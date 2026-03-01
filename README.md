@@ -1,5 +1,95 @@
 # GarClaw
 
-Golang has GC, Just for Myself
+GarClaw 是一个基于 LLM（大语言模型）的命令行智能助手，使用 Go 语言开发，支持多种 AI 模型接口，提供文件操作与系统命令执行等功能。
 
-Need DeepSeek ApiKey
+## 功能特性
+
+- **多模型支持**：集成 OpenAI、Anthropic、Ollama 等多种 LLM API
+- **工具调用**：支持执行 shell 命令、文件读写操作
+- **流式输出**：实时显示模型响应，提供更好的交互体验
+- **跨平台兼容**：支持 Windows 与 Unix 系统，自动转换命令格式
+- **灵活配置**：支持配置文件与环境变量双重配置方式
+
+## 支持的工具
+
+1. **shell**：执行系统命令，如列出文件、创建目录等
+2. **read_file_line**：读取文件指定行
+3. **write_file_line**：写入文件指定行
+4. **read_all_lines**：读取文件所有行
+5. **write_all_lines**：写入文件所有行
+
+## 安装与配置
+
+### 前置条件
+
+- Go 1.20+ 环境
+- 对应 AI 模型的 API Key（如 OpenAI、Anthropic）
+
+### 安装
+
+```bash
+go build -o garclaw .
+```
+
+### 配置
+
+程序会自动生成默认配置文件 `config.toon`，你可以根据需要修改：
+
+```toon
+api_config = {
+    api_type = "openai",  # 可选值: anthropic, ollama, openai
+    base_url = "https://api.openai.com/v1",
+    api_key = "your-api-key",
+    model = "claude-3-opus-20240229",
+    temperature = 0.7,
+    max_tokens = 4096
+}
+```
+
+也可以通过环境变量配置：
+- `API_TYPE`：API 类型
+- `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`：对应 API 的密钥
+- `MODEL_ID`：模型 ID
+- `TEMPERATURE`：温度参数
+- `MAX_TOKENS`：最大 tokens
+
+## 使用方法
+
+运行程序后，在命令行中输入问题或指令：
+
+```bash
+GarClaw />
+```
+
+### 示例
+
+1. **执行系统命令**：
+   ```
+   GarClaw /> 列出当前目录的文件
+   ```
+
+2. **读取文件内容**：
+   ```
+   GarClaw /> 读取 README.md 文件的所有内容
+   ```
+
+3. **修改文件**：
+   ```
+   GarClaw /> 在 main.go 文件的第 10 行添加注释 "// This is a comment"
+   ```
+
+## 技术实现
+
+- **核心逻辑**：`main.go` 包含配置加载、API 调用与工具执行逻辑
+- **工具定义**：`getTools.go` 定义了支持的工具结构
+- **文件操作**：`file.go` 实现文件读写功能
+- **命令执行**：`shell.go` 实现跨平台命令执行
+
+## 安全注意事项
+
+- 程序会拦截危险命令，如 `rm -rf /`、`sudo` 等
+- 执行命令时会设置 3 分钟超时，防止长时间运行的命令
+
+## 许可证
+
+本项目使用 Apache License Version 2.0 许可证。
