@@ -35,6 +35,7 @@ type Config struct {
 		APIKey      string  `json:"api_key"`
 		Model       string  `json:"model"`
 		Temperature float64 `json:"temperature"`
+		MaxTokens   int     `json:"max_tokens"`
 	} `json:"api_config"`
 }
 
@@ -89,6 +90,9 @@ func loadConfig() (Config, error) {
 			if temperature, ok := apiConfigMap["temperature"].(float64); ok {
 				config.APIConfig.Temperature = temperature
 			}
+			if maxTokens, ok := apiConfigMap["max_tokens"].(float64); ok {
+				config.APIConfig.MaxTokens = int(maxTokens)
+			}
 		}
 	}
 
@@ -139,7 +143,7 @@ type StreamChunk struct {
 }
 
 // 调用LLM API
-func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64) (Response, error) {
+func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int) (Response, error) {
 	// 确保有默认值
 	if apiType == "" {
 		apiType = DEFAULT_API_TYPE
@@ -164,7 +168,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			"system":      systemPrompt,
 			"messages":    messages,
 			"tools":       getTools(apiType),
-			"max_tokens":  8000,
+			"max_tokens":  maxTokens,
 			"temperature": temperature,
 			"stream":      true,
 		}
@@ -238,7 +242,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			"model":       modelID,
 			"messages":    openaiMessages,
 			"tools":       getTools(apiType),
-			"max_tokens":  8000,
+			"max_tokens":  maxTokens,
 			"temperature": temperature,
 			"stream":      true, // 启用流式
 			"system":      systemPrompt,
@@ -680,9 +684,9 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 }
 
 // 核心agent循环
-func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64) {
+func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int) {
 	for {
-		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature)
+		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens)
 		if err != nil {
 			fmt.Printf("Error calling LLM: %v\n", err)
 			return
@@ -1189,6 +1193,19 @@ func main() {
 		}
 	}
 
+	maxTokens := config.APIConfig.MaxTokens
+	if maxTokens == 0 {
+		tokensStr := os.Getenv("MAX_TOKENS")
+		if tokensStr != "" {
+			if tokens, err := strconv.Atoi(tokensStr); err == nil {
+				maxTokens = tokens
+			}
+		}
+		if maxTokens == 0 {
+			maxTokens = 4096 // 默认值
+		}
+	}
+
 	if err != nil {
 		fmt.Printf("Warning: Error loading config file: %v\n", err)
 		fmt.Println("Using environment variables for configuration")
@@ -1227,7 +1244,7 @@ func main() {
 			Content: query,
 		})
 
-		agentLoop(history, apiType, baseURL, apiKey, modelID, temperature)
+		agentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens)
 
 		// 流式输出已经在CallModel函数中实时打印，这里不再重复打印
 		// 只打印一个空行作为分隔
