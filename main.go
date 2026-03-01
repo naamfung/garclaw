@@ -30,10 +30,11 @@ const (
 // 配置结构体
 type Config struct {
 	APIConfig struct {
-		APIType string `json:"api_type"`
-		BaseURL string `json:"base_url"`
-		APIKey  string `json:"api_key"`
-		Model   string `json:"model"`
+		APIType     string  `json:"api_type"`
+		BaseURL     string  `json:"base_url"`
+		APIKey      string  `json:"api_key"`
+		Model       string  `json:"model"`
+		Temperature float64 `json:"temperature"`
 	} `json:"api_config"`
 }
 
@@ -85,6 +86,9 @@ func loadConfig() (Config, error) {
 			if model, ok := apiConfigMap["model"].(string); ok {
 				config.APIConfig.Model = model
 			}
+			if temperature, ok := apiConfigMap["temperature"].(float64); ok {
+				config.APIConfig.Temperature = temperature
+			}
 		}
 	}
 
@@ -135,7 +139,7 @@ type StreamChunk struct {
 }
 
 // 调用LLM API
-func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string) (Response, error) {
+func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64) (Response, error) {
 	// 确保有默认值
 	if apiType == "" {
 		apiType = DEFAULT_API_TYPE
@@ -156,12 +160,13 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string) (Re
 		// 生成系统提示，Anthropic 使用 "tool"
 		systemPrompt := strings.ReplaceAll(SYSTEM_PROMPT_TEMPLATE, "{{tool_or_function}}", "tool")
 		data = map[string]interface{}{
-			"model":      modelID,
-			"system":     systemPrompt,
-			"messages":   messages,
-			"tools":      getTools(apiType),
-			"max_tokens": 8000,
-			"stream":     true,
+			"model":       modelID,
+			"system":      systemPrompt,
+			"messages":    messages,
+			"tools":       getTools(apiType),
+			"max_tokens":  8000,
+			"temperature": temperature,
+			"stream":      true,
 		}
 		endpoint = "/messages"
 
@@ -181,11 +186,12 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string) (Re
 		// 生成系统提示，Ollama 使用 "tool"
 		systemPrompt := strings.ReplaceAll(SYSTEM_PROMPT_TEMPLATE, "{{tool_or_function}}", "tool")
 		data = map[string]interface{}{
-			"model":    modelID,
-			"messages": ollamaMessages,
-			"tools":    getTools(apiType),
-			"stream":   true,
-			"system":   systemPrompt,
+			"model":       modelID,
+			"messages":    ollamaMessages,
+			"tools":       getTools(apiType),
+			"stream":      true,
+			"system":      systemPrompt,
+			"temperature": temperature,
 		}
 		endpoint = "/chat"
 
@@ -233,7 +239,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string) (Re
 			"messages":    openaiMessages,
 			"tools":       getTools(apiType),
 			"max_tokens":  8000,
-			"temperature": 0.7,
+			"temperature": temperature,
 			"stream":      true, // 启用流式
 			"system":      systemPrompt,
 		}
@@ -674,9 +680,9 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 }
 
 // 核心agent循环
-func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string) {
+func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64) {
 	for {
-		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID)
+		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature)
 		if err != nil {
 			fmt.Printf("Error calling LLM: %v\n", err)
 			return
@@ -1170,6 +1176,19 @@ func main() {
 		}
 	}
 
+	temperature := config.APIConfig.Temperature
+	if temperature == 0 {
+		tempStr := os.Getenv("TEMPERATURE")
+		if tempStr != "" {
+			if temp, err := strconv.ParseFloat(tempStr, 64); err == nil {
+				temperature = temp
+			}
+		}
+		if temperature == 0 {
+			temperature = 0.7 // 默认值
+		}
+	}
+
 	if err != nil {
 		fmt.Printf("Warning: Error loading config file: %v\n", err)
 		fmt.Println("Using environment variables for configuration")
@@ -1208,7 +1227,7 @@ func main() {
 			Content: query,
 		})
 
-		agentLoop(history, apiType, baseURL, apiKey, modelID)
+		agentLoop(history, apiType, baseURL, apiKey, modelID, temperature)
 
 		// 流式输出已经在CallModel函数中实时打印，这里不再重复打印
 		// 只打印一个空行作为分隔
