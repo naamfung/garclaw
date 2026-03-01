@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -40,8 +41,20 @@ type Config struct {
 func loadConfig() (Config, error) {
 	var config Config
 
+	// 获取程序自身路径
+	execPath, err := os.Executable()
+	if err != nil {
+		return config, fmt.Errorf("error getting executable path: %v", err)
+	}
+
+	// 获取程序所在目录
+	execDir := filepath.Dir(execPath)
+
+	// 拼接配置文件路径
+	configPath := filepath.Join(execDir, CONFIG_FILE)
+
 	// 读取配置文件
-	data, err := os.ReadFile(CONFIG_FILE)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return config, fmt.Errorf("error reading config file: %v", err)
 	}
