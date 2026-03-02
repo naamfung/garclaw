@@ -1027,8 +1027,13 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					}
 
 					fmt.Printf("Visiting: %s\n", url)
-					Visit(url)
-					output := "Visit completed"
+					err := Visit(url)
+					var output string
+					if err != nil {
+						output = "Error: " + err.Error()
+					} else {
+						output = "Visit completed"
+					}
 
 					// 打印输出
 					fmt.Println(output)
@@ -1046,8 +1051,13 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					}
 
 					fmt.Printf("Downloading from: %s\n", url)
-					Download(url)
-					output := "Download completed"
+					fileName, err := Download(url)
+					var output string
+					if err != nil {
+						output = "Error: " + err.Error()
+					} else {
+						output = "Download completed, saved to: " + fileName
+					}
 
 					// 打印输出
 					fmt.Println(output)
@@ -1065,8 +1075,13 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					}
 
 					fmt.Printf("Downloading novel from: %s\n", novelURL)
-					DownloadNovel(novelURL)
-					output := "Novel download completed"
+					err := DownloadNovel(novelURL)
+					var output string
+					if err != nil {
+						output = "Error: " + err.Error()
+					} else {
+						output = "Novel download completed"
+					}
 
 					// 打印输出
 					fmt.Println(output)

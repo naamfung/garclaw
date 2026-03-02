@@ -41,7 +41,7 @@ func Search(keyword string) ([]SearchResult, error) {
 }
 
 // 访问功能
-func Visit(url string) {
+func Visit(url string) error {
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -58,11 +58,13 @@ func Visit(url string) {
 
 	if err := visitURL(ctxTimeout, url); err != nil {
 		log.Printf("访问功能执行失败: %v", err)
+		return err
 	}
+	return nil
 }
 
 // 下载小说功能
-func DownloadNovel(novelURL string) {
+func DownloadNovel(novelURL string) error {
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -77,11 +79,13 @@ func DownloadNovel(novelURL string) {
 	// 下载可能耗时较长，不使用超时
 	if err := downloadNovel(ctx, novelURL); err != nil {
 		log.Printf("下载功能执行失败: %v", err)
+		return err
 	}
+	return nil
 }
 
 // 通用下载功能，用于下载网页文件或网页文本
-func Download(url string) {
+func Download(url string) (string, error) {
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -115,7 +119,7 @@ func Download(url string) {
 
 	if err != nil {
 		log.Printf("下载失败: %v", err)
-		return
+		return "", err
 	}
 
 	// 生成文件名
@@ -125,10 +129,11 @@ func Download(url string) {
 	err = os.WriteFile(fileName, []byte(pageContent), 0644)
 	if err != nil {
 		log.Printf("保存文件失败: %v", err)
-		return
+		return "", err
 	}
 
 	fmt.Printf("下载完成，保存至: %s\n", fileName)
+	return fileName, nil
 }
 
 // 搜索结果结构
