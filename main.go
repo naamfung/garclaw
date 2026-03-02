@@ -380,7 +380,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					// 获取索引
 					idxVal, hasIdx := tc["index"]
 					if !hasIdx {
-						// 没有 index，直接当作完整工具调用处理（可能某些API不使用index）
+						// 无有 index，直接当作完整工具调用处理（可能某些API不使用index）
 						// 这种情况简单处理，直接添加到结果中
 						// 但为了保险，我们仍尝试处理
 						continue
@@ -995,17 +995,17 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					fmt.Printf("Searching for: %s\n", keyword)
 					resultsList, err := Search(keyword)
 
-					// 将搜索结果转换为 JSON 字符串
+					// 将搜索结果转换为 TOON 字符串
 					var output string
 					if err != nil {
 						output = "Error: " + err.Error()
 					} else if resultsList != nil {
-						resultsJSON, err := json.Marshal(resultsList)
+						resultsTOON, err := toon.Marshal(resultsList)
 						if err != nil {
 							output = "Error: Failed to marshal search results"
 							log.Printf("Failed to marshal search results: %v", err)
 						} else {
-							output = string(resultsJSON)
+							output = string(resultsTOON)
 						}
 					} else {
 						output = "No search results found"
@@ -1272,17 +1272,17 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								fmt.Printf("Searching for: %s\n", keyword)
 								resultsList, err := Search(keyword)
 
-								// 将搜索结果转换为 JSON 字符串
+								// 将搜索结果转换为 TOON 字符串
 								var output string
 								if err != nil {
 									output = "Error: " + err.Error()
 								} else if resultsList != nil {
-									resultsJSON, err := json.Marshal(resultsList)
+									resultsTOON, err := toon.Marshal(resultsList)
 									if err != nil {
 										output = "Error: Failed to marshal search results"
 										log.Printf("Failed to marshal search results: %v", err)
 									} else {
-										output = string(resultsJSON)
+										output = string(resultsTOON)
 									}
 								} else {
 									output = "No search results found"

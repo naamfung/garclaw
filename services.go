@@ -182,7 +182,7 @@ func search(ctx context.Context, searchURL string) ([]SearchResult, error) {
 	// 构建搜索结果
 	results := make([]SearchResult, 0, len(titles))
 	for i, title := range titles {
-		// 打印搜索结果的标题和链接（方便人观察）
+		// 打印搜索结果的标题与链接（方便人观察）
 		fmt.Printf("Title: %s\nLink: %s\n\n", title, links[i])
 		// 添加到结果列表
 		results = append(results, SearchResult{
@@ -209,7 +209,7 @@ func visitURL(ctx context.Context, url string) (string, error) {
 			if !jsEnabled {
 				time.Sleep(15 * time.Second)
 			}
-			// 获取整个页面的文本内容，排除<script>和<style>标签以及特定的class
+			// 获取整个页面的文本内容，排除<script>与<style>标签以及特定的class
 			var textContent string
 			err := chromedp.Evaluate(`
 				function getTextContentWithoutScriptsAndStyles() {
@@ -302,7 +302,7 @@ func downloadNovel(ctx context.Context, novelURL string) error {
 	}
 	defer file.Close()
 
-	// 获取所有章节链接和标题（用于统计总章节数）
+	// 获取所有章节链接与标题（用于统计总章节数）
 	var chapterList []struct {
 		Href string `json:"href"`
 		Text string `json:"text"`
@@ -571,7 +571,7 @@ func downloadNovel(ctx context.Context, novelURL string) error {
 				goto NextChapter
 			}
 
-			// 导航和加载都成功
+			// 导航与加载都成功
 			navigationSuccess = true
 			break
 		}
@@ -661,7 +661,7 @@ func downloadNovel(ctx context.Context, novelURL string) error {
 			isSameChapter = (currentBaseTitle == currentChapterBaseTitle)
 		}
 
-		// 格式化当前章节标题和输出
+		// 格式化当前章节标题与输出
 		if isSameChapter {
 			formattedTitle := fmt.Sprintf("%s_第%d页", currentChapterBaseTitle, currentPageNum)
 			fmt.Printf("正在下载第 %d 章: %s\n", currentChapterIndex, formattedTitle)
@@ -685,7 +685,7 @@ func downloadNovel(ctx context.Context, novelURL string) error {
                         let maxTextLength = 0;
 
                         for (const element of elements) {
-                            // 跳过隐藏元素和不需要的元素
+                            // 跳过隐藏元素与不需要的元素
                             if (window.getComputedStyle(element).display === 'none' ||
                                 window.getComputedStyle(element).visibility === 'hidden' ||
                                 window.getComputedStyle(element).opacity === '0' ||
@@ -713,7 +713,7 @@ func downloadNovel(ctx context.Context, novelURL string) error {
 
                             // 如果文本长度足够长，并且比当前最佳候选更长
                             if (textLength > 300 && textLength > maxTextLength) {
-                                // 检查文本质量：连续文本比例和段落数量
+                                // 检查文本质量：连续文本比例与段落数量
                                 const lineBreakCount = (text.match(/\n/g) || []).length;
                                 const paragraphCount = lineBreakCount + 1; // 假设每行一个段落
 
@@ -816,7 +816,7 @@ func downloadNovel(ctx context.Context, novelURL string) error {
 
 		// 写入文件
 		if !isSameChapter {
-			// 新章节，写入标题和内容
+			// 新章节，写入标题与内容
 			_, err = file.WriteString(fmt.Sprintf("%s\n\n%s\n\n", currentChapterTitle, chapterContent))
 		} else {
 			// 同一章节的分页，只写入内容，不写入标题
@@ -928,7 +928,7 @@ func downloadNovel(ctx context.Context, novelURL string) error {
                             const href = link.href;
                             const text = link.textContent.trim();
 
-                            // 排除推荐链接和非章节链接
+                            // 排除推荐链接与非章节链接
                             const excludePatterns = [
                                 /recommend/i,
                                 /related/i,
