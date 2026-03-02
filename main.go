@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -992,11 +993,24 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					}
 
 					fmt.Printf("Searching for: %s\n", keyword)
-					Search(keyword)
-					output := "Search completed"
+					resultsList := Search(keyword)
+
+					// 将搜索结果转换为 JSON 字符串
+					var output string
+					if resultsList != nil {
+						resultsJSON, err := json.Marshal(resultsList)
+						if err != nil {
+							output = "Error: Failed to marshal search results"
+							log.Printf("Failed to marshal search results: %v", err)
+						} else {
+							output = string(resultsJSON)
+						}
+					} else {
+						output = "No search results found"
+					}
 
 					// 打印输出
-					fmt.Println(output)
+					fmt.Println("Search completed")
 
 					results = append(results, ToolResult{
 						Type:      "tool_result",
@@ -1239,11 +1253,24 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								}
 
 								fmt.Printf("Searching for: %s\n", keyword)
-								Search(keyword)
-								output := "Search completed"
+								resultsList := Search(keyword)
+
+								// 将搜索结果转换为 JSON 字符串
+								var output string
+								if resultsList != nil {
+									resultsJSON, err := json.Marshal(resultsList)
+									if err != nil {
+										output = "Error: Failed to marshal search results"
+										log.Printf("Failed to marshal search results: %v", err)
+									} else {
+										output = string(resultsJSON)
+									}
+								} else {
+									output = "No search results found"
+								}
 
 								// 打印输出
-								fmt.Println(output)
+								fmt.Println("Search completed")
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",

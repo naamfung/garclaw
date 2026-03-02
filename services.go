@@ -16,7 +16,7 @@ import (
 )
 
 // 搜索功能
-func Search(keyword string) {
+func Search(keyword string) []SearchResult {
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -32,9 +32,12 @@ func Search(keyword string) {
 	defer cancelTimeout()
 
 	searchURL := fmt.Sprintf("https://www.baidu.com/s?ie=UTF-8&wd=%s", keyword)
-	if err := search(ctxTimeout, searchURL); err != nil {
+	results, err := search(ctxTimeout, searchURL)
+	if err != nil {
 		log.Printf("搜索功能执行失败: %v", err)
+		return nil
 	}
+	return results
 }
 
 // 访问功能
@@ -128,8 +131,14 @@ func Download(url string) {
 	fmt.Printf("下载完成，保存至: %s\n", fileName)
 }
 
+// 搜索结果结构
+type SearchResult struct {
+	Title string `json:"title"`
+	Link  string `json:"link"`
+}
+
 // 搜索功能
-func search(ctx context.Context, searchURL string) error {
+func search(ctx context.Context, searchURL string) ([]SearchResult, error) {
 	// 定义变量来存储搜索结果
 	var titles []string
 	var links []string
@@ -161,14 +170,21 @@ func search(ctx context.Context, searchURL string) error {
 	)
 	if err != nil {
 		log.Printf("搜索失败: %v", err)
-		return err
+		return nil, err
 	}
 
-	// 打印搜索结果的标题和链接
+	// 构建搜索结果
+	results := make([]SearchResult, 0, len(titles))
 	for i, title := range titles {
+		// 打印搜索结果的标题和链接（方便人观察）
 		fmt.Printf("Title: %s\nLink: %s\n\n", title, links[i])
+		// 添加到结果列表
+		results = append(results, SearchResult{
+			Title: title,
+			Link:  links[i],
+		})
 	}
-	return nil
+	return results, nil
 }
 
 // 访问功能
