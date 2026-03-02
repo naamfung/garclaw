@@ -187,6 +187,43 @@ func getTools(apiType string) interface{} {
 					},
 				},
 			},
+			{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "todo",
+					"description": "Update task list. Track progress on multi-step tasks.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"items": map[string]interface{}{
+								"type": "array",
+								"items": map[string]interface{}{
+									"type": "object",
+									"properties": map[string]interface{}{
+										"id": map[string]interface{}{
+											"type":        "string",
+											"description": "Task ID.",
+										},
+										"text": map[string]interface{}{
+											"type":        "string",
+											"description": "Task description.",
+										},
+										"status": map[string]interface{}{
+											"type":        "string",
+											"enum":        []string{"pending", "in_progress", "completed"},
+											"description": "Task status: pending, in_progress, or completed.",
+										},
+									},
+									"required": []string{"id", "text", "status"},
+								},
+								"description": "List of tasks.",
+							},
+						},
+						"required":             []string{"items"},
+						"additionalProperties": false,
+					},
+				},
+			},
 		}
 	default:
 		// Anthropic与Ollama使用tools格式
@@ -342,6 +379,40 @@ func getTools(apiType string) interface{} {
 						},
 					},
 					"required":             []string{"novel_url"},
+					"additionalProperties": false,
+				},
+			},
+			{
+				"name":        "todo",
+				"description": "Update task list. Track progress on multi-step tasks.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"items": map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{
+								"type": "object",
+								"properties": map[string]interface{}{
+									"id": map[string]interface{}{
+										"type":        "string",
+										"description": "Task ID.",
+									},
+									"text": map[string]interface{}{
+										"type":        "string",
+										"description": "Task description.",
+									},
+									"status": map[string]interface{}{
+										"type":        "string",
+										"enum":        []string{"pending", "in_progress", "completed"},
+										"description": "Task status: pending, in_progress, or completed.",
+									},
+								},
+								"required": []string{"id", "text", "status"},
+							},
+							"description": "List of tasks.",
+						},
+					},
+					"required":             []string{"items"},
 					"additionalProperties": false,
 				},
 			},

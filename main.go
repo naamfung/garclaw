@@ -16,6 +16,98 @@ import (
 	"github.com/toon-format/toon-go"
 )
 
+// TodoManager 管理待办事项
+type TodoManager struct {
+	items []TodoItem
+}
+
+// TodoItem 待办事项项
+type TodoItem struct {
+	ID     string `json:"id"`
+	Text   string `json:"text"`
+	Status string `json:"status"` // pending, in_progress, completed
+}
+
+// NewTodoManager 创建新的TodoManager
+func NewTodoManager() *TodoManager {
+	return &TodoManager{
+		items: []TodoItem{},
+	}
+}
+
+// Update 更新待办事项列表
+func (tm *TodoManager) Update(items []TodoItem) (string, error) {
+	if len(items) > 20 {
+		return "", fmt.Errorf("max 20 todos allowed")
+	}
+
+	validated := []TodoItem{}
+	inProgressCount := 0
+
+	for i, item := range items {
+		text := strings.TrimSpace(item.Text)
+		status := strings.ToLower(item.Status)
+		itemID := item.ID
+		if itemID == "" {
+			itemID = strconv.Itoa(i + 1)
+		}
+
+		if text == "" {
+			return "", fmt.Errorf("item %s: text required", itemID)
+		}
+
+		if status != "pending" && status != "in_progress" && status != "completed" {
+			return "", fmt.Errorf("item %s: invalid status '%s'", itemID, status)
+		}
+
+		if status == "in_progress" {
+			inProgressCount++
+		}
+
+		validated = append(validated, TodoItem{
+			ID:     itemID,
+			Text:   text,
+			Status: status,
+		})
+	}
+
+	if inProgressCount > 1 {
+		return "", fmt.Errorf("only one task can be in_progress at a time")
+	}
+
+	tm.items = validated
+	return tm.Render(), nil
+}
+
+// Render 渲染待办事项列表
+func (tm *TodoManager) Render() string {
+	if len(tm.items) == 0 {
+		return "No todos."
+	}
+
+	lines := []string{}
+	done := 0
+
+	for _, item := range tm.items {
+		var marker string
+		switch item.Status {
+		case "pending":
+			marker = "[ ]"
+		case "in_progress":
+			marker = "[>"
+		case "completed":
+			marker = "[x]"
+			done++
+		default:
+			marker = "[?]"
+		}
+		lines = append(lines, fmt.Sprintf("%s #%s: %s", marker, item.ID, item.Text))
+	}
+
+	lines = append(lines, fmt.Sprintf("\n(%d/%d completed)", done, len(tm.items)))
+	return strings.Join(lines, "\n")
+}
+
 // 配置
 const (
 	DEFAULT_API_TYPE       = "openai" // 可选值: anthropic, ollama, openai
@@ -25,8 +117,11 @@ const (
 	DEFAULT_MODEL_ID       = "claude-3-opus-20240229"
 	CONFIG_FILE            = "config.toon"
 	isDebug                = false // 控制调试信息的显示
-	SYSTEM_PROMPT_TEMPLATE = "You are a coding agent. When the user asks to list files, run commands, or interact with the system, you MUST use the shell {{tool_or_function}}. When you need to read a specific line from a file, use the read_file_line {{tool_or_function}}. When you need to write content to a specific line in a file, use the write_file_line {{tool_or_function}}. When you need to read all lines from a file, use the read_all_lines {{tool_or_function}}. When you need to write all lines to a file, use the write_all_lines {{tool_or_function}}. Do NOT explain how to run the command, do NOT provide alternative methods, just use the {{tool_or_function}} directly. For example, when asked to list files, use the shell {{tool_or_function}} with command 'ls' or 'ls -la' (Unix/Linux). Your response MUST be a {{tool_or_function}} call, not a regular message. Under no circumstances should you provide explanations or instructions to the user - only use the {{tool_or_function}}."
+	SYSTEM_PROMPT_TEMPLATE = "You are a coding agent. When the user asks to list files, run commands, or interact with the system, you MUST use the shell {{tool_or_function}}. When you need to read a specific line from a file, use the read_file_line {{tool_or_function}}. When you need to write content to a specific line in a file, use the write_file_line {{tool_or_function}}. When you need to read all lines from a file, use the read_all_lines {{tool_or_function}}. When you need to write all lines to a file, use the write_all_lines {{tool_or_function}}. When you need to manage tasks, use the todo {{tool_or_function}}. Do NOT explain how to run the command, do NOT provide alternative methods, just use the {{tool_or_function}} directly. For example, when asked to list files, use the shell {{tool_or_function}} with command 'ls' or 'ls -la' (Unix/Linux). Your response MUST be a {{tool_or_function}} call, not a regular message. Under no circumstances should you provide explanations or instructions to the user - only use the {{tool_or_function}}."
 )
+
+// 全局TodoManager实例
+var TODO = NewTodoManager()
 
 // 配置结构体
 type Config struct {
@@ -1081,6 +1176,44 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						output = "Error: " + err.Error()
 					} else {
 						output = "Novel download completed"
+					}
+
+					// 打印输出
+					fmt.Println(output)
+
+					results = append(results, ToolResult{
+						Type:      "tool_result",
+						ToolUseID: toolID,
+						Content:   output,
+					})
+				case "todo":
+					itemsInterface, _ := argsMap["items"].([]interface{})
+					if itemsInterface == nil {
+						fmt.Printf("Warning: invalid items in todo tool call\n")
+						continue
+					}
+
+					var items []TodoItem
+					for _, itemInterface := range itemsInterface {
+						if itemMap, ok := itemInterface.(map[string]interface{}); ok {
+							item := TodoItem{}
+							if id, ok := itemMap["id"].(string); ok {
+								item.ID = id
+							}
+							if text, ok := itemMap["text"].(string); ok {
+								item.Text = text
+							}
+							if status, ok := itemMap["status"].(string); ok {
+								item.Status = status
+							}
+							items = append(items, item)
+						}
+					}
+
+					fmt.Println("Updating todo list...")
+					output, err := TODO.Update(items)
+					if err != nil {
+						output = "Error: " + err.Error()
 					}
 
 					// 打印输出
