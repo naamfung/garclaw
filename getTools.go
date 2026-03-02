@@ -118,7 +118,7 @@ func getTools(apiType string) interface{} {
 			{
 				"type": "function",
 				"function": map[string]interface{}{
-					"name":        "Search",
+					"name":        "search",
 					"description": "Search for a keyword using Baidu search engine.",
 					"parameters": map[string]interface{}{
 						"type": "object",
@@ -136,7 +136,7 @@ func getTools(apiType string) interface{} {
 			{
 				"type": "function",
 				"function": map[string]interface{}{
-					"name":        "Visit",
+					"name":        "visit",
 					"description": "Visit a URL and retrieve its content.",
 					"parameters": map[string]interface{}{
 						"type": "object",
@@ -154,7 +154,7 @@ func getTools(apiType string) interface{} {
 			{
 				"type": "function",
 				"function": map[string]interface{}{
-					"name":        "Download",
+					"name":        "download",
 					"description": "Download a web page or file from a given URL.",
 					"parameters": map[string]interface{}{
 						"type": "object",
@@ -172,17 +172,17 @@ func getTools(apiType string) interface{} {
 			{
 				"type": "function",
 				"function": map[string]interface{}{
-					"name":        "DownloadNovel",
+					"name":        "download_novel",
 					"description": "Download a novel from a given URL.",
 					"parameters": map[string]interface{}{
 						"type": "object",
 						"properties": map[string]interface{}{
-							"novelURL": map[string]interface{}{
+							"novel_url": map[string]interface{}{
 								"type":        "string",
 								"description": "The URL of the novel to download.",
 							},
 						},
-						"required":             []string{"novelURL"},
+						"required":             []string{"novel_url"},
 						"additionalProperties": false,
 					},
 				},
@@ -286,7 +286,7 @@ func getTools(apiType string) interface{} {
 				},
 			},
 			{
-				"name":        "Search",
+				"name":        "search",
 				"description": "Search for a keyword using Baidu search engine.",
 				"input_schema": map[string]interface{}{
 					"type": "object",
@@ -301,7 +301,7 @@ func getTools(apiType string) interface{} {
 				},
 			},
 			{
-				"name":        "Visit",
+				"name":        "visit",
 				"description": "Visit a URL and retrieve its content.",
 				"input_schema": map[string]interface{}{
 					"type": "object",
@@ -316,7 +316,7 @@ func getTools(apiType string) interface{} {
 				},
 			},
 			{
-				"name":        "Download",
+				"name":        "download",
 				"description": "Download a web page or file from a given URL.",
 				"input_schema": map[string]interface{}{
 					"type": "object",
@@ -331,17 +331,17 @@ func getTools(apiType string) interface{} {
 				},
 			},
 			{
-				"name":        "DownloadNovel",
+				"name":        "download_novel",
 				"description": "Download a novel from a given URL.",
 				"input_schema": map[string]interface{}{
 					"type": "object",
 					"properties": map[string]interface{}{
-						"novelURL": map[string]interface{}{
+						"novel_url": map[string]interface{}{
 							"type":        "string",
 							"description": "The URL of the novel to download.",
 						},
 					},
-					"required":             []string{"novelURL"},
+					"required":             []string{"novel_url"},
 					"additionalProperties": false,
 				},
 			},

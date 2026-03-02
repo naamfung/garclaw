@@ -985,10 +985,10 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						ToolUseID: toolID,
 						Content:   output,
 					})
-				case "Search":
+				case "search":
 					keyword, _ := argsMap["keyword"].(string)
 					if keyword == "" {
-						fmt.Printf("Warning: empty keyword in Search tool call\n")
+						fmt.Printf("Warning: empty keyword in search tool call\n")
 						continue
 					}
 
@@ -1017,10 +1017,10 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						ToolUseID: toolID,
 						Content:   output,
 					})
-				case "Visit":
+				case "visit":
 					url, _ := argsMap["url"].(string)
 					if url == "" {
-						fmt.Printf("Warning: empty url in Visit tool call\n")
+						fmt.Printf("Warning: empty url in visit tool call\n")
 						continue
 					}
 
@@ -1036,10 +1036,10 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						ToolUseID: toolID,
 						Content:   output,
 					})
-				case "Download":
+				case "download":
 					url, _ := argsMap["url"].(string)
 					if url == "" {
-						fmt.Printf("Warning: empty url in Download tool call\n")
+						fmt.Printf("Warning: empty url in download tool call\n")
 						continue
 					}
 
@@ -1055,10 +1055,10 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						ToolUseID: toolID,
 						Content:   output,
 					})
-				case "DownloadNovel":
-					novelURL, _ := argsMap["novelURL"].(string)
+				case "download_novel":
+					novelURL, _ := argsMap["novel_url"].(string)
 					if novelURL == "" {
-						fmt.Printf("Warning: empty novelURL in DownloadNovel tool call\n")
+						fmt.Printf("Warning: empty novel_url in download_novel tool call\n")
 						continue
 					}
 
@@ -1245,10 +1245,10 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									ToolUseID: toolUse["id"].(string),
 									Content:   output,
 								})
-							case "Search":
+							case "search":
 								keyword := input["keyword"].(string)
 								if keyword == "" {
-									fmt.Printf("Warning: empty keyword in Search tool call\n")
+									fmt.Printf("Warning: empty keyword in search tool call\n")
 									continue
 								}
 
@@ -1277,10 +1277,10 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									ToolUseID: toolUse["id"].(string),
 									Content:   output,
 								})
-							case "Visit":
+							case "visit":
 								url := input["url"].(string)
 								if url == "" {
-									fmt.Printf("Warning: empty url in Visit tool call\n")
+									fmt.Printf("Warning: empty url in visit tool call\n")
 									continue
 								}
 
@@ -1296,10 +1296,10 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									ToolUseID: toolUse["id"].(string),
 									Content:   output,
 								})
-							case "Download":
+							case "download":
 								url := input["url"].(string)
 								if url == "" {
-									fmt.Printf("Warning: empty url in Download tool call\n")
+									fmt.Printf("Warning: empty url in download tool call\n")
 									continue
 								}
 
@@ -1315,10 +1315,10 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									ToolUseID: toolUse["id"].(string),
 									Content:   output,
 								})
-							case "DownloadNovel":
-								novelURL := input["novelURL"].(string)
+							case "download_novel":
+								novelURL := input["novel_url"].(string)
 								if novelURL == "" {
-									fmt.Printf("Warning: empty novelURL in DownloadNovel tool call\n")
+									fmt.Printf("Warning: empty novel_url in download_novel tool call\n")
 									continue
 								}
 
