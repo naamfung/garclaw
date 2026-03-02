@@ -1270,15 +1270,34 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									Content:   output,
 								})
 							case "Download":
+								url := input["url"].(string)
+								if url == "" {
+									fmt.Printf("Warning: empty url in Download tool call\n")
+									continue
+								}
+
+								fmt.Printf("Downloading from: %s\n", url)
+								Download(url)
+								output := "Download completed"
+
+								// 打印输出
+								fmt.Println(output)
+
+								results = append(results, ToolResult{
+									Type:      "tool_result",
+									ToolUseID: toolUse["id"].(string),
+									Content:   output,
+								})
+							case "DownloadNovel":
 								novelURL := input["novelURL"].(string)
 								if novelURL == "" {
-									fmt.Printf("Warning: empty novelURL in Download tool call\n")
+									fmt.Printf("Warning: empty novelURL in DownloadNovel tool call\n")
 									continue
 								}
 
 								fmt.Printf("Downloading novel from: %s\n", novelURL)
-								Download(novelURL)
-								output := "Download completed"
+								DownloadNovel(novelURL)
+								output := "Novel download completed"
 
 								// 打印输出
 								fmt.Println(output)
