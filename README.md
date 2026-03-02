@@ -40,14 +40,13 @@ go build -o garclaw .
 程序会自动生成默认配置文件 `config.toon`，你可以根据需要修改：
 
 ```toon
-api_config = {
-    api_type = "openai",  # 可选值: anthropic, ollama, openai
-    base_url = "https://api.openai.com/v1",
-    api_key = "your-api-key",
-    model = "claude-3-opus-20240229",
-    temperature = 0.7,
-    max_tokens = 4096
-}
+APIConfig:
+  APIType: openai  # 可选值: anthropic, ollama, openai
+  BaseURL: "https://api.openai.com/v1"
+  APIKey: "your-api-key"
+  Model: "claude-3-opus-20240229"
+  Temperature: 0.7
+  MaxTokens: 4096
 ```
 
 也可以通过环境变量配置：
