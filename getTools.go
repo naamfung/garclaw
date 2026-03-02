@@ -115,6 +115,60 @@ func getTools(apiType string) interface{} {
 					},
 				},
 			},
+			{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "Search",
+					"description": "Search for a keyword using Baidu search engine.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"keyword": map[string]interface{}{
+								"type":        "string",
+								"description": "The keyword to search for.",
+							},
+						},
+						"required":             []string{"keyword"},
+						"additionalProperties": false,
+					},
+				},
+			},
+			{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "Visit",
+					"description": "Visit a URL and retrieve its content.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"url": map[string]interface{}{
+								"type":        "string",
+								"description": "The URL to visit.",
+							},
+						},
+						"required":             []string{"url"},
+						"additionalProperties": false,
+					},
+				},
+			},
+			{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "Download",
+					"description": "Download a novel from a given URL.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"novelURL": map[string]interface{}{
+								"type":        "string",
+								"description": "The URL of the novel to download.",
+							},
+						},
+						"required":             []string{"novelURL"},
+						"additionalProperties": false,
+					},
+				},
+			},
 		}
 	default:
 		// Anthropic与Ollama使用tools格式
@@ -210,6 +264,51 @@ func getTools(apiType string) interface{} {
 						},
 					},
 					"required":             []string{"filename", "lines"},
+					"additionalProperties": false,
+				},
+			},
+			{
+				"name":        "Search",
+				"description": "Search for a keyword using Baidu search engine.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"keyword": map[string]interface{}{
+							"type":        "string",
+							"description": "The keyword to search for.",
+						},
+					},
+					"required":             []string{"keyword"},
+					"additionalProperties": false,
+				},
+			},
+			{
+				"name":        "Visit",
+				"description": "Visit a URL and retrieve its content.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"url": map[string]interface{}{
+							"type":        "string",
+							"description": "The URL to visit.",
+						},
+					},
+					"required":             []string{"url"},
+					"additionalProperties": false,
+				},
+			},
+			{
+				"name":        "Download",
+				"description": "Download a novel from a given URL.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"novelURL": map[string]interface{}{
+							"type":        "string",
+							"description": "The URL of the novel to download.",
+						},
+					},
+					"required":             []string{"novelURL"},
 					"additionalProperties": false,
 				},
 			},
