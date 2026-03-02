@@ -155,6 +155,24 @@ func getTools(apiType string) interface{} {
 				"type": "function",
 				"function": map[string]interface{}{
 					"name":        "Download",
+					"description": "Download a web page or file from a given URL.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"url": map[string]interface{}{
+								"type":        "string",
+								"description": "The URL to download.",
+							},
+						},
+						"required":             []string{"url"},
+						"additionalProperties": false,
+					},
+				},
+			},
+			{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "DownloadNovel",
 					"description": "Download a novel from a given URL.",
 					"parameters": map[string]interface{}{
 						"type": "object",
@@ -299,6 +317,21 @@ func getTools(apiType string) interface{} {
 			},
 			{
 				"name":        "Download",
+				"description": "Download a web page or file from a given URL.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"url": map[string]interface{}{
+							"type":        "string",
+							"description": "The URL to download.",
+						},
+					},
+					"required":             []string{"url"},
+					"additionalProperties": false,
+				},
+			},
+			{
+				"name":        "DownloadNovel",
 				"description": "Download a novel from a given URL.",
 				"input_schema": map[string]interface{}{
 					"type": "object",

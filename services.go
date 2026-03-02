@@ -58,8 +58,8 @@ func Visit(url string) {
 	}
 }
 
-// 下载功能
-func Download(novelURL string) {
+// 下载小说功能
+func DownloadNovel(novelURL string) {
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -75,6 +75,57 @@ func Download(novelURL string) {
 	if err := downloadNovel(ctx, novelURL); err != nil {
 		log.Printf("下载功能执行失败: %v", err)
 	}
+}
+
+// 通用下载功能，用于下载网页文件或网页文本
+func Download(url string) {
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
+		chromedp.NoFirstRun,
+		chromedp.NoDefaultBrowserCheck,
+		chromedp.Headless,
+		chromedp.DisableGPU,
+	)
+	defer cancelAlloc()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+
+	ctxTimeout, cancelTimeout := context.WithTimeout(ctx, 60*time.Second)
+	defer cancelTimeout()
+
+	// 访问URL并获取页面内容
+	var pageContent string
+	err := chromedp.Run(ctxTimeout,
+		chromedp.Navigate(url),
+		chromedp.WaitVisible(`body`, chromedp.ByQuery),
+		chromedp.Sleep(2*time.Second),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			var content string
+			err := chromedp.Evaluate(`document.documentElement.outerHTML`, &content).Do(ctx)
+			if err != nil {
+				return err
+			}
+			pageContent = content
+			return nil
+		}),
+	)
+
+	if err != nil {
+		log.Printf("下载失败: %v", err)
+		return
+	}
+
+	// 生成文件名
+	fileName := "download_" + time.Now().Format("20060102150405") + ".html"
+
+	// 写入文件
+	err = os.WriteFile(fileName, []byte(pageContent), 0644)
+	if err != nil {
+		log.Printf("保存文件失败: %v", err)
+		return
+	}
+
+	fmt.Printf("下载完成，保存至: %s\n", fileName)
 }
 
 // 搜索功能
