@@ -41,7 +41,7 @@ func Search(keyword string) ([]SearchResult, error) {
 }
 
 // 访问功能
-func Visit(url string) error {
+func Visit(url string) (string, error) {
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -56,11 +56,12 @@ func Visit(url string) error {
 	ctxTimeout, cancelTimeout := context.WithTimeout(ctx, 60*time.Second)
 	defer cancelTimeout()
 
-	if err := visitURL(ctxTimeout, url); err != nil {
+	pageText, err := visitURL(ctxTimeout, url)
+	if err != nil {
 		log.Printf("访问功能执行失败: %v", err)
-		return err
+		return "", err
 	}
-	return nil
+	return pageText, nil
 }
 
 // 下载小说功能
@@ -193,7 +194,7 @@ func search(ctx context.Context, searchURL string) ([]SearchResult, error) {
 }
 
 // 访问功能
-func visitURL(ctx context.Context, url string) error {
+func visitURL(ctx context.Context, url string) (string, error) {
 	// Variable to hold the result
 	var jsEnabled bool
 
@@ -252,11 +253,11 @@ func visitURL(ctx context.Context, url string) error {
 	)
 	if err != nil {
 		log.Printf("访问失败: %v", err)
-		return err
+		return "", err
 	}
 
 	fmt.Println(pageText)
-	return nil
+	return pageText, nil
 }
 
 // 下载小说功能

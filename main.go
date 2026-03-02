@@ -1027,16 +1027,21 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					}
 
 					fmt.Printf("Visiting: %s\n", url)
-					err := Visit(url)
+					pageText, err := Visit(url)
 					var output string
 					if err != nil {
 						output = "Error: " + err.Error()
 					} else {
-						output = "Visit completed"
+						// 限制返回的文本长度，避免过长
+						if len(pageText) > 2000 {
+							output = "Visit completed. Page content (truncated): " + pageText[:2000] + "..."
+						} else {
+							output = "Visit completed. Page content: " + pageText
+						}
 					}
 
 					// 打印输出
-					fmt.Println(output)
+					fmt.Println("Visit completed")
 
 					results = append(results, ToolResult{
 						Type:      "tool_result",
@@ -1304,16 +1309,21 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								}
 
 								fmt.Printf("Visiting: %s\n", url)
-								err := Visit(url)
+								pageText, err := Visit(url)
 								var output string
 								if err != nil {
 									output = "Error: " + err.Error()
 								} else {
-									output = "Visit completed"
+									// 限制返回的文本长度，避免过长
+									if len(pageText) > 2000 {
+										output = "Visit completed. Page content (truncated): " + pageText[:2000] + "..."
+									} else {
+										output = "Visit completed. Page content: " + pageText
+									}
 								}
 
 								// 打印输出
-								fmt.Println(output)
+								fmt.Println("Visit completed")
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",
