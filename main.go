@@ -984,6 +984,63 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						ToolUseID: toolID,
 						Content:   output,
 					})
+				case "Search":
+					keyword, _ := argsMap["keyword"].(string)
+					if keyword == "" {
+						fmt.Printf("Warning: empty keyword in Search tool call\n")
+						continue
+					}
+
+					fmt.Printf("Searching for: %s\n", keyword)
+					Search(keyword)
+					output := "Search completed"
+
+					// 打印输出
+					fmt.Println(output)
+
+					results = append(results, ToolResult{
+						Type:      "tool_result",
+						ToolUseID: toolID,
+						Content:   output,
+					})
+				case "Visit":
+					url, _ := argsMap["url"].(string)
+					if url == "" {
+						fmt.Printf("Warning: empty url in Visit tool call\n")
+						continue
+					}
+
+					fmt.Printf("Visiting: %s\n", url)
+					Visit(url)
+					output := "Visit completed"
+
+					// 打印输出
+					fmt.Println(output)
+
+					results = append(results, ToolResult{
+						Type:      "tool_result",
+						ToolUseID: toolID,
+						Content:   output,
+					})
+				case "Download":
+					novelURL, _ := argsMap["novelURL"].(string)
+					if novelURL == "" {
+						fmt.Printf("Warning: empty novelURL in Download tool call\n")
+						continue
+					}
+
+					fmt.Printf("Downloading novel from: %s\n", novelURL)
+					Download(novelURL)
+					output := "Download completed"
+
+					// 打印输出
+					fmt.Println(output)
+
+					results = append(results, ToolResult{
+						Type:      "tool_result",
+						ToolUseID: toolID,
+						Content:   output,
+					})
 				default:
 					continue
 				}
@@ -1146,6 +1203,63 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								} else {
 									output = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
 								}
+
+								// 打印输出
+								fmt.Println(output)
+
+								results = append(results, ToolResult{
+									Type:      "tool_result",
+									ToolUseID: toolUse["id"].(string),
+									Content:   output,
+								})
+							case "Search":
+								keyword := input["keyword"].(string)
+								if keyword == "" {
+									fmt.Printf("Warning: empty keyword in Search tool call\n")
+									continue
+								}
+
+								fmt.Printf("Searching for: %s\n", keyword)
+								Search(keyword)
+								output := "Search completed"
+
+								// 打印输出
+								fmt.Println(output)
+
+								results = append(results, ToolResult{
+									Type:      "tool_result",
+									ToolUseID: toolUse["id"].(string),
+									Content:   output,
+								})
+							case "Visit":
+								url := input["url"].(string)
+								if url == "" {
+									fmt.Printf("Warning: empty url in Visit tool call\n")
+									continue
+								}
+
+								fmt.Printf("Visiting: %s\n", url)
+								Visit(url)
+								output := "Visit completed"
+
+								// 打印输出
+								fmt.Println(output)
+
+								results = append(results, ToolResult{
+									Type:      "tool_result",
+									ToolUseID: toolUse["id"].(string),
+									Content:   output,
+								})
+							case "Download":
+								novelURL := input["novelURL"].(string)
+								if novelURL == "" {
+									fmt.Printf("Warning: empty novelURL in Download tool call\n")
+									continue
+								}
+
+								fmt.Printf("Downloading novel from: %s\n", novelURL)
+								Download(novelURL)
+								output := "Download completed"
 
 								// 打印输出
 								fmt.Println(output)
