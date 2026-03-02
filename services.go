@@ -256,7 +256,12 @@ func visitURL(ctx context.Context, url string) (string, error) {
 		return "", err
 	}
 
-	fmt.Println(pageText)
+	// 只在调试模式或内容较短时打印，避免输出过长
+	if len(pageText) > 512 {
+		fmt.Println("Page content (truncated): " + pageText[:512] + "...")
+	} else {
+		fmt.Println(pageText)
+	}
 	return pageText, nil
 }
 
