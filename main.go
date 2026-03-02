@@ -826,6 +826,7 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 
 // 核心agent循环
 func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int) {
+	roundsSinceTodo := 0
 	for {
 		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens)
 		if err != nil {
@@ -865,6 +866,7 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 		// 执行工具调用
 		var results []ToolResult
+		usedTodo := false
 
 		// 打印调试信息
 		if isDebug {
@@ -1224,6 +1226,7 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						ToolUseID: toolID,
 						Content:   output,
 					})
+					usedTodo = true
 				default:
 					continue
 				}
@@ -1539,12 +1542,28 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									ToolUseID: toolUse["id"].(string),
 									Content:   output,
 								})
+								usedTodo = true
 							default:
 								continue
 							}
 						}
 					}
 				}
+			}
+		}
+
+		// 更新todo使用计数并添加提醒
+		if usedTodo {
+			roundsSinceTodo = 0
+		} else {
+			roundsSinceTodo++
+			if roundsSinceTodo >= 3 {
+				// 注入todo提醒
+				messages = append(messages, Message{
+					Role:    "user",
+					Content: "<reminder>Update your todos.</reminder>",
+				})
+				roundsSinceTodo = 0
 			}
 		}
 
