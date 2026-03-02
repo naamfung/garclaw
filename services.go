@@ -16,7 +16,7 @@ import (
 )
 
 // 搜索功能
-func Search(keyword string) []SearchResult {
+func Search(keyword string) ([]SearchResult, error) {
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -35,9 +35,9 @@ func Search(keyword string) []SearchResult {
 	results, err := search(ctxTimeout, searchURL)
 	if err != nil {
 		log.Printf("搜索功能执行失败: %v", err)
-		return nil
+		return nil, err
 	}
-	return results
+	return results, nil
 }
 
 // 访问功能

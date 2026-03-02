@@ -993,11 +993,13 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					}
 
 					fmt.Printf("Searching for: %s\n", keyword)
-					resultsList := Search(keyword)
+					resultsList, err := Search(keyword)
 
 					// 将搜索结果转换为 JSON 字符串
 					var output string
-					if resultsList != nil {
+					if err != nil {
+						output = "Error: " + err.Error()
+					} else if resultsList != nil {
 						resultsJSON, err := json.Marshal(resultsList)
 						if err != nil {
 							output = "Error: Failed to marshal search results"
@@ -1253,11 +1255,13 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								}
 
 								fmt.Printf("Searching for: %s\n", keyword)
-								resultsList := Search(keyword)
+								resultsList, err := Search(keyword)
 
 								// 将搜索结果转换为 JSON 字符串
 								var output string
-								if resultsList != nil {
+								if err != nil {
+									output = "Error: " + err.Error()
+								} else if resultsList != nil {
 									resultsJSON, err := json.Marshal(resultsList)
 									if err != nil {
 										output = "Error: Failed to marshal search results"
