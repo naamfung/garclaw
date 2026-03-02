@@ -1032,12 +1032,7 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					if err != nil {
 						output = "Error: " + err.Error()
 					} else {
-						// 限制返回的文本长度，避免过长
-						if len(pageText) > 2000 {
-							output = "Visit completed. Page content (truncated): " + pageText[:2000] + "..."
-						} else {
-							output = "Visit completed. Page content: " + pageText
-						}
+						output = "Visit completed. Page content: " + pageText
 					}
 
 					// 打印输出
@@ -1314,12 +1309,7 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								if err != nil {
 									output = "Error: " + err.Error()
 								} else {
-									// 限制返回的文本长度，避免过长
-									if len(pageText) > 2000 {
-										output = "Visit completed. Page content (truncated): " + pageText[:2000] + "..."
-									} else {
-										output = "Visit completed. Page content: " + pageText
-									}
+									output = "Visit completed. Page content: " + pageText
 								}
 
 								// 打印输出
