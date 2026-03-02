@@ -1501,6 +1501,44 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									ToolUseID: toolUse["id"].(string),
 									Content:   output,
 								})
+							case "todo":
+								itemsInterface := input["items"].([]interface{})
+								if itemsInterface == nil {
+									fmt.Printf("Warning: invalid items in todo tool call\n")
+									continue
+								}
+
+								var items []TodoItem
+								for _, itemInterface := range itemsInterface {
+									if itemMap, ok := itemInterface.(map[string]interface{}); ok {
+										item := TodoItem{}
+										if id, ok := itemMap["id"].(string); ok {
+											item.ID = id
+										}
+										if text, ok := itemMap["text"].(string); ok {
+											item.Text = text
+										}
+										if status, ok := itemMap["status"].(string); ok {
+											item.Status = status
+										}
+										items = append(items, item)
+									}
+								}
+
+								fmt.Println("Updating todo list...")
+								output, err := TODO.Update(items)
+								if err != nil {
+									output = "Error: " + err.Error()
+								}
+
+								// 打印输出
+								fmt.Println(output)
+
+								results = append(results, ToolResult{
+									Type:      "tool_result",
+									ToolUseID: toolUse["id"].(string),
+									Content:   output,
+								})
 							default:
 								continue
 							}
