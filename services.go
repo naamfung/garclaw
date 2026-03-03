@@ -142,29 +142,39 @@ func init() {
 				log.Printf("浏览器已启动，CDP URL: %s", cdpURL)
 
 				// 轮询检查浏览器是否完全启动并准备好接受连接
-				maxRetries := 30                        // 最多尝试 30 次
-				retryInterval := 100 * time.Millisecond // 每次尝试间隔 100ms
+				maxRetries := 60                        // 最多尝试 60 次
+				retryInterval := 200 * time.Millisecond // 每次尝试间隔 200ms
 				success := false
 
-				for range make([]struct{}, maxRetries) {
+				log.Printf("开始检查浏览器启动状态，最多等待 %v", time.Duration(maxRetries)*retryInterval)
+
+				for i := 0; i < maxRetries; i++ {
 					// 检查端口是否被占用（表示浏览器正在监听）
 					if isPortInUse(cdpPort) {
-						// 尝试连接到 CDP 端口
+						// 尝试连接到 CDP 端口（Playwright 会自动处理端点发现）
 						client := &http.Client{
-							Timeout: 500 * time.Millisecond,
+							Timeout: 1 * time.Second, // 增加超时时间
 						}
-						_, err := client.Get(cdpURL + "/json/version")
+
+						// 直接使用基础 URL，Playwright 会自动发现正确的端点
+						log.Printf("尝试连接到 CDP 基础 URL: %s", cdpURL)
+						_, err := client.Get(cdpURL)
 						if err == nil {
 							success = true
 							log.Printf("浏览器已完全启动并准备就绪")
 							break
+						} else {
+							log.Printf("连接到 %s 失败: %v", cdpURL, err)
 						}
+					} else {
+						log.Printf("端口 %d 尚未被占用，浏览器可能仍在启动中...", cdpPort)
 					}
 					time.Sleep(retryInterval)
 				}
 
 				if !success {
 					log.Printf("警告：无法确认浏览器是否完全启动，可能会导致后续操作失败")
+					log.Printf("尝试直接连接到 CDP URL: %s", cdpURL)
 				}
 			}
 		}
