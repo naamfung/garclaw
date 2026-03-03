@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net"
@@ -35,215 +33,37 @@ func init() {
 		}
 	}
 
-	// 如果不是 Alpine Linux 系统，则执行安装
-	if !isAlpine {
-		err := playwright.Install(&playwright.RunOptions{
-			Browsers: []string{"chromium"}, // 只安装 Chromium 驱动（不含浏览器）
-			Verbose:  true,
-		})
-		if err != nil {
-			log.Fatal(err)
+	// --- 关键点1: 安装时跳过浏览器下载 ---
+	// 通过 RunOptions 告诉 Playwright 的驱动安装程序，不要自动下载浏览器。
+	// 你需要自己保证系统里已经有可用的 Chromium。
+	installOptions := &playwright.RunOptions{
+		SkipInstallBrowsers: true, // 核心参数：跳过浏览器二进制文件的下载
+		Verbose:             false,
+	}
+
+	// 执行安装（主要是安装驱动程序，浏览器我们手动管理）
+	err = playwright.Install(installOptions)
+	if err != nil {
+		log.Printf("安装 Playwright 驱动失败: %v", err)
+	}
+
+	// 检查是否已安装浏览器
+	browserPaths := []string{"chromium", "chromium-browser", "google-chrome", "firefox"}
+	hasBrowser := false
+	for _, browser := range browserPaths {
+		if _, err := exec.LookPath(browser); err == nil {
+			hasBrowser = true
+			break
 		}
-	} else { // Just for Alpine Linux
-		// 检查是否已安装浏览器
-		browserPaths := []string{"chromium", "chromium-browser", "google-chrome", "firefox"}
-		hasBrowser := false
-		for _, browser := range browserPaths {
-			if _, err := exec.LookPath(browser); err == nil {
-				hasBrowser = true
-				break
-			}
-		}
-		if !hasBrowser {
-			log.Println("当前为 Alpine Linux 系统，跳过自动安装：必须手动安装浏览器")
-		} else {
-			// 检查是否有浏览器进程已在运行，如果有则杀死
-			if isDebug {
-				log.Println("检查是否有浏览器进程已在运行...")
-			}
-			// 使用 ps 命令查找 Chromium 进程
-			psCmd := exec.Command("ps", "aux")
-			grepCmd := exec.Command("grep", "chromium")
+	}
+	if !hasBrowser {
+		log.Println("未检测到浏览器，请确保已安装 Chromium")
+		return
+	}
 
-			// 连接管道
-			psOut, err := psCmd.StdoutPipe()
-			if err == nil {
-				defer psOut.Close()
-				grepCmd.Stdin = psOut
-				grepOut, err := grepCmd.StdoutPipe()
-				if err == nil {
-					defer grepOut.Close()
-
-					// 启动命令
-					if err := psCmd.Start(); err == nil {
-						if err := grepCmd.Start(); err == nil {
-							// 读取输出
-							output, _ := io.ReadAll(grepOut)
-							psCmd.Wait()
-							grepCmd.Wait()
-
-							// 解析进程 ID 并杀死进程
-							lines := strings.Split(string(output), "\n")
-							for _, line := range lines {
-								if strings.Contains(line, "chromium") && !strings.Contains(line, "grep") {
-									// 提取进程 ID
-									fields := strings.Fields(line)
-									if len(fields) > 1 {
-										pid := fields[1]
-										// 杀死进程
-										killCmd := exec.Command("kill", "-9", pid)
-										killCmd.Run()
-										if isDebug {
-											log.Printf("已杀死 Chromium 进程: %s", pid)
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// 检查并删除残留的 SingletonLock 文件
-			singletonLockPath := "/tmp/chromium-profile/SingletonLock"
-			// 确保目录存在
-			if err := os.MkdirAll("/tmp/chromium-profile", 0755); err != nil {
-				log.Printf("创建 chromium-profile 目录失败: %v", err)
-			}
-			// 死循环尝试删除 SingletonLock 文件，直到成功
-			for {
-				if err := os.Remove(singletonLockPath); err == nil {
-					if isDebug {
-						log.Println("已删除残留的 SingletonLock 文件")
-					}
-					break
-				} else if os.IsNotExist(err) {
-					if isDebug {
-						log.Println("SingletonLock 文件不存在，无需删除")
-					}
-					break
-				} else {
-					if isDebug {
-						log.Printf("删除 SingletonLock 文件失败，将重试: %v", err)
-					}
-					time.Sleep(500 * time.Millisecond)
-				}
-			}
-			// 再次检查文件是否仍然存在
-			if _, err := os.Stat(singletonLockPath); err == nil {
-				log.Printf("警告：SingletonLock 文件仍然存在，可能导致浏览器启动失败")
-			} else if isDebug {
-				log.Println("SingletonLock 文件已成功清理")
-			}
-
-			// 启动浏览器并开启远程调试
-			cdpPort = 10000
-			for isPortInUse(cdpPort) {
-				cdpPort++
-			}
-
-			// 查找浏览器可执行文件路径
-			browserPath := ""
-			browserCandidates := []string{"chromium", "chromium-browser", "google-chrome"}
-			for _, candidate := range browserCandidates {
-				if path, err := exec.LookPath(candidate); err == nil {
-					browserPath = path
-					break
-				}
-			}
-
-			if browserPath == "" {
-				log.Printf("未找到浏览器可执行文件，无法启动浏览器")
-			} else {
-				// 使用 exec.Command 独立启动浏览器并开启远程调试
-				cmd := exec.Command(browserPath,
-					"--no-sandbox",
-					"--disable-setuid-sandbox",
-					"--user-data-dir=/tmp/chromium-profile",          // 避免锁文件冲突
-					"--remote-debugging-port="+strconv.Itoa(cdpPort), // 开启远程调试
-					"--remote-debugging-address=0.0.0.0",             // 绑定到所有接口
-					"--headless",                                     // 无头模式
-					"--disable-gpu",                                  // 禁止 GPU 加速
-					"--disable-dev-shm-usage",                        // 避免共享内存问题
-					"--no-first-run",                                 // 跳过首次运行设置
-					"--no-default-browser-check",                     // 跳过默认浏览器检查
-				)
-				// 捕获浏览器输出以便调试
-				var stdout, stderr bytes.Buffer
-				cmd.Stdout = &stdout
-				cmd.Stderr = &stderr
-				err = cmd.Start()
-				if err != nil {
-					log.Printf("启动浏览器失败: %v", err)
-				} else {
-					browserProcess = cmd.Process
-					cdpURL = fmt.Sprintf("http://localhost:%d", cdpPort)
-					if isDebug {
-						log.Printf("浏览器已启动，路径: %s, CDP URL: %s", browserPath, cdpURL)
-					}
-
-					// 轮询检查浏览器是否完全启动并准备好接受连接
-					maxRetries := 60                        // 最多尝试 60 次
-					retryInterval := 200 * time.Millisecond // 每次尝试间隔 200ms
-					success := false
-
-					if isDebug {
-						log.Printf("开始检查浏览器启动状态，最多等待 %v", time.Duration(maxRetries)*retryInterval)
-					}
-
-					for i := 0; i < maxRetries; i++ {
-						// 检查进程是否仍在运行
-						if browserProcess != nil && isDebug {
-							// 检查进程状态
-							if i%10 == 0 { // 每10次尝试检查一次进程状态
-								log.Printf("浏览器进程状态检查，PID: %d", browserProcess.Pid)
-							}
-						}
-
-						// 尝试连接到 CDP 端口（检查端口是否开放）
-						// 尝试 IPv4
-						conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", cdpPort), 500*time.Millisecond)
-						if err != nil {
-							// 尝试 IPv6
-							conn, err = net.DialTimeout("tcp", fmt.Sprintf("[::1]:%d", cdpPort), 500*time.Millisecond)
-						}
-
-						if err == nil {
-							conn.Close()
-							success = true
-							if isDebug {
-								log.Printf("浏览器已完全启动并准备就绪，端口 %d 已开放", cdpPort)
-							}
-							break
-						} else {
-							// 不记录每次失败，只记录最后几次
-							if i > maxRetries-5 && isDebug {
-								log.Printf("端口 %d 连接失败: %v", cdpPort, err)
-							}
-						}
-						time.Sleep(retryInterval)
-					}
-
-					if !success {
-						log.Printf("警告：无法确认浏览器是否完全启动，可能会导致后续操作失败")
-						log.Printf("尝试直接连接到 CDP URL: %s", cdpURL)
-						// 记录浏览器输出以便调试
-						if isDebug {
-							if stdout.Len() > 0 {
-								log.Printf("浏览器标准输出: %s", stdout.String())
-							}
-							if stderr.Len() > 0 {
-								log.Printf("浏览器标准错误: %s", stderr.String())
-							}
-						}
-					} else {
-						if isDebug {
-							log.Printf("浏览器启动检测成功，准备就绪")
-						}
-					}
-				}
-			}
-		}
+	// 在 Alpine Linux 上，使用系统安装的 Chromium
+	if isAlpine {
+		log.Println("在 Alpine Linux 上使用系统安装的 Chromium")
 	}
 }
 
@@ -266,7 +86,11 @@ type SearchResult struct {
 
 // 搜索功能
 func Search(keyword string) ([]SearchResult, error) {
-	pw, err := playwright.Run()
+	// 启动 Playwright
+	pw, err := playwright.Run(&playwright.RunOptions{
+		SkipInstallBrowsers: true,
+		Verbose:             false,
+	})
 	if err != nil {
 		log.Printf("启动 Playwright 失败: %v", err)
 		return nil, err
@@ -274,32 +98,22 @@ func Search(keyword string) ([]SearchResult, error) {
 	defer pw.Stop()
 
 	var browser playwright.Browser
-	if isAlpine && cdpURL != "" {
-		// 复用已启动的浏览器实例
-		browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
-		if err != nil {
-			log.Printf("连接到浏览器失败: %v", err)
-			return nil, err
-		}
-	} else {
-		// 正常启动浏览器
-		browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-			Headless: playwright.Bool(true),
-		})
-		if err != nil {
-			if isAlpine {
-				// 使用 CDP 连接到浏览器
-				cdpURL := fmt.Sprintf("http://localhost:%d", cdpPort)
-				browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
-				if err != nil {
-					log.Printf("连接到浏览器失败: %v", err)
-					return nil, err
-				}
-			} else {
-				log.Printf("启动浏览器失败: %v", err)
-				return nil, err
-			}
-		}
+
+	// --- 关键点2: 启动时指定使用本地 Chromium ---
+	// 方案 A: 使用 "Channel" 指向系统安装的 Chromium (更优雅)
+	// 这里的 "chrome" 是一个约定，让 Playwright 去系统的 PATH 环境变量里找 Chrome/Chromium。
+	// 它通常会找到 /usr/bin/chromium-browser。
+	launchOptions := playwright.BrowserTypeLaunchOptions{
+		Channel:  playwright.String("chrome"), // 告诉 Playwright 启动系统 Chrome/Chromium
+		Headless: playwright.Bool(true),
+		Args:     []string{"--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"},
+	}
+
+	// 启动浏览器
+	browser, err = pw.Chromium.Launch(launchOptions)
+	if err != nil {
+		log.Printf("启动浏览器失败: %v", err)
+		return nil, err
 	}
 	defer browser.Close()
 
@@ -320,7 +134,11 @@ func Search(keyword string) ([]SearchResult, error) {
 
 // 访问功能
 func Visit(url string) (string, error) {
-	pw, err := playwright.Run()
+	// 启动 Playwright
+	pw, err := playwright.Run(&playwright.RunOptions{
+		SkipInstallBrowsers: true,
+		Verbose:             false,
+	})
 	if err != nil {
 		log.Printf("启动 Playwright 失败: %v", err)
 		return "", err
@@ -328,32 +146,19 @@ func Visit(url string) (string, error) {
 	defer pw.Stop()
 
 	var browser playwright.Browser
-	if isAlpine && cdpURL != "" {
-		// 复用已启动的浏览器实例
-		browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
-		if err != nil {
-			log.Printf("连接到浏览器失败: %v", err)
-			return "", err
-		}
-	} else {
-		// 正常启动浏览器
-		browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-			Headless: playwright.Bool(true),
-		})
-		if err != nil {
-			if isAlpine {
-				// 使用 CDP 连接到浏览器
-				cdpURL := fmt.Sprintf("http://localhost:%d", cdpPort)
-				browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
-				if err != nil {
-					log.Printf("连接到浏览器失败: %v", err)
-					return "", err
-				}
-			} else {
-				log.Printf("启动浏览器失败: %v", err)
-				return "", err
-			}
-		}
+
+	// 使用 "Channel" 指向系统安装的 Chromium
+	launchOptions := playwright.BrowserTypeLaunchOptions{
+		Channel:  playwright.String("chrome"), // 告诉 Playwright 启动系统 Chrome/Chromium
+		Headless: playwright.Bool(true),
+		Args:     []string{"--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"},
+	}
+
+	// 启动浏览器
+	browser, err = pw.Chromium.Launch(launchOptions)
+	if err != nil {
+		log.Printf("启动浏览器失败: %v", err)
+		return "", err
 	}
 	defer browser.Close()
 
@@ -373,7 +178,11 @@ func Visit(url string) (string, error) {
 
 // 通用下载功能
 func Download(url string) (string, error) {
-	pw, err := playwright.Run()
+	// 启动 Playwright
+	pw, err := playwright.Run(&playwright.RunOptions{
+		SkipInstallBrowsers: true,
+		Verbose:             false,
+	})
 	if err != nil {
 		log.Printf("启动 Playwright 失败: %v", err)
 		return "", err
@@ -381,32 +190,19 @@ func Download(url string) (string, error) {
 	defer pw.Stop()
 
 	var browser playwright.Browser
-	if isAlpine && cdpURL != "" {
-		// 复用已启动的浏览器实例
-		browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
-		if err != nil {
-			log.Printf("连接到浏览器失败: %v", err)
-			return "", err
-		}
-	} else {
-		// 正常启动浏览器
-		browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-			Headless: playwright.Bool(true),
-		})
-		if err != nil {
-			if isAlpine {
-				// 使用 CDP 连接到浏览器
-				cdpURL := fmt.Sprintf("http://localhost:%d", cdpPort)
-				browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
-				if err != nil {
-					log.Printf("连接到浏览器失败: %v", err)
-					return "", err
-				}
-			} else {
-				log.Printf("启动浏览器失败: %v", err)
-				return "", err
-			}
-		}
+
+	// 使用 "Channel" 指向系统安装的 Chromium
+	launchOptions := playwright.BrowserTypeLaunchOptions{
+		Channel:  playwright.String("chrome"), // 告诉 Playwright 启动系统 Chrome/Chromium
+		Headless: playwright.Bool(true),
+		Args:     []string{"--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"},
+	}
+
+	// 启动浏览器
+	browser, err = pw.Chromium.Launch(launchOptions)
+	if err != nil {
+		log.Printf("启动浏览器失败: %v", err)
+		return "", err
 	}
 	defer browser.Close()
 
