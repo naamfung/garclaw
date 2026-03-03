@@ -91,7 +91,9 @@ func init() {
 										// 杀死进程
 										killCmd := exec.Command("kill", "-9", pid)
 										killCmd.Run()
-										log.Printf("已杀死 Chromium 进程: %s", pid)
+										if isDebug {
+											log.Printf("已杀死 Chromium 进程: %s", pid)
+										}
 									}
 								}
 							}
@@ -102,13 +104,34 @@ func init() {
 
 			// 检查并删除残留的 SingletonLock 文件
 			singletonLockPath := "/tmp/chromium-profile/SingletonLock"
-			if _, err := os.Stat(singletonLockPath); err == nil {
-				// 文件存在，删除它
+			// 确保目录存在
+			if err := os.MkdirAll("/tmp/chromium-profile", 0755); err != nil {
+				log.Printf("创建 chromium-profile 目录失败: %v", err)
+			}
+			// 死循环尝试删除 SingletonLock 文件，直到成功
+			for {
 				if err := os.Remove(singletonLockPath); err == nil {
-					log.Println("已删除残留的 SingletonLock 文件")
+					if isDebug {
+						log.Println("已删除残留的 SingletonLock 文件")
+					}
+					break
+				} else if os.IsNotExist(err) {
+					if isDebug {
+						log.Println("SingletonLock 文件不存在，无需删除")
+					}
+					break
 				} else {
-					log.Printf("删除 SingletonLock 文件失败: %v", err)
+					if isDebug {
+						log.Printf("删除 SingletonLock 文件失败，将重试: %v", err)
+					}
+					time.Sleep(500 * time.Millisecond)
 				}
+			}
+			// 再次检查文件是否仍然存在
+			if _, err := os.Stat(singletonLockPath); err == nil {
+				log.Printf("警告：SingletonLock 文件仍然存在，可能导致浏览器启动失败")
+			} else if isDebug {
+				log.Println("SingletonLock 文件已成功清理")
 			}
 
 			// 启动浏览器并开启远程调试
@@ -153,18 +176,24 @@ func init() {
 				} else {
 					browserProcess = cmd.Process
 					cdpURL = fmt.Sprintf("http://localhost:%d", cdpPort)
-					log.Printf("浏览器已启动，路径: %s, CDP URL: %s", browserPath, cdpURL)
+					if isDebug {
+						log.Printf("浏览器已启动，路径: %s, CDP URL: %s", browserPath, cdpURL)
+					} else {
+						log.Println("浏览器已启动")
+					}
 
 					// 轮询检查浏览器是否完全启动并准备好接受连接
 					maxRetries := 60                        // 最多尝试 60 次
 					retryInterval := 200 * time.Millisecond // 每次尝试间隔 200ms
 					success := false
 
-					log.Printf("开始检查浏览器启动状态，最多等待 %v", time.Duration(maxRetries)*retryInterval)
+					if isDebug {
+						log.Printf("开始检查浏览器启动状态，最多等待 %v", time.Duration(maxRetries)*retryInterval)
+					}
 
 					for i := 0; i < maxRetries; i++ {
 						// 检查进程是否仍在运行
-						if browserProcess != nil {
+						if browserProcess != nil && isDebug {
 							// 检查进程状态
 							if i%10 == 0 { // 每10次尝试检查一次进程状态
 								log.Printf("浏览器进程状态检查，PID: %d", browserProcess.Pid)
@@ -182,11 +211,15 @@ func init() {
 						if err == nil {
 							conn.Close()
 							success = true
-							log.Printf("浏览器已完全启动并准备就绪，端口 %d 已开放", cdpPort)
+							if isDebug {
+								log.Printf("浏览器已完全启动并准备就绪，端口 %d 已开放", cdpPort)
+							} else {
+								log.Println("浏览器已启动并准备就绪")
+							}
 							break
 						} else {
 							// 不记录每次失败，只记录最后几次
-							if i > maxRetries-5 {
+							if i > maxRetries-5 && isDebug {
 								log.Printf("端口 %d 连接失败: %v", cdpPort, err)
 							}
 						}
@@ -197,14 +230,18 @@ func init() {
 						log.Printf("警告：无法确认浏览器是否完全启动，可能会导致后续操作失败")
 						log.Printf("尝试直接连接到 CDP URL: %s", cdpURL)
 						// 记录浏览器输出以便调试
-						if stdout.Len() > 0 {
-							log.Printf("浏览器标准输出: %s", stdout.String())
-						}
-						if stderr.Len() > 0 {
-							log.Printf("浏览器标准错误: %s", stderr.String())
+						if isDebug {
+							if stdout.Len() > 0 {
+								log.Printf("浏览器标准输出: %s", stdout.String())
+							}
+							if stderr.Len() > 0 {
+								log.Printf("浏览器标准错误: %s", stderr.String())
+							}
 						}
 					} else {
-						log.Printf("浏览器启动检测成功，准备就绪")
+						if isDebug {
+							log.Printf("浏览器启动检测成功，准备就绪")
+						}
 					}
 				}
 			}
