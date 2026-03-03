@@ -192,10 +192,13 @@ func translateUnixToWindows(command string) string {
 		// cat 命令转换为 type
 		return "type " + strings.Join(args, " ")
 	case "echo":
-		// echo 命令在Windows中也可用
-		return command
-	default:
-		// 其他命令保持不变
-		return command
+			// echo 命令在Windows中也可用
+			return command
+		case "date":
+			// date 命令转换为 date /t
+			return "date /t"
+		default:
+			// 其他命令保持不变
+			return command
 	}
 }
