@@ -55,7 +55,7 @@ APIConfig:
 - `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`：对应 API 的密钥
 - `MODEL_ID`：模型 ID
 - `TEMPERATURE`：温度参数
-- `MAX_TOKENS`：最大 tokens
+- `MAX_TOKENS`：最大令牌数量
 
 ## 使用方法
 
