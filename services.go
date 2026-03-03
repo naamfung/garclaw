@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"net"
 	net_url "net/url"
 	"os"
 	"os/exec"
@@ -18,10 +17,7 @@ import (
 )
 
 var (
-	isAlpine       = false
-	browserProcess *os.Process
-	cdpURL         string
-	cdpPort        int
+	isAlpine = false
 )
 
 func init() {
@@ -73,17 +69,6 @@ func init() {
 	}
 }
 
-// 检查端口是否被占用
-func isPortInUse(port int) bool {
-	addr := fmt.Sprintf(":%d", port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return true
-	}
-	listener.Close()
-	return false
-}
-
 // 搜索结果结构
 type SearchResult struct {
 	Title string `json:"title"`
@@ -130,9 +115,8 @@ func Search(keyword string) ([]SearchResult, error) {
 	}
 	defer page.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	page.SetDefaultTimeout(float64(60 * time.Second / time.Millisecond))
+	// 移除超时设置，使用 Playwright 自带的等待机制
+	ctx := context.Background()
 
 	searchURL := fmt.Sprintf("https://www.baidu.com/s?ie=UTF-8&wd=%s", keyword)
 	return search(ctx, page, searchURL)
@@ -175,9 +159,8 @@ func Visit(url string) (string, error) {
 	}
 	defer page.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	page.SetDefaultTimeout(float64(60 * time.Second / time.Millisecond))
+	// 移除超时设置，使用 Playwright 自带的等待机制
+	ctx := context.Background()
 
 	return visitURL(ctx, page, url)
 }
@@ -219,9 +202,7 @@ func Download(url string) (string, error) {
 	}
 	defer page.Close()
 
-	// ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	// defer cancel()
-	page.SetDefaultTimeout(float64(60 * time.Second / time.Millisecond))
+	// 移除超时设置，使用 Playwright 自带的等待机制
 
 	if _, err = page.Goto(url, playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateNetworkidle,
@@ -230,7 +211,7 @@ func Download(url string) (string, error) {
 		return "", err
 	}
 
-	if _, err = page.WaitForSelector("body", playwright.PageWaitForSelectorOptions{
+	if err := page.Locator("body").WaitFor(playwright.LocatorWaitForOptions{
 		State: playwright.WaitForSelectorStateAttached,
 	}); err != nil {
 		log.Printf("等待 body 失败: %v", err)
@@ -272,7 +253,7 @@ func search(ctx context.Context, page playwright.Page, searchURL string) ([]Sear
 		return nil, err
 	}
 
-	if _, err := page.WaitForSelector("#content_left", playwright.PageWaitForSelectorOptions{
+	if err := page.Locator("#content_left").WaitFor(playwright.LocatorWaitForOptions{
 		State: playwright.WaitForSelectorStateAttached,
 	}); err != nil {
 		log.Printf("等待搜索结果容器失败: %v", err)
@@ -331,7 +312,7 @@ func visitURL(ctx context.Context, page playwright.Page, url string) (string, er
 		return "", err
 	}
 
-	if _, err := page.WaitForSelector("body", playwright.PageWaitForSelectorOptions{
+	if err := page.Locator("body").WaitFor(playwright.LocatorWaitForOptions{
 		State: playwright.WaitForSelectorStateAttached,
 	}); err != nil {
 		log.Printf("等待 body 失败: %v", err)
@@ -393,7 +374,7 @@ func downloadNovel(ctx context.Context, page playwright.Page, novelURL string) e
 		return err
 	}
 
-	if _, err := page.WaitForSelector("body", playwright.PageWaitForSelectorOptions{
+	if err := page.Locator("body").WaitFor(playwright.LocatorWaitForOptions{
 		State: playwright.WaitForSelectorStateAttached,
 	}); err != nil {
 		log.Printf("等待页面加载失败: %v", err)
@@ -582,7 +563,7 @@ func downloadNovel(ctx context.Context, page playwright.Page, novelURL string) e
 				goto NextChapter
 			}
 
-			_, err = page.WaitForSelector("body", playwright.PageWaitForSelectorOptions{
+			err = page.Locator("body").WaitFor(playwright.LocatorWaitForOptions{
 				State: playwright.WaitForSelectorStateAttached,
 			})
 			if err != nil {
