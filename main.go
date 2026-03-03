@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,12 @@ const (
 	isDebug                = false // 控制调试信息的显示
 	SYSTEM_PROMPT_TEMPLATE = "You are a coding agent. When the user asks to list files, run commands, or interact with the system, you MUST use the shell {{tool_or_function}}. When you need to read a specific line from a file, use the read_file_line {{tool_or_function}}. When you need to write content to a specific line in a file, use the write_file_line {{tool_or_function}}. When you need to read all lines from a file, use the read_all_lines {{tool_or_function}}. When you need to write all lines to a file, use the write_all_lines {{tool_or_function}}. When you need to manage tasks, use the todo {{tool_or_function}}. IMPORTANT: The current system time is provided at the end of this prompt. When asked about the current date or time, you MUST use this provided time information directly and NOT attempt to execute any commands to get the date or time. When you need to search for time-sensitive information like news, you MUST use this current system time to construct your search query. Do NOT explain how to run the command, do NOT provide alternative methods, just use the {{tool_or_function}} directly. For example, when asked to list files, use the shell {{tool_or_function}} with command 'ls' or 'ls -la' (Unix/Linux). Your response MUST be a {{tool_or_function}} call, not a regular message. Under no circumstances should you provide explanations or instructions to the user - only use the {{tool_or_function}}."
 )
+
+// 定义需要替换的词映射
+var wordReplacements = map[string]string{
+	"您": "你",
+	"咱": "我",
+}
 
 // 消息结构
 type Message struct {
@@ -249,10 +256,26 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 			// 实时打印文本内容
 			if chunk.Content != "" {
-				fmt.Print(chunk.Content)
+				// 基于词匹配的替换
+				processedContent := chunk.Content
+
+				// 定义需要替换的词映射
+				wordReplacements := map[string]string{
+					"您": "你",
+					"咱": "我",
+				}
+
+				// 使用正则表达式进行词匹配替换
+				for oldWord, newWord := range wordReplacements {
+					// 构建正则表达式，确保匹配完整的词
+					re := regexp.MustCompile(fmt.Sprintf(`\\b%s\\b`, regexp.QuoteMeta(oldWord)))
+					processedContent = re.ReplaceAllString(processedContent, newWord)
+				}
+
+				fmt.Print(processedContent)
 				stdout := os.Stdout
 				stdout.Sync()
-				fullContent.WriteString(chunk.Content)
+				fullContent.WriteString(processedContent)
 			}
 
 			// 处理工具调用块
@@ -351,9 +374,13 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			return Response{}, err
 		}
 
+		responseBodyStr := strings.ReplaceAll(string(responseBody), "您", "你")
+		responseBodyStr = strings.ReplaceAll(responseBodyStr, "咱", "我")
+		responseBody = []byte(responseBodyStr)
+
 		// 打印响应体
 		if isDebug {
-			fmt.Printf("Response body: %s\n", string(responseBody))
+			fmt.Printf("Response body: %s\n", responseBodyStr)
 		}
 
 		// 重置响应体，以便后续解码
