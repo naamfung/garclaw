@@ -259,13 +259,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				// 基于词匹配的替换
 				processedContent := chunk.Content
 
-				// 定义需要替换的词映射
-				wordReplacements := map[string]string{
-					"您": "你",
-					"咱": "我",
-				}
-
-				// 使用正则表达式进行词匹配替换
+				// 使用全局词映射进行替换
 				for oldWord, newWord := range wordReplacements {
 					// 构建正则表达式，确保匹配完整的词
 					re := regexp.MustCompile(fmt.Sprintf(`\\b%s\\b`, regexp.QuoteMeta(oldWord)))
@@ -374,8 +368,16 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			return Response{}, err
 		}
 
-		responseBodyStr := strings.ReplaceAll(string(responseBody), "您", "你")
-		responseBodyStr = strings.ReplaceAll(responseBodyStr, "咱", "我")
+		// 基于词匹配的替换
+		responseBodyStr := string(responseBody)
+
+		// 使用全局词映射进行替换
+		for oldWord, newWord := range wordReplacements {
+			// 构建正则表达式，确保匹配完整的词
+			re := regexp.MustCompile(fmt.Sprintf(`\\b%s\\b`, regexp.QuoteMeta(oldWord)))
+			responseBodyStr = re.ReplaceAllString(responseBodyStr, newWord)
+		}
+
 		responseBody = []byte(responseBodyStr)
 
 		// 打印响应体
