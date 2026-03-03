@@ -950,30 +950,6 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						ToolUseID: toolID,
 						Content:   output,
 					})
-				case "download_novel":
-					novelURL, _ := argsMap["novel_url"].(string)
-					if novelURL == "" {
-						fmt.Printf("Warning: empty novel_url in download_novel tool call\n")
-						continue
-					}
-
-					fmt.Printf("Downloading novel from: %s\n", novelURL)
-					err := DownloadNovel(novelURL)
-					var output string
-					if err != nil {
-						output = "Error: " + err.Error()
-					} else {
-						output = "Novel download completed"
-					}
-
-					// 打印输出
-					fmt.Println(output)
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
 				case "todo":
 					itemsInterface, _ := argsMap["items"].([]interface{})
 					if itemsInterface == nil {
@@ -1256,30 +1232,6 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									output = "Error: " + err.Error()
 								} else {
 									output = "Download completed, saved to: " + fileName
-								}
-
-								// 打印输出
-								fmt.Println(output)
-
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
-									Content:   output,
-								})
-							case "download_novel":
-								novelURL := input["novel_url"].(string)
-								if novelURL == "" {
-									fmt.Printf("Warning: empty novel_url in download_novel tool call\n")
-									continue
-								}
-
-								fmt.Printf("Downloading novel from: %s\n", novelURL)
-								err := DownloadNovel(novelURL)
-								var output string
-								if err != nil {
-									output = "Error: " + err.Error()
-								} else {
-									output = "Novel download completed"
 								}
 
 								// 打印输出

@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +22,7 @@ var (
 	isAlpine       = false
 	browserProcess *os.Process
 	cdpURL         string
+	cdpPort        int
 )
 
 func init() {
@@ -57,18 +57,18 @@ func init() {
 			log.Println("当前为 Alpine Linux 系统，跳过自动安装：必须手动安装浏览器")
 		} else {
 			// 启动浏览器并开启远程调试
-			port := 10000
-			for isPortInUse(port) {
-				port++
+			cdpPort = 10000
+			for isPortInUse(cdpPort) {
+				cdpPort++
 			}
 
 			// 使用 exec.Command 独立启动浏览器并开启远程调试
 			cmd := exec.Command("/usr/bin/chromium-browser",
 				"--no-sandbox",
 				"--disable-setuid-sandbox",
-				"--user-data-dir=/tmp/chromium-profile",       // 避免锁文件冲突
-				"--remote-debugging-port="+strconv.Itoa(port), // 开启远程调试
-				"--headless",                                  // 无头模式
+				"--user-data-dir=/tmp/chromium-profile",          // 避免锁文件冲突
+				"--remote-debugging-port="+strconv.Itoa(cdpPort), // 开启远程调试
+				"--headless",                                     // 无头模式
 			)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -77,7 +77,7 @@ func init() {
 				log.Printf("启动浏览器失败: %v", err)
 			} else {
 				browserProcess = cmd.Process
-				cdpURL = fmt.Sprintf("http://localhost:%d", port)
+				cdpURL = fmt.Sprintf("http://localhost:%d", cdpPort)
 				log.Printf("浏览器已启动，CDP URL: %s", cdpURL)
 
 				// 轮询检查浏览器是否完全启动并准备好接受连接
@@ -87,7 +87,7 @@ func init() {
 
 				for range make([]struct{}, maxRetries) {
 					// 检查端口是否被占用（表示浏览器正在监听）
-					if isPortInUse(port) {
+					if isPortInUse(cdpPort) {
 						// 尝试连接到 CDP 端口
 						client := &http.Client{
 							Timeout: 500 * time.Millisecond,
@@ -151,17 +151,11 @@ func Search(keyword string) ([]SearchResult, error) {
 		})
 		if err != nil {
 			if isAlpine {
-				browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-					Headless:       playwright.Bool(true),                          // 是否无头模式
-					ExecutablePath: playwright.String("/usr/bin/chromium-browser"), // 根据实际路径调整
-					Args: []string{
-						"--no-sandbox",
-						"--disable-setuid-sandbox",
-						"--user-data-dir=/tmp/chromium-profile", // 避免锁文件冲突
-					},
-				})
+				// 使用 CDP 连接到浏览器
+				cdpURL := fmt.Sprintf("http://localhost:%d", cdpPort)
+				browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
 				if err != nil {
-					log.Printf("启动浏览器失败: %v", err)
+					log.Printf("连接到浏览器失败: %v", err)
 					return nil, err
 				}
 			} else {
@@ -211,17 +205,11 @@ func Visit(url string) (string, error) {
 		})
 		if err != nil {
 			if isAlpine {
-				browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-					Headless:       playwright.Bool(true),                          // 是否无头模式
-					ExecutablePath: playwright.String("/usr/bin/chromium-browser"), // 根据实际路径调整
-					Args: []string{
-						"--no-sandbox",
-						"--disable-setuid-sandbox",
-						"--user-data-dir=/tmp/chromium-profile", // 避免锁文件冲突
-					},
-				})
+				// 使用 CDP 连接到浏览器
+				cdpURL := fmt.Sprintf("http://localhost:%d", cdpPort)
+				browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
 				if err != nil {
-					log.Printf("启动浏览器失败: %v", err)
+					log.Printf("连接到浏览器失败: %v", err)
 					return "", err
 				}
 			} else {
@@ -244,92 +232,6 @@ func Visit(url string) (string, error) {
 	page.SetDefaultTimeout(float64(60 * time.Second / time.Millisecond))
 
 	return visitURL(ctx, page, url)
-}
-
-// 下载小说功能
-func DownloadNovel(novelURL string) error {
-	// 创建上下文，用于管理浏览器进程
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	pw, err := playwright.Run()
-	if err != nil {
-		log.Printf("启动 Playwright 失败: %v", err)
-		return err
-	}
-	defer pw.Stop()
-
-	var browser playwright.Browser
-	if isAlpine && cdpURL != "" {
-		// 复用已启动的浏览器实例
-		browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
-		if err != nil {
-			log.Printf("连接到浏览器失败: %v", err)
-			// 取消上下文，终止浏览器进程
-			cancel()
-			return err
-		}
-	} else {
-		// 正常启动浏览器
-		browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-			Headless: playwright.Bool(true),
-		})
-		if err != nil {
-			if isAlpine {
-				// 查找可用端口（从 10000 开始）
-				port := 10000
-				for isPortInUse(port) {
-					port++
-				}
-
-				// 使用 exec.Command 独立启动浏览器并开启远程调试
-				cmd := exec.CommandContext(ctx, "/usr/bin/chromium-browser",
-					"--no-sandbox",
-					"--disable-setuid-sandbox",
-					"--user-data-dir=/tmp/chromium-profile",       // 避免锁文件冲突
-					"--remote-debugging-port="+strconv.Itoa(port), // 开启远程调试
-					"--headless",                                  // 无头模式
-				)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err := cmd.Start()
-				if err != nil {
-					log.Printf("启动浏览器失败: %v", err)
-					return err
-				}
-
-				// 等待浏览器启动
-				time.Sleep(2 * time.Second)
-
-				// 使用 CDP 连接到浏览器
-				cdpURL := fmt.Sprintf("http://localhost:%d", port)
-				browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
-				if err != nil {
-					log.Printf("连接到浏览器失败: %v", err)
-					// 取消上下文，终止浏览器进程
-					cancel()
-					return err
-				}
-			} else {
-				log.Printf("启动浏览器失败: %v", err)
-				return err
-			}
-		}
-	}
-	defer browser.Close()
-
-	page, err := browser.NewPage()
-	if err != nil {
-		log.Printf("创建页面失败: %v", err)
-		// 取消上下文，终止浏览器进程
-		cancel()
-		return err
-	}
-	defer page.Close()
-
-	// 保持默认超时设置，让 Playwright 自己管理超时
-
-	return downloadNovel(ctx, page, novelURL)
 }
 
 // 通用下载功能
@@ -355,18 +257,12 @@ func Download(url string) (string, error) {
 			Headless: playwright.Bool(true),
 		})
 		if err != nil {
-			if runtime.GOOS == "linux" {
-				browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-					Headless:       playwright.Bool(true),                          // 是否无头模式
-					ExecutablePath: playwright.String("/usr/bin/chromium-browser"), // 根据实际路径调整
-					Args: []string{
-						"--no-sandbox",
-						"--disable-setuid-sandbox",
-						"--user-data-dir=/tmp/chromium-profile", // 避免锁文件冲突
-					},
-				})
+			if isAlpine {
+				// 使用 CDP 连接到浏览器
+				cdpURL := fmt.Sprintf("http://localhost:%d", cdpPort)
+				browser, err = pw.Chromium.ConnectOverCDP(cdpURL)
 				if err != nil {
-					log.Printf("启动浏览器失败: %v", err)
+					log.Printf("连接到浏览器失败: %v", err)
 					return "", err
 				}
 			} else {
