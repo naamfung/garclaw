@@ -46,6 +46,7 @@ func Search(keyword string) ([]SearchResult, error) {
 				Args: []string{
 					"--no-sandbox",
 					"--disable-setuid-sandbox",
+					"--user-data-dir=/tmp/chromium-profile", // 避免锁文件冲突
 				},
 			})
 			if err != nil {
@@ -94,6 +95,7 @@ func Visit(url string) (string, error) {
 				Args: []string{
 					"--no-sandbox",
 					"--disable-setuid-sandbox",
+					"--user-data-dir=/tmp/chromium-profile", // 避免锁文件冲突
 				},
 			})
 			if err != nil {
@@ -141,6 +143,7 @@ func DownloadNovel(novelURL string) error {
 				Args: []string{
 					"--no-sandbox",
 					"--disable-setuid-sandbox",
+					"--user-data-dir=/tmp/chromium-profile", // 避免锁文件冲突
 				},
 			})
 			if err != nil {
@@ -188,6 +191,7 @@ func Download(url string) (string, error) {
 				Args: []string{
 					"--no-sandbox",
 					"--disable-setuid-sandbox",
+					"--user-data-dir=/tmp/chromium-profile", // 避免锁文件冲突
 				},
 			})
 			if err != nil {
