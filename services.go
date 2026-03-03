@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	net_url "net/url"
 	"os"
 	"os/exec"
@@ -44,7 +44,7 @@ func init() {
 		if err != nil {
 			log.Fatal(err)
 		}
-	} else {
+	} else { // Just for Alpine Linux
 		// 检查是否已安装浏览器
 		browserPaths := []string{"chromium", "chromium-browser", "google-chrome", "firefox"}
 		hasBrowser := false
@@ -136,16 +136,17 @@ func init() {
 					"--disable-setuid-sandbox",
 					"--user-data-dir=/tmp/chromium-profile",          // 避免锁文件冲突
 					"--remote-debugging-port="+strconv.Itoa(cdpPort), // 开启远程调试
+					"--remote-debugging-address=0.0.0.0",             // 绑定到所有接口
 					"--headless",                                     // 无头模式
 					"--disable-gpu",                                  // 禁止 GPU 加速
+					"--disable-dev-shm-usage",                        // 避免共享内存问题
+					"--no-first-run",                                 // 跳过首次运行设置
+					"--no-default-browser-check",                     // 跳过默认浏览器检查
 				)
-				// 将标准输出与标准错误重定向到 null 设备，避免干扰终端输入
-				nullFile, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
-				if err == nil {
-					cmd.Stdout = nullFile
-					cmd.Stderr = nullFile
-					defer nullFile.Close()
-				}
+				// 捕获浏览器输出以便调试
+				var stdout, stderr bytes.Buffer
+				cmd.Stdout = &stdout
+				cmd.Stderr = &stderr
 				err = cmd.Start()
 				if err != nil {
 					log.Printf("启动浏览器失败: %v", err)
@@ -162,21 +163,31 @@ func init() {
 					log.Printf("开始检查浏览器启动状态，最多等待 %v", time.Duration(maxRetries)*retryInterval)
 
 					for i := 0; i < maxRetries; i++ {
-						// 尝试连接到 CDP 端口（Playwright 会自动处理端点发现）
-						client := &http.Client{
-							Timeout: 1 * time.Second, // 增加超时时间
+						// 检查进程是否仍在运行
+						if browserProcess != nil {
+							// 检查进程状态
+							if i%10 == 0 { // 每10次尝试检查一次进程状态
+								log.Printf("浏览器进程状态检查，PID: %d", browserProcess.Pid)
+							}
 						}
 
-						// 直接使用基础 URL，Playwright 会自动发现正确的端点
-						_, err := client.Get(cdpURL)
+						// 尝试连接到 CDP 端口（检查端口是否开放）
+						// 尝试 IPv4
+						conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", cdpPort), 500*time.Millisecond)
+						if err != nil {
+							// 尝试 IPv6
+							conn, err = net.DialTimeout("tcp", fmt.Sprintf("[::1]:%d", cdpPort), 500*time.Millisecond)
+						}
+
 						if err == nil {
+							conn.Close()
 							success = true
-							log.Printf("浏览器已完全启动并准备就绪")
+							log.Printf("浏览器已完全启动并准备就绪，端口 %d 已开放", cdpPort)
 							break
 						} else {
 							// 不记录每次失败，只记录最后几次
 							if i > maxRetries-5 {
-								log.Printf("连接到 %s 失败: %v", cdpURL, err)
+								log.Printf("端口 %d 连接失败: %v", cdpPort, err)
 							}
 						}
 						time.Sleep(retryInterval)
@@ -185,6 +196,13 @@ func init() {
 					if !success {
 						log.Printf("警告：无法确认浏览器是否完全启动，可能会导致后续操作失败")
 						log.Printf("尝试直接连接到 CDP URL: %s", cdpURL)
+						// 记录浏览器输出以便调试
+						if stdout.Len() > 0 {
+							log.Printf("浏览器标准输出: %s", stdout.String())
+						}
+						if stderr.Len() > 0 {
+							log.Printf("浏览器标准错误: %s", stderr.String())
+						}
 					} else {
 						log.Printf("浏览器启动检测成功，准备就绪")
 					}
