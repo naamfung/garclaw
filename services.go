@@ -70,9 +70,14 @@ func init() {
 				"--remote-debugging-port="+strconv.Itoa(cdpPort), // 开启远程调试
 				"--headless",                                     // 无头模式
 			)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Start()
+			// 将标准输出和标准错误重定向到 null 设备，避免干扰终端输入
+			nullFile, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
+			if err == nil {
+				cmd.Stdout = nullFile
+				cmd.Stderr = nullFile
+				defer nullFile.Close()
+			}
+			err = cmd.Start()
 			if err != nil {
 				log.Printf("启动浏览器失败: %v", err)
 			} else {
