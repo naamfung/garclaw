@@ -15,6 +15,10 @@ import (
 	"github.com/playwright-community/playwright-go"
 )
 
+func init() {
+	playwright.Install()
+}
+
 // 搜索结果结构
 type SearchResult struct {
 	Title string `json:"title"`
@@ -265,22 +269,21 @@ func visitURL(ctx context.Context, page playwright.Page, url string) (string, er
 	time.Sleep(15 * time.Second)
 
 	jsEnabled := true
-	textContent, err := page.Evaluate(`
-		function getTextContentWithoutScriptsAndStyles() {
-			const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-			let text = '';
-			while (walker.nextNode()) {
-				const node = walker.currentNode;
-				if (!node.parentElement.matches('script, style, .confirm-dialog') &&
-					window.getComputedStyle(node.parentElement).display !== 'none' &&
-					window.getComputedStyle(node.parentElement).visibility !== 'hidden') {
-					text += node.nodeValue.trim() + ' ';
-				}
-			}
-			return text.trim();
-		}
-		getTextContentWithoutScriptsAndStyles()
-	`)
+    textContent, err := page.Evaluate(`
+        (() => {
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+            let text = '';
+            while (walker.nextNode()) {
+                const node = walker.currentNode;
+                if (!node.parentElement.matches('script, style, .confirm-dialog') &&
+                    window.getComputedStyle(node.parentElement).display !== 'none' &&
+                    window.getComputedStyle(node.parentElement).visibility !== 'hidden') {
+                    text += node.nodeValue.trim() + ' ';
+                }
+            }
+            return text.trim();
+        })()
+    `)
 	if err != nil {
 		log.Printf("提取文本内容失败: %v", err)
 		return "", err

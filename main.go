@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/toon-format/toon-go"
 )
@@ -24,7 +25,7 @@ const (
 	DEFAULT_MODEL_ID       = "claude-3-opus-20240229"
 	CONFIG_FILE            = "config.toon"
 	isDebug                = false // 控制调试信息的显示
-	SYSTEM_PROMPT_TEMPLATE = "You are a coding agent. When the user asks to list files, run commands, or interact with the system, you MUST use the shell {{tool_or_function}}. When you need to read a specific line from a file, use the read_file_line {{tool_or_function}}. When you need to write content to a specific line in a file, use the write_file_line {{tool_or_function}}. When you need to read all lines from a file, use the read_all_lines {{tool_or_function}}. When you need to write all lines to a file, use the write_all_lines {{tool_or_function}}. When you need to manage tasks, use the todo {{tool_or_function}}. Do NOT explain how to run the command, do NOT provide alternative methods, just use the {{tool_or_function}} directly. For example, when asked to list files, use the shell {{tool_or_function}} with command 'ls' or 'ls -la' (Unix/Linux). Your response MUST be a {{tool_or_function}} call, not a regular message. Under no circumstances should you provide explanations or instructions to the user - only use the {{tool_or_function}}."
+	SYSTEM_PROMPT_TEMPLATE = "You are a coding agent. When the user asks to list files, run commands, or interact with the system, you MUST use the shell {{tool_or_function}}. When you need to read a specific line from a file, use the read_file_line {{tool_or_function}}. When you need to write content to a specific line in a file, use the write_file_line {{tool_or_function}}. When you need to read all lines from a file, use the read_all_lines {{tool_or_function}}. When you need to write all lines to a file, use the write_all_lines {{tool_or_function}}. When you need to manage tasks, use the todo {{tool_or_function}}. When you need to search for time-sensitive information like news, you MUST use the current system time provided in the prompt to construct your search query. Do NOT explain how to run the command, do NOT provide alternative methods, just use the {{tool_or_function}} directly. For example, when asked to list files, use the shell {{tool_or_function}} with command 'ls' or 'ls -la' (Unix/Linux). Your response MUST be a {{tool_or_function}} call, not a regular message. Under no circumstances should you provide explanations or instructions to the user - only use the {{tool_or_function}}."
 )
 
 // 消息结构
@@ -86,6 +87,9 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		}
 		// 生成系统提示，Anthropic 使用 "tool"
 		systemPrompt := strings.ReplaceAll(SYSTEM_PROMPT_TEMPLATE, "{{tool_or_function}}", "tool")
+		// 添加当前时间信息
+		currentTime := time.Now().Format("2006-01-02 15:04:05")
+		systemPrompt += fmt.Sprintf("\n\n当前系统时间：%s", currentTime)
 		data = map[string]interface{}{
 			"model":       modelID,
 			"system":      systemPrompt,
@@ -112,6 +116,9 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		}
 		// 生成系统提示，Ollama 使用 "tool"
 		systemPrompt := strings.ReplaceAll(SYSTEM_PROMPT_TEMPLATE, "{{tool_or_function}}", "tool")
+		// 添加当前时间信息
+		currentTime := time.Now().Format("2006-01-02 15:04:05")
+		systemPrompt += fmt.Sprintf("\n\n当前系统时间：%s", currentTime)
 		data = map[string]interface{}{
 			"model":       modelID,
 			"messages":    ollamaMessages,
@@ -161,6 +168,9 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		}
 		// 生成系统提示，OpenAI 使用 "function"
 		systemPrompt := strings.ReplaceAll(SYSTEM_PROMPT_TEMPLATE, "{{tool_or_function}}", "function")
+		// 添加当前时间信息
+		currentTime := time.Now().Format("2006-01-02 15:04:05")
+		systemPrompt += fmt.Sprintf("\n\n当前系统时间：%s", currentTime)
 		data = map[string]interface{}{
 			"model":       modelID,
 			"messages":    openaiMessages,
