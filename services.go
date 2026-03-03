@@ -38,17 +38,23 @@ func init() {
 	// 你需要自己保证系统里已经有可用的 Chromium。
 	installOptions := &playwright.RunOptions{
 		SkipInstallBrowsers: true, // 核心参数：跳过浏览器二进制文件的下载
-		Verbose:             false,
 	}
 
-	// 执行安装（主要是安装驱动程序，浏览器我们手动管理）
-	err = playwright.Install(installOptions)
-	if err != nil {
-		log.Printf("安装 Playwright 驱动失败: %v", err)
+	if isAlpine {
+		// 执行安装（主要是安装驱动程序，浏览器我们手动管理）
+		err = playwright.Install(installOptions)
+		if err != nil {
+			log.Printf("Alpine Linux 系统安装 Playwright 驱动失败: %v", err)
+		}
+	} else {
+		err = playwright.Install() // 其他系统安装驱动程序无须特殊处理
+		if err != nil {
+			log.Printf("安装 Playwright 驱动失败: %v", err)
+		}
 	}
 
 	// 检查是否已安装浏览器
-	browserPaths := []string{"chromium", "chromium-browser", "google-chrome", "firefox"}
+	browserPaths := []string{"chromium", "chromium-browser", "google-chrome"}
 	hasBrowser := false
 	for _, browser := range browserPaths {
 		if _, err := exec.LookPath(browser); err == nil {
