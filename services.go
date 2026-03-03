@@ -117,64 +117,77 @@ func init() {
 				cdpPort++
 			}
 
-			// 使用 exec.Command 独立启动浏览器并开启远程调试
-			cmd := exec.Command("/usr/bin/chromium-browser",
-				"--no-sandbox",
-				"--disable-setuid-sandbox",
-				"--user-data-dir=/tmp/chromium-profile",          // 避免锁文件冲突
-				"--remote-debugging-port="+strconv.Itoa(cdpPort), // 开启远程调试
-				"--headless",                                     // 无头模式
-				"--disable-gpu",                                  // 禁止 GPU 加速
-			)
-			// 将标准输出与标准错误重定向到 null 设备，避免干扰终端输入
-			nullFile, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
-			if err == nil {
-				cmd.Stdout = nullFile
-				cmd.Stderr = nullFile
-				defer nullFile.Close()
+			// 查找浏览器可执行文件路径
+			browserPath := ""
+			browserCandidates := []string{"chromium", "chromium-browser", "google-chrome"}
+			for _, candidate := range browserCandidates {
+				if path, err := exec.LookPath(candidate); err == nil {
+					browserPath = path
+					break
+				}
 			}
-			err = cmd.Start()
-			if err != nil {
-				log.Printf("启动浏览器失败: %v", err)
+
+			if browserPath == "" {
+				log.Printf("未找到浏览器可执行文件，无法启动浏览器")
 			} else {
-				browserProcess = cmd.Process
-				cdpURL = fmt.Sprintf("http://localhost:%d", cdpPort)
-				log.Printf("浏览器已启动，CDP URL: %s", cdpURL)
+				// 使用 exec.Command 独立启动浏览器并开启远程调试
+				cmd := exec.Command(browserPath,
+					"--no-sandbox",
+					"--disable-setuid-sandbox",
+					"--user-data-dir=/tmp/chromium-profile",          // 避免锁文件冲突
+					"--remote-debugging-port="+strconv.Itoa(cdpPort), // 开启远程调试
+					"--headless",                                     // 无头模式
+					"--disable-gpu",                                  // 禁止 GPU 加速
+				)
+				// 将标准输出与标准错误重定向到 null 设备，避免干扰终端输入
+				nullFile, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
+				if err == nil {
+					cmd.Stdout = nullFile
+					cmd.Stderr = nullFile
+					defer nullFile.Close()
+				}
+				err = cmd.Start()
+				if err != nil {
+					log.Printf("启动浏览器失败: %v", err)
+				} else {
+					browserProcess = cmd.Process
+					cdpURL = fmt.Sprintf("http://localhost:%d", cdpPort)
+					log.Printf("浏览器已启动，路径: %s, CDP URL: %s", browserPath, cdpURL)
 
-				// 轮询检查浏览器是否完全启动并准备好接受连接
-				maxRetries := 60                        // 最多尝试 60 次
-				retryInterval := 200 * time.Millisecond // 每次尝试间隔 200ms
-				success := false
+					// 轮询检查浏览器是否完全启动并准备好接受连接
+					maxRetries := 60                        // 最多尝试 60 次
+					retryInterval := 200 * time.Millisecond // 每次尝试间隔 200ms
+					success := false
 
-				log.Printf("开始检查浏览器启动状态，最多等待 %v", time.Duration(maxRetries)*retryInterval)
+					log.Printf("开始检查浏览器启动状态，最多等待 %v", time.Duration(maxRetries)*retryInterval)
 
-				for i := 0; i < maxRetries; i++ {
-					// 检查端口是否被占用（表示浏览器正在监听）
-					if isPortInUse(cdpPort) {
+					for i := 0; i < maxRetries; i++ {
 						// 尝试连接到 CDP 端口（Playwright 会自动处理端点发现）
 						client := &http.Client{
 							Timeout: 1 * time.Second, // 增加超时时间
 						}
 
 						// 直接使用基础 URL，Playwright 会自动发现正确的端点
-						log.Printf("尝试连接到 CDP 基础 URL: %s", cdpURL)
 						_, err := client.Get(cdpURL)
 						if err == nil {
 							success = true
 							log.Printf("浏览器已完全启动并准备就绪")
 							break
 						} else {
-							log.Printf("连接到 %s 失败: %v", cdpURL, err)
+							// 不记录每次失败，只记录最后几次
+							if i > maxRetries-5 {
+								log.Printf("连接到 %s 失败: %v", cdpURL, err)
+							}
 						}
-					} else {
-						log.Printf("端口 %d 尚未被占用，浏览器可能仍在启动中...", cdpPort)
+						time.Sleep(retryInterval)
 					}
-					time.Sleep(retryInterval)
-				}
 
-				if !success {
-					log.Printf("警告：无法确认浏览器是否完全启动，可能会导致后续操作失败")
-					log.Printf("尝试直接连接到 CDP URL: %s", cdpURL)
+					if !success {
+						log.Printf("警告：无法确认浏览器是否完全启动，可能会导致后续操作失败")
+						log.Printf("尝试直接连接到 CDP URL: %s", cdpURL)
+					} else {
+						log.Printf("浏览器启动检测成功，准备就绪")
+					}
 				}
 			}
 		}
