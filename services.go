@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net"
@@ -56,6 +57,60 @@ func init() {
 		if !hasBrowser {
 			log.Println("当前为 Alpine Linux 系统，跳过自动安装：必须手动安装浏览器")
 		} else {
+			// 检查是否有浏览器进程已在运行，如果有则杀死
+			log.Println("检查是否有浏览器进程已在运行...")
+			// 使用 ps 命令查找 Chromium 进程
+			psCmd := exec.Command("ps", "aux")
+			grepCmd := exec.Command("grep", "chromium")
+
+			// 连接管道
+			psOut, err := psCmd.StdoutPipe()
+			if err == nil {
+				defer psOut.Close()
+				grepCmd.Stdin = psOut
+				grepOut, err := grepCmd.StdoutPipe()
+				if err == nil {
+					defer grepOut.Close()
+
+					// 启动命令
+					if err := psCmd.Start(); err == nil {
+						if err := grepCmd.Start(); err == nil {
+							// 读取输出
+							output, _ := io.ReadAll(grepOut)
+							psCmd.Wait()
+							grepCmd.Wait()
+
+							// 解析进程 ID 并杀死进程
+							lines := strings.Split(string(output), "\n")
+							for _, line := range lines {
+								if strings.Contains(line, "chromium") && !strings.Contains(line, "grep") {
+									// 提取进程 ID
+									fields := strings.Fields(line)
+									if len(fields) > 1 {
+										pid := fields[1]
+										// 杀死进程
+										killCmd := exec.Command("kill", "-9", pid)
+										killCmd.Run()
+										log.Printf("已杀死 Chromium 进程: %s", pid)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// 检查并删除残留的 SingletonLock 文件
+			singletonLockPath := "/tmp/chromium-profile/SingletonLock"
+			if _, err := os.Stat(singletonLockPath); err == nil {
+				// 文件存在，删除它
+				if err := os.Remove(singletonLockPath); err == nil {
+					log.Println("已删除残留的 SingletonLock 文件")
+				} else {
+					log.Printf("删除 SingletonLock 文件失败: %v", err)
+				}
+			}
+
 			// 启动浏览器并开启远程调试
 			cdpPort = 10000
 			for isPortInUse(cdpPort) {
@@ -69,8 +124,9 @@ func init() {
 				"--user-data-dir=/tmp/chromium-profile",          // 避免锁文件冲突
 				"--remote-debugging-port="+strconv.Itoa(cdpPort), // 开启远程调试
 				"--headless",                                     // 无头模式
+				"--disable-gpu",                                  // 禁止 GPU 加速
 			)
-			// 将标准输出和标准错误重定向到 null 设备，避免干扰终端输入
+			// 将标准输出与标准错误重定向到 null 设备，避免干扰终端输入
 			nullFile, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0666)
 			if err == nil {
 				cmd.Stdout = nullFile
