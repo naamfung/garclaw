@@ -310,19 +310,23 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 			// 实时打印文本内容
 			if chunk.Content != "" {
-				// 基于词匹配的替换
+				// 基于字符串替换
 				processedContent := chunk.Content
 
 				// 使用排序后的字符串替换映射
 				sortedStringsReplacements.ForEach(func(oldWord, newWord string) {
-					// 构建正则表达式，确保匹配完整的词
-					re := regexp.MustCompile(fmt.Sprintf(`\\b%s\\b`, regexp.QuoteMeta(oldWord)))
-					processedContent = re.ReplaceAllString(processedContent, newWord)
+					// 直接进行字符串替换，不使用词边界，确保中文也能正确替换
+					processedContent = strings.ReplaceAll(processedContent, oldWord, newWord)
 				})
 
-				fmt.Print(processedContent)
-				stdout := os.Stdout
-				stdout.Sync()
+				// 逐字打印，增强流式效果
+				for _, char := range processedContent {
+					fmt.Print(string(char))
+					stdout := os.Stdout
+					stdout.Sync()
+					// 微小延迟，增强打字机效果
+					time.Sleep(10 * time.Millisecond)
+				}
 				fullContent.WriteString(processedContent)
 			}
 
