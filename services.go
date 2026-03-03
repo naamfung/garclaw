@@ -8,6 +8,7 @@ import (
 	net_url "net/url"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +39,21 @@ func Search(keyword string) ([]SearchResult, error) {
 		Headless: playwright.Bool(true),
 	})
 	if err != nil {
+		if runtime.GOOS == "linux" {
+			browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+				Headless:       playwright.Bool(true),                          // 是否无头模式
+				ExecutablePath: playwright.String("/usr/bin/chromium-browser"), // 根据实际路径调整
+				Args: []string{
+					"--no-sandbox",
+					"--disable-setuid-sandbox",
+				},
+			})
+			if err != nil {
+				log.Printf("启动浏览器失败: %v", err)
+				return nil, err
+			}
+		}
+
 		log.Printf("启动浏览器失败: %v", err)
 		return nil, err
 	}
@@ -71,6 +87,21 @@ func Visit(url string) (string, error) {
 		Headless: playwright.Bool(true),
 	})
 	if err != nil {
+		if runtime.GOOS == "linux" {
+			browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+				Headless:       playwright.Bool(true),                          // 是否无头模式
+				ExecutablePath: playwright.String("/usr/bin/chromium-browser"), // 根据实际路径调整
+				Args: []string{
+					"--no-sandbox",
+					"--disable-setuid-sandbox",
+				},
+			})
+			if err != nil {
+				log.Printf("启动浏览器失败: %v", err)
+				return "", err
+			}
+		}
+
 		log.Printf("启动浏览器失败: %v", err)
 		return "", err
 	}
@@ -103,6 +134,21 @@ func DownloadNovel(novelURL string) error {
 		Headless: playwright.Bool(true),
 	})
 	if err != nil {
+		if runtime.GOOS == "linux" {
+			browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+				Headless:       playwright.Bool(true),                          // 是否无头模式
+				ExecutablePath: playwright.String("/usr/bin/chromium-browser"), // 根据实际路径调整
+				Args: []string{
+					"--no-sandbox",
+					"--disable-setuid-sandbox",
+				},
+			})
+			if err != nil {
+				log.Printf("启动浏览器失败: %v", err)
+				return err
+			}
+		}
+
 		log.Printf("启动浏览器失败: %v", err)
 		return err
 	}
@@ -135,6 +181,21 @@ func Download(url string) (string, error) {
 		Headless: playwright.Bool(true),
 	})
 	if err != nil {
+		if runtime.GOOS == "linux" {
+			browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+				Headless:       playwright.Bool(true),                          // 是否无头模式
+				ExecutablePath: playwright.String("/usr/bin/chromium-browser"), // 根据实际路径调整
+				Args: []string{
+					"--no-sandbox",
+					"--disable-setuid-sandbox",
+				},
+			})
+			if err != nil {
+				log.Printf("启动浏览器失败: %v", err)
+				return "", err
+			}
+		}
+
 		log.Printf("启动浏览器失败: %v", err)
 		return "", err
 	}
@@ -269,7 +330,7 @@ func visitURL(ctx context.Context, page playwright.Page, url string) (string, er
 	time.Sleep(15 * time.Second)
 
 	jsEnabled := true
-    textContent, err := page.Evaluate(`
+	textContent, err := page.Evaluate(`
         (() => {
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
             let text = '';
