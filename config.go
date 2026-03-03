@@ -17,6 +17,7 @@ type Config struct {
 		Model       string  `json:"model"`
 		Temperature float64 `json:"temperature"`
 		MaxTokens   int     `json:"max_tokens"`
+		Stream      bool    `json:"stream"`
 	} `json:"api_config"`
 }
 
@@ -45,6 +46,7 @@ func loadConfig() (Config, error) {
 		defaultConfig.APIConfig.Model = DEFAULT_MODEL_ID
 		defaultConfig.APIConfig.Temperature = 0.7
 		defaultConfig.APIConfig.MaxTokens = 4096
+		defaultConfig.APIConfig.Stream = true
 
 		// 直接序列化为 TOON 格式
 		toonData, err := toon.Marshal(defaultConfig)
@@ -115,10 +117,16 @@ func loadConfig() (Config, error) {
 			}
 
 			if maxTokens, ok := apiConfigMap["max_tokens"].(float64); ok {
-				config.APIConfig.MaxTokens = int(maxTokens)
-			} else if maxTokens, ok := apiConfigMap["MaxTokens"].(float64); ok {
-				config.APIConfig.MaxTokens = int(maxTokens)
-			}
+					config.APIConfig.MaxTokens = int(maxTokens)
+				} else if maxTokens, ok := apiConfigMap["MaxTokens"].(float64); ok {
+					config.APIConfig.MaxTokens = int(maxTokens)
+				}
+
+				if stream, ok := apiConfigMap["stream"].(bool); ok {
+					config.APIConfig.Stream = stream
+				} else if stream, ok := apiConfigMap["Stream"].(bool); ok {
+					config.APIConfig.Stream = stream
+				}
 		}
 	}
 

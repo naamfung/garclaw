@@ -29,10 +29,64 @@ const (
 	SYSTEM_PROMPT_TEMPLATE = "You are a coding agent. When the user asks to list files, run commands, or interact with the system, you MUST use the shell {{tool_or_function}}. When you need to read a specific line from a file, use the read_file_line {{tool_or_function}}. When you need to write content to a specific line in a file, use the write_file_line {{tool_or_function}}. When you need to read all lines from a file, use the read_all_lines {{tool_or_function}}. When you need to write all lines to a file, use the write_all_lines {{tool_or_function}}. When you need to manage tasks, use the todo {{tool_or_function}}. IMPORTANT: The current system time is provided at the end of this prompt. When asked about the current date or time, you MUST use this provided time information directly and NOT attempt to execute any commands to get the date or time. When you need to search for time-sensitive information like news, you MUST use this current system time to construct your search query. Do NOT explain how to run the command, do NOT provide alternative methods, just use the {{tool_or_function}} directly. For example, when asked to list files, use the shell {{tool_or_function}} with command 'ls' or 'ls -la' (Unix/Linux). Your response MUST be a {{tool_or_function}} call, not a regular message. Under no circumstances should you provide explanations or instructions to the user - only use the {{tool_or_function}}."
 )
 
-// 定义需要替换的词映射
-var wordReplacements = map[string]string{
-	"您": "你",
-	"咱": "我",
+// 定义键值对结构体，用于排序
+type StringReplacement struct {
+	Key   string
+	Value string
+}
+
+// 定义排序后的字符串替换映射
+type SortedStringReplacements struct {
+	Replacements []StringReplacement
+}
+
+// 全局排序后的字符串替换映射
+var sortedStringsReplacements SortedStringReplacements
+
+// 初始化函数
+func init() {
+	// 初始化排序后的字符串替换映射
+	sortedStringsReplacements = SortedStringReplacements{
+		Replacements: make([]StringReplacement, 0, len(stringsReplacements)),
+	}
+
+	// 将 map 转换为切片
+	for key, value := range stringsReplacements {
+		sortedStringsReplacements.Replacements = append(sortedStringsReplacements.Replacements, StringReplacement{
+			Key:   key,
+			Value: value,
+		})
+	}
+
+	// 按字符串长度从长到短排序
+	for i := 0; i < len(sortedStringsReplacements.Replacements); i++ {
+		for j := i + 1; j < len(sortedStringsReplacements.Replacements); j++ {
+			if len(sortedStringsReplacements.Replacements[i].Key) < len(sortedStringsReplacements.Replacements[j].Key) {
+				// 交换位置
+				sortedStringsReplacements.Replacements[i], sortedStringsReplacements.Replacements[j] = sortedStringsReplacements.Replacements[j], sortedStringsReplacements.Replacements[i]
+			}
+		}
+	}
+
+	// 打印排序结果（调试用）
+	if isDebug {
+		fmt.Println("字符串替换映射排序完成，前5项：")
+		for i := 0; i < min(5, len(sortedStringsReplacements.Replacements)); i++ {
+			fmt.Printf("%d: %s -> %s (长度: %d)\n", i+1, sortedStringsReplacements.Replacements[i].Key, sortedStringsReplacements.Replacements[i].Value, len(sortedStringsReplacements.Replacements[i].Key))
+		}
+	}
+}
+
+// 遍历排序后的字符串替换映射
+func (s *SortedStringReplacements) ForEach(f func(key, value string)) {
+	for _, item := range s.Replacements {
+		f(item.Key, item.Value)
+	}
+}
+
+// 获取排序后的字符串替换映射长度
+func (s *SortedStringReplacements) Len() int {
+	return len(s.Replacements)
 }
 
 // 消息结构
@@ -74,7 +128,7 @@ type StreamChunk struct {
 }
 
 // 调用LLM API
-func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int) (Response, error) {
+func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool) (Response, error) {
 	// 确保有默认值
 	if apiType == "" {
 		apiType = DEFAULT_API_TYPE
@@ -102,7 +156,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			"tools":       getTools(apiType),
 			"max_tokens":  maxTokens,
 			"temperature": temperature,
-			"stream":      true,
+			"stream":      stream,
 		}
 		endpoint = "/messages"
 
@@ -126,7 +180,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			"model":       modelID,
 			"messages":    ollamaMessages,
 			"tools":       getTools(apiType),
-			"stream":      true,
+			"stream":      stream,
 			"system":      systemPrompt,
 			"temperature": temperature,
 		}
@@ -178,7 +232,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			"tools":       getTools(apiType),
 			"max_tokens":  maxTokens,
 			"temperature": temperature,
-			"stream":      true, // 启用流式
+			"stream":      stream, // 启用流式
 			"system":      systemPrompt,
 		}
 		endpoint = "/chat/completions"
@@ -259,12 +313,12 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				// 基于词匹配的替换
 				processedContent := chunk.Content
 
-				// 使用全局词映射进行替换
-				for oldWord, newWord := range wordReplacements {
+				// 使用排序后的字符串替换映射
+				sortedStringsReplacements.ForEach(func(oldWord, newWord string) {
 					// 构建正则表达式，确保匹配完整的词
 					re := regexp.MustCompile(fmt.Sprintf(`\\b%s\\b`, regexp.QuoteMeta(oldWord)))
 					processedContent = re.ReplaceAllString(processedContent, newWord)
-				}
+				})
 
 				fmt.Print(processedContent)
 				stdout := os.Stdout
@@ -371,12 +425,12 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		// 基于词匹配的替换
 		responseBodyStr := string(responseBody)
 
-		// 使用全局词映射进行替换
-		for oldWord, newWord := range wordReplacements {
+		// 使用排序后的字符串替换映射
+		sortedStringsReplacements.ForEach(func(oldWord, newWord string) {
 			// 构建正则表达式，确保匹配完整的词
 			re := regexp.MustCompile(fmt.Sprintf(`\\b%s\\b`, regexp.QuoteMeta(oldWord)))
 			responseBodyStr = re.ReplaceAllString(responseBodyStr, newWord)
-		}
+		})
 
 		responseBody = []byte(responseBodyStr)
 
@@ -640,10 +694,10 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 }
 
 // 核心agent循环
-func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int) {
+func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool) {
 	roundsSinceTodo := 0
 	for {
-		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens)
+		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream)
 		if err != nil {
 			fmt.Printf("Error calling LLM: %v\n", err)
 			return
@@ -1421,6 +1475,15 @@ func main() {
 		}
 	}
 
+	// 读取流式设置
+	stream := config.APIConfig.Stream
+	// 环境变量覆盖
+	if streamStr := os.Getenv("STREAM"); streamStr != "" {
+		if streamVal, err := strconv.ParseBool(streamStr); err == nil {
+			stream = streamVal
+		}
+	}
+
 	if err != nil {
 		fmt.Printf("Warning: Error loading config file: %v\n", err)
 		fmt.Println("Using environment variables for configuration")
@@ -1459,7 +1522,7 @@ func main() {
 			Content: query,
 		})
 
-		agentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens)
+		agentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream)
 
 		// 流式输出已经在CallModel函数中实时打印，这里不再重复打印
 		// 只打印一个空行作为分隔
