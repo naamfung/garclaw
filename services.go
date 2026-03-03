@@ -58,7 +58,9 @@ func init() {
 			log.Println("当前为 Alpine Linux 系统，跳过自动安装：必须手动安装浏览器")
 		} else {
 			// 检查是否有浏览器进程已在运行，如果有则杀死
-			log.Println("检查是否有浏览器进程已在运行...")
+			if isDebug {
+				log.Println("检查是否有浏览器进程已在运行...")
+			}
 			// 使用 ps 命令查找 Chromium 进程
 			psCmd := exec.Command("ps", "aux")
 			grepCmd := exec.Command("grep", "chromium")
@@ -178,8 +180,6 @@ func init() {
 					cdpURL = fmt.Sprintf("http://localhost:%d", cdpPort)
 					if isDebug {
 						log.Printf("浏览器已启动，路径: %s, CDP URL: %s", browserPath, cdpURL)
-					} else {
-						log.Println("浏览器已启动")
 					}
 
 					// 轮询检查浏览器是否完全启动并准备好接受连接
@@ -213,8 +213,6 @@ func init() {
 							success = true
 							if isDebug {
 								log.Printf("浏览器已完全启动并准备就绪，端口 %d 已开放", cdpPort)
-							} else {
-								log.Println("浏览器已启动并准备就绪")
 							}
 							break
 						} else {
