@@ -192,6 +192,7 @@ func sendRequest(data map[string]interface{}, endpoint, apiKey, apiType string) 
 // 处理流式响应
 func handleStreamResponse(chunkChan <-chan StreamChunk) (Response, error) {
 	var fullContent strings.Builder
+	var fullReasoningContent strings.Builder
 	var finishReason string = "stop"
 
 	// 用于收集工具调用的结构（按索引）
@@ -216,6 +217,14 @@ func handleStreamResponse(chunkChan <-chan StreamChunk) (Response, error) {
 			stdout := os.Stdout
 			stdout.Sync()
 			fullContent.WriteString(chunk.Content)
+		}
+
+		// 实时打印思考内容
+		if chunk.ReasoningContent != "" {
+			fmt.Print(chunk.ReasoningContent)
+			stdout := os.Stdout
+			stdout.Sync()
+			fullReasoningContent.WriteString(chunk.ReasoningContent)
 		}
 
 		// 处理工具调用块
@@ -292,15 +301,17 @@ func handleStreamResponse(chunkChan <-chan StreamChunk) (Response, error) {
 			toolCalls = append(toolCalls, tc)
 		}
 		return Response{
-			Content:    toolCalls,
-			StopReason: finishReason,
+			Content:          toolCalls,
+			StopReason:       finishReason,
+			ReasoningContent: fullReasoningContent.String(),
 		}, nil
 	}
 
 	// 没有工具调用，返回普通文本
 	return Response{
-		Content:    fullContent.String(),
-		StopReason: finishReason,
+		Content:          fullContent.String(),
+		StopReason:       finishReason,
+		ReasoningContent: fullReasoningContent.String(),
 	}, nil
 }
 
