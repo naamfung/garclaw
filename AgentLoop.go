@@ -245,6 +245,10 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 		// 如果模型未有调用工具，结束
 		if resp.StopReason != "tool_use" && resp.StopReason != "function_call" && resp.StopReason != "tool_calls" {
+			// [!code ++] 处理空响应情况，避免静默退出
+			if resp.Content == nil || fmt.Sprint(resp.Content) == "" {
+				fmt.Println("AI: 已获取相关信息，但未能生成详细总结。")
+			}
 			return
 		}
 
@@ -441,9 +445,10 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		} else {
 			roundsSinceTodo++
 			if roundsSinceTodo >= 3 {
+				// [!code ++] 将提醒内容改为明确的请求，引导模型继续生成
 				messages = append(messages, Message{
 					Role:    "user",
-					Content: "<reminder>Update your todos.</reminder>",
+					Content: "<reminder>Please update your todo list and then proceed with the task.</reminder>", // 原为 "<reminder>Update your todos.</reminder>"
 				})
 				roundsSinceTodo = 0
 			}
