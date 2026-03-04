@@ -199,8 +199,7 @@ func main() {
 		})
 
 		AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream)
-
-		// 流式输出已经在CallModel函数中实时打印，这里不再重复打印
+		// 输出逻辑在CallModel函数中实时打印，这里不再重复打印
 		// 只打印一个空行作为分隔
 		fmt.Println()
 	}
