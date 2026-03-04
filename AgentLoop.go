@@ -564,12 +564,19 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									Content:   output,
 								})
 							case "write_file_line":
-								filename := input["filename"].(string)
-								lineNum := int(input["line_num"].(float64))
-								content := input["content"].(string)
+								filename, _ := input["filename"].(string)
+								lineNumFloat, _ := input["line_num"].(float64)
+								lineNum := int(lineNumFloat)
+								content, _ := input["content"].(string)
 
 								if filename == "" || lineNum < 1 {
 									fmt.Printf("Warning: invalid arguments for write_file_line\n")
+									// 即使参数无效，也要添加一个错误结果
+									results = append(results, ToolResult{
+										Type:      "tool_result",
+										ToolUseID: toolID,
+										Content:   "Error: Invalid arguments for write_file_line",
+									})
 									continue
 								}
 
@@ -591,10 +598,16 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									Content:   output,
 								})
 							case "read_all_lines":
-								filename := input["filename"].(string)
+								filename, _ := input["filename"].(string)
 
 								if filename == "" {
 									fmt.Printf("Warning: invalid arguments for read_all_lines\n")
+									// 即使参数无效，也要添加一个错误结果
+									results = append(results, ToolResult{
+										Type:      "tool_result",
+										ToolUseID: toolID,
+										Content:   "Error: Invalid arguments for read_all_lines",
+									})
 									continue
 								}
 
