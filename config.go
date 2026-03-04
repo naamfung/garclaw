@@ -9,6 +9,16 @@ import (
 	"github.com/toon-format/toon-go"
 )
 
+// 配置
+const (
+	DEFAULT_API_TYPE   = "openai" // 可选值: anthropic, ollama, openai
+	ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
+	OLLAMA_BASE_URL    = "http://localhost:11434/api"
+	OPENAI_BASE_URL    = "https://api.openai.com/v1"
+	DEFAULT_MODEL_ID   = "claude-3-opus-20240229"
+	CONFIG_FILE        = "config.toon"
+)
+
 // 配置结构体
 type Config struct {
 	APIConfig struct {

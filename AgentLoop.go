@@ -247,7 +247,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		if resp.StopReason != "tool_use" && resp.StopReason != "function_call" && resp.StopReason != "tool_calls" {
 			// [!code ++] 处理空响应情况，避免静默退出
 			if resp.Content == nil || fmt.Sprint(resp.Content) == "" {
-				fmt.Println("AI: 已获取相关信息，但未能生成详细总结。")
+				fmt.Println("模型已获取相关信息，但未能生成详细总结。")
 			}
 			return
 		}
