@@ -455,6 +455,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					})
 					usedTodo = true
 				default:
+					// 即使工具名称不匹配，也要添加一个错误结果
+					results = append(results, ToolResult{
+						Type:      "tool_result",
+						ToolUseID: toolID,
+						Content:   "Error: Unknown tool name",
+					})
 					continue
 				}
 
@@ -468,11 +474,32 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				for _, item := range contentArray {
 					if toolUse, ok := item.(map[string]interface{}); ok {
 						if toolUse["type"] == "tool_use" {
-							toolName := toolUse["name"].(string)
-							input := toolUse["input"].(map[string]interface{})
+							toolName, nameOk := toolUse["name"].(string)
+							input, inputOk := toolUse["input"].(map[string]interface{})
+							toolID, _ := toolUse["id"].(string)
+
+							// 检查必要字段
+							if !nameOk || !inputOk {
+								// 即使字段无效，也要添加一个错误结果
+								results = append(results, ToolResult{
+									Type:      "tool_result",
+									ToolUseID: toolID,
+									Content:   "Error: Invalid tool use fields",
+								})
+								continue
+							}
 							switch toolName {
 							case "shell":
-								command := input["command"].(string)
+								command, _ := input["command"].(string)
+								if command == "" {
+									// 即使命令为空，也要添加一个错误结果
+									results = append(results, ToolResult{
+										Type:      "tool_result",
+										ToolUseID: toolID,
+										Content:   "Error: Empty command",
+									})
+									continue
+								}
 								fmt.Printf("$ %s\n", command)
 								result := runShell(command)
 								var output string
@@ -496,15 +523,22 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								}
 								results = append(results, ToolResult{
 									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
+									ToolUseID: toolID,
 									Content:   output,
 								})
 							case "read_file_line":
-								filename := input["filename"].(string)
-								lineNum := int(input["line_num"].(float64))
+								filename, _ := input["filename"].(string)
+								lineNumFloat, _ := input["line_num"].(float64)
+								lineNum := int(lineNumFloat)
 
 								if filename == "" || lineNum < 1 {
 									fmt.Printf("Warning: invalid arguments for read_file_line\n")
+									// 即使参数无效，也要添加一个错误结果
+									results = append(results, ToolResult{
+										Type:      "tool_result",
+										ToolUseID: toolID,
+										Content:   "Error: Invalid arguments for read_file_line",
+									})
 									continue
 								}
 
