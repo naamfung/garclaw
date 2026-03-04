@@ -779,9 +779,15 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									Content:   output,
 								})
 							case "todo":
-								itemsInterface := input["items"].([]interface{})
+								itemsInterface, _ := input["items"].([]interface{})
 								if itemsInterface == nil {
 									fmt.Printf("Warning: invalid items in todo tool call\n")
+									// 即使参数无效，也要添加一个错误结果
+									results = append(results, ToolResult{
+										Type:      "tool_result",
+										ToolUseID: toolID,
+										Content:   "Error: Invalid items in todo tool call",
+									})
 									continue
 								}
 
@@ -818,6 +824,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								})
 								usedTodo = true
 							default:
+								// 即使工具名称不匹配，也要添加一个错误结果
+								results = append(results, ToolResult{
+									Type:      "tool_result",
+									ToolUseID: toolID,
+									Content:   "Error: Unknown tool name",
+								})
 								continue
 							}
 						}
