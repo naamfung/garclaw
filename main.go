@@ -70,65 +70,82 @@ func main() {
 	// 读取配置文件
 	config, err := loadConfig()
 
-	// 优先使用配置文件中的值，当配置文件中没有值时，使用环境变量中的值
+	// 先读取配置文件中的值
 	apiType := config.APIConfig.APIType
+	// 环境变量覆盖
+	if apiTypeStr := os.Getenv("API_TYPE"); apiTypeStr != "" {
+		apiType = apiTypeStr
+	}
+	// 默认值
 	if apiType == "" {
-		apiType = os.Getenv("API_TYPE")
-		if apiType == "" {
-			apiType = "openai" // 默认值
-		}
+		apiType = "openai" // 默认值
 	}
 
+	// 先读取配置文件中的值
 	baseURL := config.APIConfig.BaseURL
-	if baseURL == "" {
-		if apiType == "openai" {
-			baseURL = os.Getenv("OPENAI_BASE_URL")
-		} else if apiType == "anthropic" {
-			baseURL = os.Getenv("ANTHROPIC_BASE_URL")
+	// 环境变量覆盖
+	if baseURLStr := os.Getenv("BASE_URL"); baseURLStr != "" {
+		baseURL = baseURLStr
+	} else if apiType == "openai" {
+		if openaiBaseURL := os.Getenv("OPENAI_BASE_URL"); openaiBaseURL != "" {
+			baseURL = openaiBaseURL
+		}
+	} else if apiType == "anthropic" {
+		if anthropicBaseURL := os.Getenv("ANTHROPIC_BASE_URL"); anthropicBaseURL != "" {
+			baseURL = anthropicBaseURL
 		}
 	}
 
+	// 先读取配置文件中的值
 	apiKey := config.APIConfig.APIKey
-	if apiKey == "" {
-		if apiType == "openai" {
-			apiKey = os.Getenv("OPENAI_API_KEY")
-		} else if apiType == "anthropic" {
-			apiKey = os.Getenv("ANTHROPIC_API_KEY")
+	// 环境变量覆盖
+	if apiKeyStr := os.Getenv("API_KEY"); apiKeyStr != "" {
+		apiKey = apiKeyStr
+	} else if apiType == "openai" {
+		if openaiAPIKey := os.Getenv("OPENAI_API_KEY"); openaiAPIKey != "" {
+			apiKey = openaiAPIKey
+		}
+	} else if apiType == "anthropic" {
+		if anthropicAPIKey := os.Getenv("ANTHROPIC_API_KEY"); anthropicAPIKey != "" {
+			apiKey = anthropicAPIKey
 		}
 	}
 
+	// 先读取配置文件中的值
 	modelID := config.APIConfig.Model
+	// 环境变量覆盖
+	if modelIDStr := os.Getenv("MODEL_ID"); modelIDStr != "" {
+		modelID = modelIDStr
+	}
+	// 默认值
 	if modelID == "" {
-		modelID = os.Getenv("MODEL_ID")
-		if modelID == "" {
-			modelID = DEFAULT_MODEL_ID
-		}
+		modelID = DEFAULT_MODEL_ID
 	}
 
+	// 先读取配置文件中的值
 	temperature := config.APIConfig.Temperature
-	if temperature == 0 {
-		tempStr := os.Getenv("TEMPERATURE")
-		if tempStr != "" {
-			if temp, err := strconv.ParseFloat(tempStr, 64); err == nil {
-				temperature = temp
-			}
-		}
-		if temperature == 0 {
-			temperature = 0.7 // 默认值
+	// 环境变量覆盖
+	if tempStr := os.Getenv("TEMPERATURE"); tempStr != "" {
+		if temp, err := strconv.ParseFloat(tempStr, 64); err == nil {
+			temperature = temp
 		}
 	}
+	// 如深度求索的　temperature　默认值有可能取值为零，所以此处不设置默认值
+	// if temperature == 0 {
+	// 	temperature = 0.7 // 默认值
+	// }
 
+	// 先读取配置文件中的值
 	maxTokens := config.APIConfig.MaxTokens
+	// 环境变量覆盖
+	if tokensStr := os.Getenv("MAX_TOKENS"); tokensStr != "" {
+		if tokens, err := strconv.Atoi(tokensStr); err == nil {
+			maxTokens = tokens
+		}
+	}
+	// 默认值
 	if maxTokens == 0 {
-		tokensStr := os.Getenv("MAX_TOKENS")
-		if tokensStr != "" {
-			if tokens, err := strconv.Atoi(tokensStr); err == nil {
-				maxTokens = tokens
-			}
-		}
-		if maxTokens == 0 {
-			maxTokens = 4096 // 默认值
-		}
+		maxTokens = 4096 // 默认值
 	}
 
 	// 读取流式设置
