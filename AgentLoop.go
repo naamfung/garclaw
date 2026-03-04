@@ -86,11 +86,24 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			for _, toolUse := range toolCalls {
 				// 标准OpenAI格式：type="function", id, function
 				if toolUse["type"] != "function" {
+					// 即使类型不正确，也要添加一个错误结果
+					toolID, _ := toolUse["id"].(string)
+					results = append(results, ToolResult{
+						Type:      "tool_result",
+						ToolUseID: toolID,
+						Content:   "Error: Invalid tool type",
+					})
 					continue
 				}
 				toolID, _ := toolUse["id"].(string)
 				function, ok := toolUse["function"].(map[string]interface{})
 				if !ok {
+					// 即使function字段不存在，也要添加一个错误结果
+					results = append(results, ToolResult{
+						Type:      "tool_result",
+						ToolUseID: toolID,
+						Content:   "Error: Invalid function field",
+					})
 					continue
 				}
 				toolName, _ := function["name"].(string)
@@ -100,6 +113,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				var argsMap map[string]interface{}
 				if err := json.Unmarshal([]byte(argsStr), &argsMap); err != nil {
 					fmt.Printf("Failed to parse arguments: %v\n", err)
+					// 即使解析失败，也要添加一个错误结果
+					results = append(results, ToolResult{
+						Type:      "tool_result",
+						ToolUseID: toolID,
+						Content:   "Error: Failed to parse arguments",
+					})
 					continue
 				}
 
@@ -108,6 +127,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					command, _ := argsMap["command"].(string)
 					if command == "" {
 						fmt.Printf("Warning: empty command in tool call\n")
+						// 即使命令为空，也要添加一个错误结果
+						results = append(results, ToolResult{
+							Type:      "tool_result",
+							ToolUseID: toolID,
+							Content:   "Error: Empty command",
+						})
 						continue
 					}
 
@@ -147,6 +172,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 					if filename == "" || lineNum < 1 {
 						fmt.Printf("Warning: invalid arguments for read_file_line\n")
+						// 即使参数无效，也要添加一个错误结果
+						results = append(results, ToolResult{
+							Type:      "tool_result",
+							ToolUseID: toolID,
+							Content:   "Error: Invalid arguments for read_file_line",
+						})
 						continue
 					}
 
@@ -175,6 +206,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 					if filename == "" || lineNum < 1 {
 						fmt.Printf("Warning: invalid arguments for write_file_line\n")
+						// 即使参数无效，也要添加一个错误结果
+						results = append(results, ToolResult{
+							Type:      "tool_result",
+							ToolUseID: toolID,
+							Content:   "Error: Invalid arguments for write_file_line",
+						})
 						continue
 					}
 
@@ -200,6 +237,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 					if filename == "" {
 						fmt.Printf("Warning: invalid arguments for read_all_lines\n")
+						// 即使参数无效，也要添加一个错误结果
+						results = append(results, ToolResult{
+							Type:      "tool_result",
+							ToolUseID: toolID,
+							Content:   "Error: Invalid arguments for read_all_lines",
+						})
 						continue
 					}
 
@@ -232,6 +275,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 					if filename == "" || linesInterface == nil {
 						fmt.Printf("Warning: invalid arguments for write_all_lines\n")
+						// 即使参数无效，也要添加一个错误结果
+						results = append(results, ToolResult{
+							Type:      "tool_result",
+							ToolUseID: toolID,
+							Content:   "Error: Invalid arguments for write_all_lines",
+						})
 						continue
 					}
 
@@ -264,6 +313,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					keyword, _ := argsMap["keyword"].(string)
 					if keyword == "" {
 						fmt.Printf("Warning: empty keyword in search tool call\n")
+						// 即使参数无效，也要添加一个错误结果
+						results = append(results, ToolResult{
+							Type:      "tool_result",
+							ToolUseID: toolID,
+							Content:   "Error: Empty keyword in search tool call",
+						})
 						continue
 					}
 
@@ -298,6 +353,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					url, _ := argsMap["url"].(string)
 					if url == "" {
 						fmt.Printf("Warning: empty url in visit tool call\n")
+						// 即使参数无效，也要添加一个错误结果
+						results = append(results, ToolResult{
+							Type:      "tool_result",
+							ToolUseID: toolID,
+							Content:   "Error: Empty url in visit tool call",
+						})
 						continue
 					}
 
@@ -322,6 +383,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					url, _ := argsMap["url"].(string)
 					if url == "" {
 						fmt.Printf("Warning: empty url in download tool call\n")
+						// 即使参数无效，也要添加一个错误结果
+						results = append(results, ToolResult{
+							Type:      "tool_result",
+							ToolUseID: toolID,
+							Content:   "Error: Empty url in download tool call",
+						})
 						continue
 					}
 
@@ -346,6 +413,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					itemsInterface, _ := argsMap["items"].([]interface{})
 					if itemsInterface == nil {
 						fmt.Printf("Warning: invalid items in todo tool call\n")
+						// 即使参数无效，也要添加一个错误结果
+						results = append(results, ToolResult{
+							Type:      "tool_result",
+							ToolUseID: toolID,
+							Content:   "Error: Invalid items in todo tool call",
+						})
 						continue
 					}
 
