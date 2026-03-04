@@ -639,11 +639,17 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									Content:   output,
 								})
 							case "write_all_lines":
-								filename := input["filename"].(string)
-								linesInterface := input["lines"].([]interface{})
+								filename, _ := input["filename"].(string)
+								linesInterface, _ := input["lines"].([]interface{})
 
 								if filename == "" || linesInterface == nil {
 									fmt.Printf("Warning: invalid arguments for write_all_lines\n")
+									// 即使参数无效，也要添加一个错误结果
+									results = append(results, ToolResult{
+										Type:      "tool_result",
+										ToolUseID: toolID,
+										Content:   "Error: Invalid arguments for write_all_lines",
+									})
 									continue
 								}
 
