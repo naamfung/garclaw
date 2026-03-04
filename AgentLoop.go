@@ -65,22 +65,32 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		// 处理不同API的工具调用格式
 		if apiType == "openai" {
 			// 确保 resp.Content 是切片
-			toolCallsSlice, ok := resp.Content.([]interface{})
-			if !ok {
-				// 尝试转换为 []map[string]interface{}
-				if mapSlice, ok := resp.Content.([]map[string]interface{}); ok {
-					toolCallsSlice = make([]interface{}, len(mapSlice))
-					for i, m := range mapSlice {
-						toolCallsSlice[i] = m
-					}
-				} else {
-					if isDebug {
-						fmt.Printf("Warning: resp.Content is not a slice of tool calls: %T\n", resp.Content)
-					}
-					// 跳过处理
-					continue
+			var toolCallsSlice []interface{}
+			switch v := resp.Content.(type) {
+			case []interface{}:
+				toolCallsSlice = v
+			case []map[string]interface{}:
+				toolCallsSlice = make([]interface{}, len(v))
+				for i, m := range v {
+					toolCallsSlice[i] = m
 				}
+			default:
+				if isDebug {
+					fmt.Printf("Warning: resp.Content is not a slice of tool calls: %T\n", resp.Content)
+				}
+				// 跳过处理
+				continue
 			}
+
+			// 用于存储有效的工具调用（将被放入助手消息）
+			validToolCalls := []interface{}{}
+			// 用于临时存储工具调用 ID 与参数的映射，方便生成结果
+			type callInfo struct {
+				ID       string
+				Name     string
+				ArgsJSON string
+			}
+			var callsToProcess []callInfo
 
 			for _, item := range toolCallsSlice {
 				toolUse, ok := item.(map[string]interface{})
@@ -88,7 +98,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					if isDebug {
 						fmt.Printf("Warning: invalid tool call item: %v\n", item)
 					}
-					continue // 跳过，不添加结果
+					continue // 跳过无效项，不加入助手消息
 				}
 
 				// 提取 toolID，确保为字符串
@@ -113,25 +123,61 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				// 标准OpenAI格式：type="function", id, function
 				if toolUse["type"] != "function" {
 					// 即使类型不正确，也要添加一个错误结果
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   "Error: Invalid tool type",
+					validToolCalls = append(validToolCalls, toolUse)
+					callsToProcess = append(callsToProcess, callInfo{
+						ID:       toolID,
+						Name:     "",
+						ArgsJSON: "",
 					})
 					continue
 				}
 				function, ok := toolUse["function"].(map[string]interface{})
 				if !ok {
 					// 即使function字段不存在，也要添加一个错误结果
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   "Error: Invalid function field",
+					validToolCalls = append(validToolCalls, toolUse)
+					callsToProcess = append(callsToProcess, callInfo{
+						ID:       toolID,
+						Name:     "",
+						ArgsJSON: "",
 					})
 					continue
 				}
 				toolName, _ := function["name"].(string)
 				argsStr, _ := function["arguments"].(string)
+
+				// 记录有效调用
+				validToolCalls = append(validToolCalls, toolUse)
+				callsToProcess = append(callsToProcess, callInfo{
+					ID:       toolID,
+					Name:     toolName,
+					ArgsJSON: argsStr,
+				})
+			}
+
+			// 重新构建助手消息，使用有效的工具调用列表
+			// 先移除之前添加的助手消息（最后一个消息）
+			messages = messages[:len(messages)-1]
+			// 再添加使用有效工具调用的助手消息
+			messages = append(messages, Message{
+				Role:      "assistant",
+				ToolCalls: validToolCalls,
+			})
+
+			// 处理有效的工具调用
+			for _, call := range callsToProcess {
+				toolID := call.ID
+				toolName := call.Name
+				argsStr := call.ArgsJSON
+
+				// 处理类型不正确的情况
+				if toolName == "" {
+					results = append(results, ToolResult{
+						Type:      "tool_result",
+						ToolUseID: toolID,
+						Content:   "Error: Invalid tool type or function field",
+					})
+					continue
+				}
 
 				// 解析arguments JSON
 				var argsMap map[string]interface{}
