@@ -502,7 +502,25 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						if toolUse["type"] == "tool_use" {
 							toolName, nameOk := toolUse["name"].(string)
 							input, inputOk := toolUse["input"].(map[string]interface{})
-							toolID, _ := toolUse["id"].(string)
+
+							// 提取 toolID，确保为字符串
+							toolID, ok := toolUse["id"].(string)
+							if !ok {
+								if idVal, exists := toolUse["id"]; exists {
+									toolID = fmt.Sprint(idVal)
+								} else {
+									if isDebug {
+										fmt.Printf("Warning: tool call missing id: %v\n", toolUse)
+									}
+									continue
+								}
+							}
+							if toolID == "" {
+								if isDebug {
+									fmt.Printf("Warning: tool call has empty id: %v\n", toolUse)
+								}
+								continue
+							}
 
 							// 检查必要字段
 							if !nameOk || !inputOk {
