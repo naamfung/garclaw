@@ -9,6 +9,207 @@ import (
 	"github.com/toon-format/toon-go"
 )
 
+// executeTool 执行单个工具调用，返回 ToolResult 和是否使用了 todo
+func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolResult, bool) {
+	usedTodo := false
+	var content string
+
+	switch toolName {
+	case "shell":
+		command, _ := argsMap["command"].(string)
+		if command == "" {
+			content = "Error: Empty command"
+		} else {
+			fmt.Printf("$ %s\n", command)
+			result := runShell(command)
+			if result.Err != nil {
+				content = fmt.Sprintf("Error: %v", result.Err)
+			} else {
+				content = result.Stdout
+				if result.ExitCode != 0 && result.Stderr != "" {
+					content += "\n" + result.Stderr
+				}
+			}
+			if len(content) > 512 && isDebug {
+				fmt.Println(TruncateString(content, 512))
+			} else {
+				fmt.Println(content)
+			}
+		}
+
+	case "read_file_line":
+		filename, _ := argsMap["filename"].(string)
+		lineNumFloat, _ := argsMap["line_num"].(float64)
+		lineNum := int(lineNumFloat)
+		if filename == "" || lineNum < 1 {
+			content = "Error: Invalid arguments for read_file_line"
+		} else {
+			fmt.Printf("Reading line %d from %s\n", lineNum, filename)
+			c, err := ReadFileLine(filename, lineNum)
+			if err != nil {
+				content = "Error: " + err.Error()
+			} else {
+				content = c
+			}
+			fmt.Println(TruncateString(content, 200))
+		}
+
+	case "write_file_line":
+		filename, _ := argsMap["filename"].(string)
+		lineNumFloat, _ := argsMap["line_num"].(float64)
+		lineNum := int(lineNumFloat)
+		text, _ := argsMap["content"].(string)
+		if filename == "" || lineNum < 1 {
+			content = "Error: Invalid arguments for write_file_line"
+		} else {
+			fmt.Printf("Writing to line %d in %s\n", lineNum, filename)
+			err := WriteFileLine(filename, lineNum, text)
+			if err != nil {
+				content = "Error: " + err.Error()
+			} else {
+				content = "Successfully wrote to line " + strconv.Itoa(lineNum)
+			}
+			fmt.Println(content)
+		}
+
+	case "read_all_lines":
+		filename, _ := argsMap["filename"].(string)
+		if filename == "" {
+			content = "Error: Invalid arguments for read_all_lines"
+		} else {
+			fmt.Printf("Reading all lines from %s\n", filename)
+			lines, err := ReadAllLines(filename)
+			if err != nil {
+				content = "Error: " + err.Error()
+			} else {
+				linesJSON, err := json.Marshal(lines)
+				if err != nil {
+					content = "Error: " + err.Error()
+				} else {
+					content = string(linesJSON)
+				}
+			}
+			fmt.Println(TruncateString(content, 200))
+		}
+
+	case "write_all_lines":
+		filename, _ := argsMap["filename"].(string)
+		linesInterface, _ := argsMap["lines"].([]interface{})
+		if filename == "" || linesInterface == nil {
+			content = "Error: Invalid arguments for write_all_lines"
+		} else {
+			lines := make([]string, len(linesInterface))
+			for i, line := range linesInterface {
+				if lineStr, ok := line.(string); ok {
+					lines[i] = lineStr
+				}
+			}
+			fmt.Printf("Writing all lines to %s\n", filename)
+			err := WriteAllLines(filename, lines)
+			if err != nil {
+				content = "Error: " + err.Error()
+			} else {
+				content = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
+			}
+			fmt.Println(content)
+		}
+
+	case "search":
+		keyword, _ := argsMap["keyword"].(string)
+		if keyword == "" {
+			content = "Error: Empty keyword in search tool call"
+		} else {
+			fmt.Printf("Searching for: %s\n", keyword)
+			resultsList, err := Search(keyword)
+			if err != nil {
+				content = "Error: " + err.Error()
+			} else if resultsList != nil {
+				resultsTOON, err := toon.Marshal(resultsList)
+				if err != nil {
+					content = "Error: Failed to marshal search results"
+					log.Printf("Failed to marshal search results: %v", err)
+				} else {
+					content = string(resultsTOON)
+				}
+			} else {
+				content = "No search results found"
+			}
+			fmt.Println("Search completed")
+		}
+
+	case "visit":
+		url, _ := argsMap["url"].(string)
+		if url == "" {
+			content = "Error: Empty url in visit tool call"
+		} else {
+			fmt.Printf("Visiting: %s\n", url)
+			pageText, err := Visit(url)
+			if err != nil {
+				content = "Error: " + err.Error()
+			} else {
+				content = "Visit completed. Page content: " + pageText
+			}
+			fmt.Println("Visit completed")
+		}
+
+	case "download":
+		url, _ := argsMap["url"].(string)
+		if url == "" {
+			content = "Error: Empty url in download tool call"
+		} else {
+			fmt.Printf("Downloading from: %s\n", url)
+			fileName, err := Download(url)
+			if err != nil {
+				content = "Error: " + err.Error()
+			} else {
+				content = "Download completed, saved to: " + fileName
+			}
+			fmt.Println(content)
+		}
+
+	case "todo":
+		itemsInterface, _ := argsMap["items"].([]interface{})
+		if itemsInterface == nil {
+			content = "Error: Invalid items in todo tool call"
+		} else {
+			var items []TodoItem
+			for _, itemInterface := range itemsInterface {
+				if itemMap, ok := itemInterface.(map[string]interface{}); ok {
+					item := TodoItem{}
+					if id, ok := itemMap["id"].(string); ok {
+						item.ID = id
+					}
+					if text, ok := itemMap["text"].(string); ok {
+						item.Text = text
+					}
+					if status, ok := itemMap["status"].(string); ok {
+						item.Status = status
+					}
+					items = append(items, item)
+				}
+			}
+			fmt.Println("Updating todo list...")
+			output, err := TODO.Update(items)
+			if err != nil {
+				content = "Error: " + err.Error()
+			} else {
+				content = output
+			}
+			fmt.Println(content)
+			usedTodo = true
+		}
+
+	default:
+		content = "Error: Unknown tool name"
+	}
+
+	return ToolResult{
+		Type:      "tool_result",
+		ToolUseID: toolID,
+		Content:   content,
+	}, usedTodo
+}
+
 // 核心agent循环
 func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) {
 	roundsSinceTodo := 0
@@ -30,13 +231,11 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 		// 添加assistant的回复
 		if resp.StopReason == "tool_use" || resp.StopReason == "function_call" || resp.StopReason == "tool_calls" {
-			// 对于工具调用，使用ToolCalls字段
 			messages = append(messages, Message{
 				Role:      "assistant",
 				ToolCalls: resp.Content,
 			})
 		} else {
-			// 对于普通回复，使用Content字段
 			messages = append(messages, Message{
 				Role:             "assistant",
 				Content:          resp.Content,
@@ -53,7 +252,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		var results []ToolResult
 		usedTodo := false
 
-		// 打印调试信息
 		if isDebug {
 			fmt.Println("===================== Executing tool calls =====================")
 			fmt.Printf("API type: %s\n", apiType)
@@ -77,13 +275,10 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				if isDebug {
 					fmt.Printf("Warning: resp.Content is not a slice of tool calls: %T\n", resp.Content)
 				}
-				// 跳过处理
 				continue
 			}
 
-			// 用于存储有效的工具调用（将被放入助手消息）
 			validToolCalls := []interface{}{}
-			// 用于临时存储工具调用 ID 与参数的映射，方便生成结果
 			type callInfo struct {
 				ID       string
 				Name     string
@@ -97,10 +292,10 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					if isDebug {
 						fmt.Printf("Warning: invalid tool call item: %v\n", item)
 					}
-					continue // 跳过无效项，不加入助手消息
+					continue
 				}
 
-				// 提取 toolID，确保为字符串
+				// 提取 toolID
 				toolID, ok := toolUse["id"].(string)
 				if !ok {
 					if idVal, exists := toolUse["id"]; exists {
@@ -119,9 +314,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					continue
 				}
 
-				// 标准OpenAI格式：type="function", id, function
 				if toolUse["type"] != "function" {
-					// 即使类型不正确，也要添加一个错误结果
 					validToolCalls = append(validToolCalls, toolUse)
 					callsToProcess = append(callsToProcess, callInfo{
 						ID:       toolID,
@@ -132,7 +325,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				}
 				function, ok := toolUse["function"].(map[string]interface{})
 				if !ok {
-					// 即使function字段不存在，也要添加一个错误结果
 					validToolCalls = append(validToolCalls, toolUse)
 					callsToProcess = append(callsToProcess, callInfo{
 						ID:       toolID,
@@ -144,7 +336,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				toolName, _ := function["name"].(string)
 				argsStr, _ := function["arguments"].(string)
 
-				// 记录有效调用
 				validToolCalls = append(validToolCalls, toolUse)
 				callsToProcess = append(callsToProcess, callInfo{
 					ID:       toolID,
@@ -154,9 +345,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			}
 
 			// 重新构建助手消息，使用有效的工具调用列表
-			// 先移除之前添加的助手消息（最后一个消息）
 			messages = messages[:len(messages)-1]
-			// 再添加使用有效工具调用的助手消息
 			messages = append(messages, Message{
 				Role:      "assistant",
 				ToolCalls: validToolCalls,
@@ -164,707 +353,73 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 			// 处理有效的工具调用
 			for _, call := range callsToProcess {
-				toolID := call.ID
-				toolName := call.Name
-				argsStr := call.ArgsJSON
-
-				// 处理类型不正确的情况
-				if toolName == "" {
+				if call.Name == "" {
 					results = append(results, ToolResult{
 						Type:      "tool_result",
-						ToolUseID: toolID,
+						ToolUseID: call.ID,
 						Content:   "Error: Invalid tool type or function field",
 					})
 					continue
 				}
 
-				// 解析arguments JSON
 				var argsMap map[string]interface{}
-				if err := json.Unmarshal([]byte(argsStr), &argsMap); err != nil {
+				if err := json.Unmarshal([]byte(call.ArgsJSON), &argsMap); err != nil {
 					if isDebug {
 						fmt.Printf("Failed to parse arguments: %v\n", err)
 					}
 					results = append(results, ToolResult{
 						Type:      "tool_result",
-						ToolUseID: toolID,
+						ToolUseID: call.ID,
 						Content:   "Error: Failed to parse arguments",
 					})
 					continue
 				}
 
-				switch toolName {
-				case "shell":
-					command, _ := argsMap["command"].(string)
-					if command == "" {
-						fmt.Printf("Warning: empty command in tool call\n")
-						results = append(results, ToolResult{
-							Type:      "tool_result",
-							ToolUseID: toolID,
-							Content:   "Error: Empty command",
-						})
-						continue
-					}
-
-					fmt.Printf("$ %s\n", command)
-					result := runShell(command)
-					var output string
-					if result.Err != nil {
-						output = fmt.Sprintf("Error: %v", result.Err)
-					} else {
-						output = result.Stdout
-						if result.ExitCode != 0 && result.Stderr != "" {
-							output += "\n" + result.Stderr
-						}
-					}
-
-					if len(output) > 512 && isDebug {
-						fmt.Println(TruncateString(output, 512))
-					} else {
-						fmt.Println(output)
-					}
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
-				case "read_file_line":
-					filename, _ := argsMap["filename"].(string)
-					lineNumFloat, _ := argsMap["line_num"].(float64)
-					lineNum := int(lineNumFloat)
-
-					if filename == "" || lineNum < 1 {
-						fmt.Printf("Warning: invalid arguments for read_file_line\n")
-						results = append(results, ToolResult{
-							Type:      "tool_result",
-							ToolUseID: toolID,
-							Content:   "Error: Invalid arguments for read_file_line",
-						})
-						continue
-					}
-
-					fmt.Printf("Reading line %d from %s\n", lineNum, filename)
-					content, err := ReadFileLine(filename, lineNum)
-					var output string
-					if err != nil {
-						output = "Error: " + err.Error()
-					} else {
-						output = content
-					}
-
-					fmt.Println(TruncateString(output, 200))
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
-				case "write_file_line":
-					filename, _ := argsMap["filename"].(string)
-					lineNumFloat, _ := argsMap["line_num"].(float64)
-					lineNum := int(lineNumFloat)
-					content, _ := argsMap["content"].(string)
-
-					if filename == "" || lineNum < 1 {
-						fmt.Printf("Warning: invalid arguments for write_file_line\n")
-						results = append(results, ToolResult{
-							Type:      "tool_result",
-							ToolUseID: toolID,
-							Content:   "Error: Invalid arguments for write_file_line",
-						})
-						continue
-					}
-
-					fmt.Printf("Writing to line %d in %s\n", lineNum, filename)
-					err := WriteFileLine(filename, lineNum, content)
-					var output string
-					if err != nil {
-						output = "Error: " + err.Error()
-					} else {
-						output = "Successfully wrote to line " + strconv.Itoa(lineNum)
-					}
-
-					fmt.Println(output)
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
-				case "read_all_lines":
-					filename, _ := argsMap["filename"].(string)
-
-					if filename == "" {
-						fmt.Printf("Warning: invalid arguments for read_all_lines\n")
-						results = append(results, ToolResult{
-							Type:      "tool_result",
-							ToolUseID: toolID,
-							Content:   "Error: Invalid arguments for read_all_lines",
-						})
-						continue
-					}
-
-					fmt.Printf("Reading all lines from %s\n", filename)
-					lines, err := ReadAllLines(filename)
-					var output string
-					if err != nil {
-						output = "Error: " + err.Error()
-					} else {
-						linesJSON, err := json.Marshal(lines)
-						if err != nil {
-							output = "Error: " + err.Error()
-						} else {
-							output = string(linesJSON)
-						}
-					}
-
-					fmt.Println(TruncateString(output, 200))
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
-				case "write_all_lines":
-					filename, _ := argsMap["filename"].(string)
-					linesInterface, _ := argsMap["lines"].([]interface{})
-
-					if filename == "" || linesInterface == nil {
-						fmt.Printf("Warning: invalid arguments for write_all_lines\n")
-						results = append(results, ToolResult{
-							Type:      "tool_result",
-							ToolUseID: toolID,
-							Content:   "Error: Invalid arguments for write_all_lines",
-						})
-						continue
-					}
-
-					lines := make([]string, len(linesInterface))
-					for i, line := range linesInterface {
-						if lineStr, ok := line.(string); ok {
-							lines[i] = lineStr
-						}
-					}
-
-					fmt.Printf("Writing all lines to %s\n", filename)
-					err := WriteAllLines(filename, lines)
-					var output string
-					if err != nil {
-						output = "Error: " + err.Error()
-					} else {
-						output = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
-					}
-
-					fmt.Println(output)
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
-				case "search":
-					keyword, _ := argsMap["keyword"].(string)
-					if keyword == "" {
-						fmt.Printf("Warning: empty keyword in search tool call\n")
-						results = append(results, ToolResult{
-							Type:      "tool_result",
-							ToolUseID: toolID,
-							Content:   "Error: Empty keyword in search tool call",
-						})
-						continue
-					}
-
-					fmt.Printf("Searching for: %s\n", keyword)
-					resultsList, err := Search(keyword)
-
-					var output string
-					if err != nil {
-						output = "Error: " + err.Error()
-					} else if resultsList != nil {
-						resultsTOON, err := toon.Marshal(resultsList)
-						if err != nil {
-							output = "Error: Failed to marshal search results"
-							log.Printf("Failed to marshal search results: %v", err)
-						} else {
-							output = string(resultsTOON)
-						}
-					} else {
-						output = "No search results found"
-					}
-
-					fmt.Println("Search completed")
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
-				case "visit":
-					url, _ := argsMap["url"].(string)
-					if url == "" {
-						fmt.Printf("Warning: empty url in visit tool call\n")
-						results = append(results, ToolResult{
-							Type:      "tool_result",
-							ToolUseID: toolID,
-							Content:   "Error: Empty url in visit tool call",
-						})
-						continue
-					}
-
-					fmt.Printf("Visiting: %s\n", url)
-					pageText, err := Visit(url)
-					var output string
-					if err != nil {
-						output = "Error: " + err.Error()
-					} else {
-						output = "Visit completed. Page content: " + pageText
-					}
-
-					fmt.Println("Visit completed")
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
-				case "download":
-					url, _ := argsMap["url"].(string)
-					if url == "" {
-						fmt.Printf("Warning: empty url in download tool call\n")
-						results = append(results, ToolResult{
-							Type:      "tool_result",
-							ToolUseID: toolID,
-							Content:   "Error: Empty url in download tool call",
-						})
-						continue
-					}
-
-					fmt.Printf("Downloading from: %s\n", url)
-					fileName, err := Download(url)
-					var output string
-					if err != nil {
-						output = "Error: " + err.Error()
-					} else {
-						output = "Download completed, saved to: " + fileName
-					}
-
-					fmt.Println(output)
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
-				case "todo":
-					itemsInterface, _ := argsMap["items"].([]interface{})
-					if itemsInterface == nil {
-						fmt.Printf("Warning: invalid items in todo tool call\n")
-						results = append(results, ToolResult{
-							Type:      "tool_result",
-							ToolUseID: toolID,
-							Content:   "Error: Invalid items in todo tool call",
-						})
-						continue
-					}
-
-					var items []TodoItem
-					for _, itemInterface := range itemsInterface {
-						if itemMap, ok := itemInterface.(map[string]interface{}); ok {
-							item := TodoItem{}
-							if id, ok := itemMap["id"].(string); ok {
-								item.ID = id
-							}
-							if text, ok := itemMap["text"].(string); ok {
-								item.Text = text
-							}
-							if status, ok := itemMap["status"].(string); ok {
-								item.Status = status
-							}
-							items = append(items, item)
-						}
-					}
-
-					fmt.Println("Updating todo list...")
-					output, err := TODO.Update(items)
-					if err != nil {
-						output = "Error: " + err.Error()
-					}
-
-					fmt.Println(output)
-
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   output,
-					})
+				result, todoUsed := executeTool(call.ID, call.Name, argsMap)
+				results = append(results, result)
+				if todoUsed {
 					usedTodo = true
-				default:
-					results = append(results, ToolResult{
-						Type:      "tool_result",
-						ToolUseID: toolID,
-						Content:   "Error: Unknown tool name",
-					})
-					continue
-				}
-
-				if isDebug {
-					fmt.Printf("Added tool result, now %d results\n", len(results))
 				}
 			}
 		} else {
 			// Anthropic与Ollama的工具调用格式
 			if contentArray, ok := resp.Content.([]interface{}); ok {
 				for _, item := range contentArray {
-					if toolUse, ok := item.(map[string]interface{}); ok {
-						if toolUse["type"] == "tool_use" {
-							toolName, nameOk := toolUse["name"].(string)
-							input, inputOk := toolUse["input"].(map[string]interface{})
+					if toolUse, ok := item.(map[string]interface{}); ok && toolUse["type"] == "tool_use" {
+						toolName, nameOk := toolUse["name"].(string)
+						input, inputOk := toolUse["input"].(map[string]interface{})
 
-							// 提取 toolID，确保为字符串
-							toolID, ok := toolUse["id"].(string)
-							if !ok {
-								if idVal, exists := toolUse["id"]; exists {
-									toolID = fmt.Sprint(idVal)
-								} else {
-									if isDebug {
-										fmt.Printf("Warning: tool call missing id: %v\n", toolUse)
-									}
-									continue
-								}
-							}
-							if toolID == "" {
+						toolID, ok := toolUse["id"].(string)
+						if !ok {
+							if idVal, exists := toolUse["id"]; exists {
+								toolID = fmt.Sprint(idVal)
+							} else {
 								if isDebug {
-									fmt.Printf("Warning: tool call has empty id: %v\n", toolUse)
+									fmt.Printf("Warning: tool call missing id: %v\n", toolUse)
 								}
 								continue
 							}
-
-							if !nameOk || !inputOk {
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   "Error: Invalid tool use fields",
-								})
-								continue
+						}
+						if toolID == "" {
+							if isDebug {
+								fmt.Printf("Warning: tool call has empty id: %v\n", toolUse)
 							}
-							switch toolName {
-							case "shell":
-								command, _ := input["command"].(string)
-								if command == "" {
-									results = append(results, ToolResult{
-										Type:      "tool_result",
-										ToolUseID: toolID,
-										Content:   "Error: Empty command",
-									})
-									continue
-								}
-								fmt.Printf("$ %s\n", command)
-								result := runShell(command)
-								var output string
-								if result.Err != nil {
-									output = fmt.Sprintf("Error: %v", result.Err)
-								} else {
-									output = result.Stdout
-									if result.ExitCode != 0 && result.Stderr != "" {
-										output += "\n" + result.Stderr
-									}
-								}
-								if len(output) > 200 {
-									fmt.Println(TruncateString(output, 200))
-								} else {
-									fmt.Println(output)
-								}
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   output,
-								})
-							case "read_file_line":
-								filename, _ := input["filename"].(string)
-								lineNumFloat, _ := input["line_num"].(float64)
-								lineNum := int(lineNumFloat)
+							continue
+						}
 
-								if filename == "" || lineNum < 1 {
-									fmt.Printf("Warning: invalid arguments for read_file_line\n")
-									results = append(results, ToolResult{
-										Type:      "tool_result",
-										ToolUseID: toolID,
-										Content:   "Error: Invalid arguments for read_file_line",
-									})
-									continue
-								}
+						if !nameOk || !inputOk {
+							results = append(results, ToolResult{
+								Type:      "tool_result",
+								ToolUseID: toolID,
+								Content:   "Error: Invalid tool use fields",
+							})
+							continue
+						}
 
-								fmt.Printf("Reading line %d from %s\n", lineNum, filename)
-								content, err := ReadFileLine(filename, lineNum)
-								var output string
-								if err != nil {
-									output = "Error: " + err.Error()
-								} else {
-									output = content
-								}
-
-								if len(output) > 200 {
-									fmt.Println(TruncateString(output, 200))
-								} else {
-									fmt.Println(output)
-								}
-
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   output,
-								})
-							case "write_file_line":
-								filename, _ := input["filename"].(string)
-								lineNumFloat, _ := input["line_num"].(float64)
-								lineNum := int(lineNumFloat)
-								content, _ := input["content"].(string)
-
-								if filename == "" || lineNum < 1 {
-									fmt.Printf("Warning: invalid arguments for write_file_line\n")
-									results = append(results, ToolResult{
-										Type:      "tool_result",
-										ToolUseID: toolID,
-										Content:   "Error: Invalid arguments for write_file_line",
-									})
-									continue
-								}
-
-								fmt.Printf("Writing to line %d in %s\n", lineNum, filename)
-								err := WriteFileLine(filename, lineNum, content)
-								var output string
-								if err != nil {
-									output = "Error: " + err.Error()
-								} else {
-									output = "Successfully wrote to line " + strconv.Itoa(lineNum)
-								}
-
-								fmt.Println(output)
-
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   output,
-								})
-							case "read_all_lines":
-								filename, _ := input["filename"].(string)
-
-								if filename == "" {
-									fmt.Printf("Warning: invalid arguments for read_all_lines\n")
-									results = append(results, ToolResult{
-										Type:      "tool_result",
-										ToolUseID: toolID,
-										Content:   "Error: Invalid arguments for read_all_lines",
-									})
-									continue
-								}
-
-								fmt.Printf("Reading all lines from %s\n", filename)
-								lines, err := ReadAllLines(filename)
-								var output string
-								if err != nil {
-									output = "Error: " + err.Error()
-								} else {
-									linesJSON, err := json.Marshal(lines)
-									if err != nil {
-										output = "Error: " + err.Error()
-									} else {
-										output = string(linesJSON)
-									}
-								}
-
-								if len(output) > 200 {
-									fmt.Println(TruncateString(output, 200))
-								} else {
-									fmt.Println(output)
-								}
-
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   output,
-								})
-							case "write_all_lines":
-								filename, _ := input["filename"].(string)
-								linesInterface, _ := input["lines"].([]interface{})
-
-								if filename == "" || linesInterface == nil {
-									fmt.Printf("Warning: invalid arguments for write_all_lines\n")
-									results = append(results, ToolResult{
-										Type:      "tool_result",
-										ToolUseID: toolID,
-										Content:   "Error: Invalid arguments for write_all_lines",
-									})
-									continue
-								}
-
-								lines := make([]string, len(linesInterface))
-								for i, line := range linesInterface {
-									if lineStr, ok := line.(string); ok {
-										lines[i] = lineStr
-									}
-								}
-
-								fmt.Printf("Writing all lines to %s\n", filename)
-								err := WriteAllLines(filename, lines)
-								var output string
-								if err != nil {
-									output = "Error: " + err.Error()
-								} else {
-									output = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
-								}
-
-								fmt.Println(output)
-
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   output,
-								})
-							case "search":
-								keyword, _ := input["keyword"].(string)
-								if keyword == "" {
-									fmt.Printf("Warning: empty keyword in search tool call\n")
-									results = append(results, ToolResult{
-										Type:      "tool_result",
-										ToolUseID: toolID,
-										Content:   "Error: Empty keyword in search tool call",
-									})
-									continue
-								}
-
-								fmt.Printf("Searching for: %s\n", keyword)
-								resultsList, err := Search(keyword)
-
-								var output string
-								if err != nil {
-									output = "Error: " + err.Error()
-								} else if resultsList != nil {
-									resultsTOON, err := toon.Marshal(resultsList)
-									if err != nil {
-										output = "Error: Failed to marshal search results"
-										log.Printf("Failed to marshal search results: %v", err)
-									} else {
-										output = string(resultsTOON)
-									}
-								} else {
-									output = "No search results found"
-								}
-
-								fmt.Println("Search completed")
-
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   output,
-								})
-							case "visit":
-								url, _ := input["url"].(string)
-								if url == "" {
-									fmt.Printf("Warning: empty url in visit tool call\n")
-									results = append(results, ToolResult{
-										Type:      "tool_result",
-										ToolUseID: toolID,
-										Content:   "Error: Empty url in visit tool call",
-									})
-									continue
-								}
-
-								fmt.Printf("Visiting: %s\n", url)
-								pageText, err := Visit(url)
-								var output string
-								if err != nil {
-									output = "Error: " + err.Error()
-								} else {
-									output = "Visit completed. Page content: " + pageText
-								}
-
-								fmt.Println("Visit completed")
-
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   output,
-								})
-							case "download":
-								url, _ := input["url"].(string)
-								if url == "" {
-									fmt.Printf("Warning: empty url in download tool call\n")
-									results = append(results, ToolResult{
-										Type:      "tool_result",
-										ToolUseID: toolID,
-										Content:   "Error: Empty url in download tool call",
-									})
-									continue
-								}
-
-								fmt.Printf("Downloading from: %s\n", url)
-								fileName, err := Download(url)
-								var output string
-								if err != nil {
-									output = "Error: " + err.Error()
-								} else {
-									output = "Download completed, saved to: " + fileName
-								}
-
-								fmt.Println(output)
-
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   output,
-								})
-							case "todo":
-								itemsInterface, _ := input["items"].([]interface{})
-								if itemsInterface == nil {
-									fmt.Printf("Warning: invalid items in todo tool call\n")
-									results = append(results, ToolResult{
-										Type:      "tool_result",
-										ToolUseID: toolID,
-										Content:   "Error: Invalid items in todo tool call",
-									})
-									continue
-								}
-
-								var items []TodoItem
-								for _, itemInterface := range itemsInterface {
-									if itemMap, ok := itemInterface.(map[string]interface{}); ok {
-										item := TodoItem{}
-										if id, ok := itemMap["id"].(string); ok {
-											item.ID = id
-										}
-										if text, ok := itemMap["text"].(string); ok {
-											item.Text = text
-										}
-										if status, ok := itemMap["status"].(string); ok {
-											item.Status = status
-										}
-										items = append(items, item)
-									}
-								}
-
-								fmt.Println("Updating todo list...")
-								output, err := TODO.Update(items)
-								if err != nil {
-									output = "Error: " + err.Error()
-								}
-
-								fmt.Println(output)
-
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   output,
-								})
-								usedTodo = true
-							default:
-								results = append(results, ToolResult{
-									Type:      "tool_result",
-									ToolUseID: toolID,
-									Content:   "Error: Unknown tool name",
-								})
-								continue
-							}
+						result, todoUsed := executeTool(toolID, toolName, input)
+						results = append(results, result)
+						if todoUsed {
+							usedTodo = true
 						}
 					}
 				}
@@ -880,13 +435,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			})
 		}
 
-		// [!code ++] 更新todo使用计数并添加提醒（现在放在tool消息之后）
+		// 更新todo使用计数并添加提醒（放在tool消息之后）
 		if usedTodo {
 			roundsSinceTodo = 0
 		} else {
 			roundsSinceTodo++
 			if roundsSinceTodo >= 3 {
-				// 注入todo提醒
 				messages = append(messages, Message{
 					Role:    "user",
 					Content: "<reminder>Update your todos.</reminder>",
@@ -895,15 +449,11 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			}
 		}
 
-		// 打印调试信息，查看messages数组
 		if isDebug {
 			fmt.Printf("Number of messages before second call: %d\n", len(messages))
 			for i, msg := range messages {
 				fmt.Printf("Message %d: Role=%s, Content=%v, ToolCallID=%s\n", i, msg.Role, msg.Content, msg.ToolCallID)
 			}
 		}
-
-		// 再次调用LLM，获取模型对工具执行结果的响应
-		// 注意：下一次循环会再次调用CallModel，其中会打印文本内容
 	}
 }
