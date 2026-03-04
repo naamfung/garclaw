@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
+	"time"
 )
 
 // StreamChunk 流式响应块
@@ -26,11 +28,19 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 		defer close(chunkChan)
 		defer body.Close()
 
+		// 调试模式：收集所有响应行
+		var debugLines []string
+
 		scanner := bufio.NewScanner(body)
 		scanner.Buffer(make([]byte, 64*1024), 10*1024*1024) // 10MB max
 
 		for scanner.Scan() {
 			line := scanner.Text()
+
+			// 调试模式：收集响应行
+			if isDebug {
+				debugLines = append(debugLines, line)
+			}
 
 			// 只处理以 data: 开头的行（SSE格式）
 			if strings.HasPrefix(line, "data:") {
@@ -40,6 +50,14 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 
 				if data == "[DONE]" {
 					chunkChan <- StreamChunk{Done: true}
+					// 调试模式：保存响应数据
+					if isDebug {
+						debugFile := fmt.Sprintf("debug_stream_response_%d.json", time.Now().Unix())
+						debugContent := strings.Join(debugLines, "\n")
+						if err := os.WriteFile(debugFile, []byte(debugContent), 0644); err == nil {
+							fmt.Printf("Debug stream response data written to: %s\n", debugFile)
+						}
+					}
 					return
 				}
 
@@ -81,6 +99,14 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 						if finishReason, ok := choiceMap["finish_reason"].(string); ok && finishReason != "" {
 							chunk.Done = true
 							chunk.FinishReason = finishReason
+							// 调试模式：保存响应数据
+							if isDebug {
+								debugFile := fmt.Sprintf("debug_stream_response_%d.json", time.Now().Unix())
+								debugContent := strings.Join(debugLines, "\n")
+								if err := os.WriteFile(debugFile, []byte(debugContent), 0644); err == nil {
+									fmt.Printf("Debug stream response data written to: %s\n", debugFile)
+								}
+							}
 						}
 
 						// 发送块
@@ -107,6 +133,14 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 					}
 
 					if ollamaChunk.Done {
+						// 调试模式：保存响应数据
+						if isDebug {
+							debugFile := fmt.Sprintf("debug_stream_response_%d.json", time.Now().Unix())
+							debugContent := strings.Join(debugLines, "\n")
+							if err := os.WriteFile(debugFile, []byte(debugContent), 0644); err == nil {
+								fmt.Printf("Debug stream response data written to: %s\n", debugFile)
+							}
+						}
 						return
 					}
 					continue
@@ -126,6 +160,14 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 						chunkChan <- StreamChunk{Content: anthropicChunk.Delta.Text}
 					} else if anthropicChunk.Type == "message_stop" {
 						chunkChan <- StreamChunk{Done: true, FinishReason: "stop"}
+						// 调试模式：保存响应数据
+						if isDebug {
+							debugFile := fmt.Sprintf("debug_stream_response_%d.json", time.Now().Unix())
+							debugContent := strings.Join(debugLines, "\n")
+							if err := os.WriteFile(debugFile, []byte(debugContent), 0644); err == nil {
+								fmt.Printf("Debug stream response data written to: %s\n", debugFile)
+							}
+						}
 						return
 					}
 					continue
