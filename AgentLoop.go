@@ -45,7 +45,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		}
 
 		// 如果模型未有调用工具，结束
-		// 注意：需要包含 "tool_calls" 原因
 		if resp.StopReason != "tool_use" && resp.StopReason != "function_call" && resp.StopReason != "tool_calls" {
 			return
 		}
@@ -185,7 +184,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					if isDebug {
 						fmt.Printf("Failed to parse arguments: %v\n", err)
 					}
-					// 即使解析失败，也要添加一个错误结果
 					results = append(results, ToolResult{
 						Type:      "tool_result",
 						ToolUseID: toolID,
@@ -199,7 +197,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					command, _ := argsMap["command"].(string)
 					if command == "" {
 						fmt.Printf("Warning: empty command in tool call\n")
-						// 即使命令为空，也要添加一个错误结果
 						results = append(results, ToolResult{
 							Type:      "tool_result",
 							ToolUseID: toolID,
@@ -212,20 +209,14 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					result := runShell(command)
 					var output string
 					if result.Err != nil {
-						// 真正无法执行的错误（如命令不存在、危险拦截）
 						output = fmt.Sprintf("Error: %v", result.Err)
 					} else {
-						// 命令已执行，根据退出码判断
 						output = result.Stdout
-						if result.ExitCode != 0 {
-							// 可附加 stderr 信息
-							if result.Stderr != "" {
-								output += "\n" + result.Stderr
-							}
+						if result.ExitCode != 0 && result.Stderr != "" {
+							output += "\n" + result.Stderr
 						}
 					}
 
-					// 打印命令输出（截断）
 					if len(output) > 512 && isDebug {
 						fmt.Println(TruncateString(output, 512))
 					} else {
@@ -244,7 +235,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 					if filename == "" || lineNum < 1 {
 						fmt.Printf("Warning: invalid arguments for read_file_line\n")
-						// 即使参数无效，也要添加一个错误结果
 						results = append(results, ToolResult{
 							Type:      "tool_result",
 							ToolUseID: toolID,
@@ -262,7 +252,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						output = content
 					}
 
-					// 打印输出（截断）
 					fmt.Println(TruncateString(output, 200))
 
 					results = append(results, ToolResult{
@@ -278,7 +267,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 					if filename == "" || lineNum < 1 {
 						fmt.Printf("Warning: invalid arguments for write_file_line\n")
-						// 即使参数无效，也要添加一个错误结果
 						results = append(results, ToolResult{
 							Type:      "tool_result",
 							ToolUseID: toolID,
@@ -296,7 +284,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						output = "Successfully wrote to line " + strconv.Itoa(lineNum)
 					}
 
-					// 打印输出
 					fmt.Println(output)
 
 					results = append(results, ToolResult{
@@ -309,7 +296,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 					if filename == "" {
 						fmt.Printf("Warning: invalid arguments for read_all_lines\n")
-						// 即使参数无效，也要添加一个错误结果
 						results = append(results, ToolResult{
 							Type:      "tool_result",
 							ToolUseID: toolID,
@@ -324,7 +310,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					if err != nil {
 						output = "Error: " + err.Error()
 					} else {
-						// 将字符串切片转换为JSON字符串
 						linesJSON, err := json.Marshal(lines)
 						if err != nil {
 							output = "Error: " + err.Error()
@@ -333,7 +318,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						}
 					}
 
-					// 打印输出（截断）
 					fmt.Println(TruncateString(output, 200))
 
 					results = append(results, ToolResult{
@@ -347,7 +331,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 					if filename == "" || linesInterface == nil {
 						fmt.Printf("Warning: invalid arguments for write_all_lines\n")
-						// 即使参数无效，也要添加一个错误结果
 						results = append(results, ToolResult{
 							Type:      "tool_result",
 							ToolUseID: toolID,
@@ -356,7 +339,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						continue
 					}
 
-					// 将 []interface{} 转换为 []string
 					lines := make([]string, len(linesInterface))
 					for i, line := range linesInterface {
 						if lineStr, ok := line.(string); ok {
@@ -373,7 +355,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						output = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
 					}
 
-					// 打印输出
 					fmt.Println(output)
 
 					results = append(results, ToolResult{
@@ -385,7 +366,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					keyword, _ := argsMap["keyword"].(string)
 					if keyword == "" {
 						fmt.Printf("Warning: empty keyword in search tool call\n")
-						// 即使参数无效，也要添加一个错误结果
 						results = append(results, ToolResult{
 							Type:      "tool_result",
 							ToolUseID: toolID,
@@ -397,7 +377,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					fmt.Printf("Searching for: %s\n", keyword)
 					resultsList, err := Search(keyword)
 
-					// 将搜索结果转换为 TOON 字符串
 					var output string
 					if err != nil {
 						output = "Error: " + err.Error()
@@ -413,7 +392,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						output = "No search results found"
 					}
 
-					// 打印输出
 					fmt.Println("Search completed")
 
 					results = append(results, ToolResult{
@@ -425,7 +403,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					url, _ := argsMap["url"].(string)
 					if url == "" {
 						fmt.Printf("Warning: empty url in visit tool call\n")
-						// 即使参数无效，也要添加一个错误结果
 						results = append(results, ToolResult{
 							Type:      "tool_result",
 							ToolUseID: toolID,
@@ -443,7 +420,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						output = "Visit completed. Page content: " + pageText
 					}
 
-					// 打印输出
 					fmt.Println("Visit completed")
 
 					results = append(results, ToolResult{
@@ -455,7 +431,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					url, _ := argsMap["url"].(string)
 					if url == "" {
 						fmt.Printf("Warning: empty url in download tool call\n")
-						// 即使参数无效，也要添加一个错误结果
 						results = append(results, ToolResult{
 							Type:      "tool_result",
 							ToolUseID: toolID,
@@ -473,7 +448,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						output = "Download completed, saved to: " + fileName
 					}
 
-					// 打印输出
 					fmt.Println(output)
 
 					results = append(results, ToolResult{
@@ -485,7 +459,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					itemsInterface, _ := argsMap["items"].([]interface{})
 					if itemsInterface == nil {
 						fmt.Printf("Warning: invalid items in todo tool call\n")
-						// 即使参数无效，也要添加一个错误结果
 						results = append(results, ToolResult{
 							Type:      "tool_result",
 							ToolUseID: toolID,
@@ -517,7 +490,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 						output = "Error: " + err.Error()
 					}
 
-					// 打印输出
 					fmt.Println(output)
 
 					results = append(results, ToolResult{
@@ -527,7 +499,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					})
 					usedTodo = true
 				default:
-					// 即使工具名称不匹配，也要添加一个错误结果
 					results = append(results, ToolResult{
 						Type:      "tool_result",
 						ToolUseID: toolID,
@@ -568,9 +539,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								continue
 							}
 
-							// 检查必要字段
 							if !nameOk || !inputOk {
-								// 即使字段无效，也要添加一个错误结果
 								results = append(results, ToolResult{
 									Type:      "tool_result",
 									ToolUseID: toolID,
@@ -582,7 +551,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 							case "shell":
 								command, _ := input["command"].(string)
 								if command == "" {
-									// 即使命令为空，也要添加一个错误结果
 									results = append(results, ToolResult{
 										Type:      "tool_result",
 										ToolUseID: toolID,
@@ -594,16 +562,11 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								result := runShell(command)
 								var output string
 								if result.Err != nil {
-									// 真正无法执行的错误（如命令不存在、危险拦截）
 									output = fmt.Sprintf("Error: %v", result.Err)
 								} else {
-									// 命令已执行，根据退出码判断
 									output = result.Stdout
-									if result.ExitCode != 0 {
-										// 可附加 stderr 信息
-										if result.Stderr != "" {
-											output += "\n" + result.Stderr
-										}
+									if result.ExitCode != 0 && result.Stderr != "" {
+										output += "\n" + result.Stderr
 									}
 								}
 								if len(output) > 200 {
@@ -623,7 +586,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								if filename == "" || lineNum < 1 {
 									fmt.Printf("Warning: invalid arguments for read_file_line\n")
-									// 即使参数无效，也要添加一个错误结果
 									results = append(results, ToolResult{
 										Type:      "tool_result",
 										ToolUseID: toolID,
@@ -641,7 +603,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									output = content
 								}
 
-								// 打印输出（截断）
 								if len(output) > 200 {
 									fmt.Println(TruncateString(output, 200))
 								} else {
@@ -661,7 +622,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								if filename == "" || lineNum < 1 {
 									fmt.Printf("Warning: invalid arguments for write_file_line\n")
-									// 即使参数无效，也要添加一个错误结果
 									results = append(results, ToolResult{
 										Type:      "tool_result",
 										ToolUseID: toolID,
@@ -679,7 +639,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									output = "Successfully wrote to line " + strconv.Itoa(lineNum)
 								}
 
-								// 打印输出
 								fmt.Println(output)
 
 								results = append(results, ToolResult{
@@ -692,7 +651,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								if filename == "" {
 									fmt.Printf("Warning: invalid arguments for read_all_lines\n")
-									// 即使参数无效，也要添加一个错误结果
 									results = append(results, ToolResult{
 										Type:      "tool_result",
 										ToolUseID: toolID,
@@ -707,7 +665,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								if err != nil {
 									output = "Error: " + err.Error()
 								} else {
-									// 将字符串切片转换为JSON字符串
 									linesJSON, err := json.Marshal(lines)
 									if err != nil {
 										output = "Error: " + err.Error()
@@ -716,7 +673,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									}
 								}
 
-								// 打印输出（截断）
 								if len(output) > 200 {
 									fmt.Println(TruncateString(output, 200))
 								} else {
@@ -734,7 +690,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								if filename == "" || linesInterface == nil {
 									fmt.Printf("Warning: invalid arguments for write_all_lines\n")
-									// 即使参数无效，也要添加一个错误结果
 									results = append(results, ToolResult{
 										Type:      "tool_result",
 										ToolUseID: toolID,
@@ -743,7 +698,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									continue
 								}
 
-								// 将 []interface{} 转换为 []string
 								lines := make([]string, len(linesInterface))
 								for i, line := range linesInterface {
 									if lineStr, ok := line.(string); ok {
@@ -760,7 +714,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									output = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
 								}
 
-								// 打印输出
 								fmt.Println(output)
 
 								results = append(results, ToolResult{
@@ -772,7 +725,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								keyword, _ := input["keyword"].(string)
 								if keyword == "" {
 									fmt.Printf("Warning: empty keyword in search tool call\n")
-									// 即使参数无效，也要添加一个错误结果
 									results = append(results, ToolResult{
 										Type:      "tool_result",
 										ToolUseID: toolID,
@@ -784,7 +736,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								fmt.Printf("Searching for: %s\n", keyword)
 								resultsList, err := Search(keyword)
 
-								// 将搜索结果转换为 TOON 字符串
 								var output string
 								if err != nil {
 									output = "Error: " + err.Error()
@@ -800,7 +751,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									output = "No search results found"
 								}
 
-								// 打印输出
 								fmt.Println("Search completed")
 
 								results = append(results, ToolResult{
@@ -812,7 +762,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								url, _ := input["url"].(string)
 								if url == "" {
 									fmt.Printf("Warning: empty url in visit tool call\n")
-									// 即使参数无效，也要添加一个错误结果
 									results = append(results, ToolResult{
 										Type:      "tool_result",
 										ToolUseID: toolID,
@@ -830,7 +779,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									output = "Visit completed. Page content: " + pageText
 								}
 
-								// 打印输出
 								fmt.Println("Visit completed")
 
 								results = append(results, ToolResult{
@@ -842,7 +790,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								url, _ := input["url"].(string)
 								if url == "" {
 									fmt.Printf("Warning: empty url in download tool call\n")
-									// 即使参数无效，也要添加一个错误结果
 									results = append(results, ToolResult{
 										Type:      "tool_result",
 										ToolUseID: toolID,
@@ -860,7 +807,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									output = "Download completed, saved to: " + fileName
 								}
 
-								// 打印输出
 								fmt.Println(output)
 
 								results = append(results, ToolResult{
@@ -872,7 +818,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								itemsInterface, _ := input["items"].([]interface{})
 								if itemsInterface == nil {
 									fmt.Printf("Warning: invalid items in todo tool call\n")
-									// 即使参数无效，也要添加一个错误结果
 									results = append(results, ToolResult{
 										Type:      "tool_result",
 										ToolUseID: toolID,
@@ -904,7 +849,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									output = "Error: " + err.Error()
 								}
 
-								// 打印输出
 								fmt.Println(output)
 
 								results = append(results, ToolResult{
@@ -914,7 +858,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 								})
 								usedTodo = true
 							default:
-								// 即使工具名称不匹配，也要添加一个错误结果
 								results = append(results, ToolResult{
 									Type:      "tool_result",
 									ToolUseID: toolID,
@@ -928,7 +871,16 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			}
 		}
 
-		// 更新todo使用计数并添加提醒
+		// 添加工具执行结果到消息历史
+		for _, result := range results {
+			messages = append(messages, Message{
+				Role:       "tool",
+				ToolCallID: result.ToolUseID,
+				Content:    result.Content,
+			})
+		}
+
+		// [!code ++] 更新todo使用计数并添加提醒（现在放在tool消息之后）
 		if usedTodo {
 			roundsSinceTodo = 0
 		} else {
@@ -941,15 +893,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				})
 				roundsSinceTodo = 0
 			}
-		}
-
-		// 添加工具执行结果到消息历史
-		for _, result := range results {
-			messages = append(messages, Message{
-				Role:       "tool",
-				ToolCallID: result.ToolUseID,
-				Content:    result.Content,
-			})
 		}
 
 		// 打印调试信息，查看messages数组
