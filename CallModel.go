@@ -416,15 +416,59 @@ func handleOllamaResponse(resp *http.Response) (Response, error) {
 // 处理Anthropic响应
 func handleAnthropicResponse(resp *http.Response) (Response, error) {
 	var result Response
-	err := json.NewDecoder(resp.Body).Decode(&result)
+	var anthropicResp struct {
+		Content []struct {
+			Type    string `json:"type"`
+			Text    string `json:"text,omitempty"`
+			ToolUse struct {
+				ID    string                 `json:"id"`
+				Name  string                 `json:"name"`
+				Input map[string]interface{} `json:"input"`
+			} `json:"tool_use,omitempty"`
+		} `json:"content"`
+		StopReason string `json:"stop_reason"`
+	}
+
+	err := json.NewDecoder(resp.Body).Decode(&anthropicResp)
 	if err != nil {
 		return Response{}, fmt.Errorf("failed to decode Anthropic response: %w", err)
 	}
-	// 打印文本内容（假设Content是字符串）
-	if content, ok := result.Content.(string); ok && content != "" {
-		fmt.Println(content)
+
+	// 处理响应内容
+	var content interface{}
+	var hasToolUse bool
+	var toolCalls []map[string]interface{}
+
+	for _, item := range anthropicResp.Content {
+		if item.Type == "text" && item.Text != "" {
+			fmt.Println(item.Text)
+			if content == nil {
+				content = item.Text
+			} else if str, ok := content.(string); ok {
+				content = str + "\n" + item.Text
+			}
+		} else if item.Type == "tool_use" {
+			hasToolUse = true
+			toolCall := map[string]interface{}{
+				"id":   item.ToolUse.ID,
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":      item.ToolUse.Name,
+					"arguments": item.ToolUse.Input,
+				},
+			}
+			toolCalls = append(toolCalls, toolCall)
+		}
 	}
 
+	if hasToolUse {
+		content = toolCalls
+		result.StopReason = "function_call"
+	} else {
+		result.StopReason = anthropicResp.StopReason
+	}
+
+	result.Content = content
 	return result, nil
 }
 
