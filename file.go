@@ -18,10 +18,13 @@ func ReadFileLine(filename string, lineNum int) (string, error) {
 	}
 	defer file.Close()
 
+	// 创建Scanner并设置动态缓冲区
 	scanner := bufio.NewScanner(file)
-	// 设置更大的缓冲区大小（10MB），以处理长行
-	buf := make([]byte, 10*1024*1024)
-	scanner.Buffer(buf, bufio.MaxScanTokenSize)
+	// 设置初始缓冲区为1MB，最大缓冲区为100MB
+	const initialBufSize = 1024 * 1024   // 1MB
+	const maxBufSize = 100 * 1024 * 1024 // 100MB
+	scanner.Buffer(make([]byte, initialBufSize), maxBufSize)
+
 	currentLine := 0
 	for scanner.Scan() {
 		currentLine++
@@ -30,9 +33,12 @@ func ReadFileLine(filename string, lineNum int) (string, error) {
 			return scanner.Text(), nil
 		}
 	}
+
 	if err := scanner.Err(); err != nil {
 		return "", err
 	}
+
+	// 如果扫描结束还没找到目标行，说明行号超出范围
 	return "", errors.New("line number out of range")
 }
 
@@ -74,10 +80,14 @@ func ReadAllLines(filename string) ([]string, error) {
 	defer file.Close()
 
 	var lines []string
+
+	// 创建Scanner并设置动态缓冲区
 	scanner := bufio.NewScanner(file)
-	// 设置更大的缓冲区大小（10MB），以处理长行
+	// 设置初始缓冲区为10MB，最大缓冲区为100MB，以应对长行
 	buf := make([]byte, 10*1024*1024)
-	scanner.Buffer(buf, bufio.MaxScanTokenSize)
+	const maxBufSize = 100 * 1024 * 1024 // 100MB
+	scanner.Buffer(buf, maxBufSize)
+
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
