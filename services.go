@@ -28,7 +28,7 @@ func init() {
 
 	// --- 关键点1: 安装时跳过浏览器下载 ---
 	// 通过 RunOptions 告诉 Playwright 的驱动安装程序，不要自动下载浏览器。
-	// 你需要自己保证系统里已经有可用的 Chromium。
+	// 我们必须自己保证系统里经已有可用的 Chromium。
 	installOptions := &playwright.RunOptions{
 		SkipInstallBrowsers: true, // 核心参数：跳过浏览器二进制文件的下载
 	}

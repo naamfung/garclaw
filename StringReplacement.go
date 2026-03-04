@@ -16,18 +16,6 @@ type SortedStringReplacements struct {
 // 全局排序后的字符串替换映射
 var sortedStringsReplacements SortedStringReplacements
 
-// 遍历排序后的字符串替换映射
-func (s *SortedStringReplacements) ForEach(f func(key, value string)) {
-	for _, item := range s.Replacements {
-		f(item.Key, item.Value)
-	}
-}
-
-// 获取排序后的字符串替换映射长度
-func (s *SortedStringReplacements) Len() int {
-	return len(s.Replacements)
-}
-
 // 初始化函数
 func init() {
 	// 初始化排序后的字符串替换映射
@@ -59,5 +47,17 @@ func init() {
 		for i := 0; i < min(5, len(sortedStringsReplacements.Replacements)); i++ {
 			fmt.Printf("%d: %s -> %s (长度: %d)\n", i+1, sortedStringsReplacements.Replacements[i].Key, sortedStringsReplacements.Replacements[i].Value, len(sortedStringsReplacements.Replacements[i].Key))
 		}
+	}
+}
+
+// 获取排序后的字符串替换映射长度
+func (s *SortedStringReplacements) Len() int {
+	return len(s.Replacements)
+}
+
+// 遍历排序后的字符串替换映射
+func (s *SortedStringReplacements) ForEach(f func(key, value string)) {
+	for _, item := range s.Replacements {
+		f(item.Key, item.Value)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/toon-format/toon-go"
 )
@@ -27,6 +28,22 @@ const (
 	isDebug                = false // 控制调试信息的显示
 	SYSTEM_PROMPT_TEMPLATE = "You are a coding agent. When the user asks to list files, run commands, or interact with the system, you MUST use the shell {{tool_or_function}}. When you need to read a specific line from a file, use the read_file_line {{tool_or_function}}. When you need to write content to a specific line in a file, use the write_file_line {{tool_or_function}}. When you need to read all lines from a file, use the read_all_lines {{tool_or_function}}. When you need to write all lines to a file, use the write_all_lines {{tool_or_function}}. When you need to manage tasks, use the todo {{tool_or_function}}. IMPORTANT: The current system time is provided at the end of this prompt. When asked about the current date or time, you MUST use this provided time information directly and NOT attempt to execute any commands to get the date or time. When you need to search for time-sensitive information like news, you MUST use this current system time to construct your search query. Do NOT explain how to run the command, do NOT provide alternative methods, just use the {{tool_or_function}} directly. For example, when asked to list files, use the shell {{tool_or_function}} with command 'ls' or 'ls -la' (Unix/Linux). Your response MUST be a {{tool_or_function}} call, not a regular message. Under no circumstances should you provide explanations or instructions to the user - only use the {{tool_or_function}}."
 )
+
+// TruncateString 安全地截断 UTF-8 字符串，确保不会在字符中间切断
+func TruncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+
+	// 确保我们不会在 UTF-8 字符的中间截断
+	for i := maxLen; i > 0; i-- {
+		if utf8.RuneStart(s[i]) {
+			return s[:i] + "..."
+		}
+	}
+
+	return "..."
+}
 
 // 消息结构
 type Message struct {
@@ -616,7 +633,7 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 	for {
 		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream)
 		if err != nil {
-			fmt.Printf("Error calling LLM: %v\n", err)
+			fmt.Printf("Error calling model: %v\n", err)
 			return
 		}
 
@@ -644,7 +661,7 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			})
 		}
 
-		// 如果模型没有调用工具，结束
+		// 如果模型未有调用工具，结束
 		// 注意：需要包含 "tool_calls" 原因
 		if resp.StopReason != "tool_use" && resp.StopReason != "function_call" && resp.StopReason != "tool_calls" {
 			return
@@ -760,11 +777,7 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					}
 
 					// 打印输出（截断）
-					if len(output) > 200 {
-						fmt.Println(output[:200] + "...")
-					} else {
-						fmt.Println(output)
-					}
+					fmt.Println(TruncateString(output, 200))
 
 					results = append(results, ToolResult{
 						Type:      "tool_result",
@@ -823,11 +836,7 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					}
 
 					// 打印输出（截断）
-					if len(output) > 200 {
-						fmt.Println(output[:200] + "...")
-					} else {
-						fmt.Println(output)
-					}
+					fmt.Println(TruncateString(output, 200))
 
 					results = append(results, ToolResult{
 						Type:      "tool_result",
@@ -1025,7 +1034,7 @@ func agentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									}
 								}
 								if len(output) > 200 {
-									fmt.Println(output[:200])
+									fmt.Println(TruncateString(output, 200))
 								} else {
 									fmt.Println(output)
 								}
