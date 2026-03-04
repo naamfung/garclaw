@@ -324,6 +324,7 @@ func handleOpenAIResponse(resp *http.Response) (Response, error) {
 					Name      string `json:"name"`
 					Arguments string `json:"arguments"`
 				} `json:"function_call"`
+				ReasoningContent interface{} `json:"reasoning_content,omitempty"`
 			} `json:"message"`
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
@@ -389,6 +390,8 @@ func handleOpenAIResponse(resp *http.Response) (Response, error) {
 			} else {
 				// 纯文本回复，直接作为结果内容（不需要额外打印，因为上面已经打印了）
 				result.Content = choice.Message.Content
+				// 保存思考内容
+				result.ReasoningContent = choice.Message.ReasoningContent
 			}
 		}
 	}
@@ -439,6 +442,7 @@ func handleAnthropicResponse(resp *http.Response) (Response, error) {
 				Name  string                 `json:"name"`
 				Input map[string]interface{} `json:"input"`
 			} `json:"tool_use,omitempty"`
+			Thinking string `json:"thinking,omitempty"`
 		} `json:"content"`
 		StopReason string `json:"stop_reason"`
 	}
@@ -452,6 +456,7 @@ func handleAnthropicResponse(resp *http.Response) (Response, error) {
 	var content interface{}
 	var hasToolUse bool
 	var toolCalls []map[string]interface{}
+	var reasoningContent strings.Builder
 
 	for _, item := range anthropicResp.Content {
 		if item.Type == "text" && item.Text != "" {
@@ -472,7 +477,16 @@ func handleAnthropicResponse(resp *http.Response) (Response, error) {
 				},
 			}
 			toolCalls = append(toolCalls, toolCall)
+		} else if item.Type == "thinking" && item.Thinking != "" {
+			// 处理思考内容
+			reasoningContent.WriteString(item.Thinking)
+			reasoningContent.WriteString("\n")
 		}
+	}
+
+	// 保存思考内容
+	if reasoningContent.Len() > 0 {
+		result.ReasoningContent = reasoningContent.String()
 	}
 
 	if hasToolUse {

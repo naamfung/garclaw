@@ -10,11 +10,12 @@ import (
 
 // StreamChunk 流式响应块
 type StreamChunk struct {
-	Content      string
-	ToolCalls    []map[string]interface{} // 用于存放工具调用（可能是多个，每个可能不完整）
-	Done         bool
-	Error        error
-	FinishReason string
+	Content          string
+	ToolCalls        []map[string]interface{} // 用于存放工具调用（可能是多个，每个可能不完整）
+	Done             bool
+	Error            error
+	FinishReason     string
+	ReasoningContent string
 }
 
 // getStreamChunks 从响应体中获取流式响应块

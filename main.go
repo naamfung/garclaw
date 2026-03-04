@@ -38,10 +38,11 @@ func TruncateString(s string, maxLen int) string {
 
 // 消息结构
 type Message struct {
-	Role       string      `json:"role"`
-	Content    interface{} `json:"content,omitempty"`
-	ToolCalls  interface{} `json:"tool_calls,omitempty"`
-	ToolCallID string      `json:"tool_call_id,omitempty"`
+	Role             string      `json:"role"`
+	Content          interface{} `json:"content,omitempty"`
+	ToolCalls        interface{} `json:"tool_calls,omitempty"`
+	ToolCallID       string      `json:"tool_call_id,omitempty"`
+	ReasoningContent interface{} `json:"reasoning_content,omitempty"`
 }
 
 // 工具调用结构
@@ -61,8 +62,9 @@ type ToolResult struct {
 
 // 响应结构
 type Response struct {
-	Content    interface{} `json:"content"`
-	StopReason string      `json:"stop_reason"`
+	Content          interface{} `json:"content"`
+	StopReason       string      `json:"stop_reason"`
+	ReasoningContent interface{} `json:"reasoning_content,omitempty"`
 }
 
 func main() {

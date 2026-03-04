@@ -38,8 +38,9 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		} else {
 			// 对于普通回复，使用Content字段
 			messages = append(messages, Message{
-				Role:    "assistant",
-				Content: resp.Content,
+				Role:            "assistant",
+				Content:         resp.Content,
+				ReasoningContent: resp.ReasoningContent,
 			})
 		}
 
