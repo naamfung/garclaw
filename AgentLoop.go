@@ -73,6 +73,17 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				for _, item := range contentArray {
 					if toolUse, ok := item.(map[string]interface{}); ok {
 						toolCalls = append(toolCalls, toolUse)
+					} else {
+						// 即使item不是map，也要创建一个错误的toolUse
+						toolUse := map[string]interface{}{
+							"id":   "error_" + fmt.Sprintf("%d", len(toolCalls)),
+							"type": "function",
+							"function": map[string]interface{}{
+								"name":      "error",
+								"arguments": "{}",
+							},
+						}
+						toolCalls = append(toolCalls, toolUse)
 					}
 				}
 			} else if contentMapSlice, ok := resp.Content.([]map[string]interface{}); ok {
@@ -81,6 +92,16 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				if isDebug {
 					fmt.Printf("Warning: resp.Content is not a slice of maps: %T\n", resp.Content)
 				}
+				// 即使resp.Content不是预期类型，也要创建一个错误的toolUse
+				toolUse := map[string]interface{}{
+					"id":   "error_0",
+					"type": "function",
+					"function": map[string]interface{}{
+						"name":      "error",
+						"arguments": "{}",
+					},
+				}
+				toolCalls = append(toolCalls, toolUse)
 			}
 
 			for _, toolUse := range toolCalls {
