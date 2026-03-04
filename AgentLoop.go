@@ -679,9 +679,15 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									Content:   output,
 								})
 							case "search":
-								keyword := input["keyword"].(string)
+								keyword, _ := input["keyword"].(string)
 								if keyword == "" {
 									fmt.Printf("Warning: empty keyword in search tool call\n")
+									// 即使参数无效，也要添加一个错误结果
+									results = append(results, ToolResult{
+										Type:      "tool_result",
+										ToolUseID: toolID,
+										Content:   "Error: Empty keyword in search tool call",
+									})
 									continue
 								}
 
@@ -713,9 +719,15 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									Content:   output,
 								})
 							case "visit":
-								url := input["url"].(string)
+								url, _ := input["url"].(string)
 								if url == "" {
 									fmt.Printf("Warning: empty url in visit tool call\n")
+									// 即使参数无效，也要添加一个错误结果
+									results = append(results, ToolResult{
+										Type:      "tool_result",
+										ToolUseID: toolID,
+										Content:   "Error: Empty url in visit tool call",
+									})
 									continue
 								}
 
