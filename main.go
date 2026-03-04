@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -28,66 +27,6 @@ const (
 	isDebug                = false // 控制调试信息的显示
 	SYSTEM_PROMPT_TEMPLATE = "You are a coding agent. When the user asks to list files, run commands, or interact with the system, you MUST use the shell {{tool_or_function}}. When you need to read a specific line from a file, use the read_file_line {{tool_or_function}}. When you need to write content to a specific line in a file, use the write_file_line {{tool_or_function}}. When you need to read all lines from a file, use the read_all_lines {{tool_or_function}}. When you need to write all lines to a file, use the write_all_lines {{tool_or_function}}. When you need to manage tasks, use the todo {{tool_or_function}}. IMPORTANT: The current system time is provided at the end of this prompt. When asked about the current date or time, you MUST use this provided time information directly and NOT attempt to execute any commands to get the date or time. When you need to search for time-sensitive information like news, you MUST use this current system time to construct your search query. Do NOT explain how to run the command, do NOT provide alternative methods, just use the {{tool_or_function}} directly. For example, when asked to list files, use the shell {{tool_or_function}} with command 'ls' or 'ls -la' (Unix/Linux). Your response MUST be a {{tool_or_function}} call, not a regular message. Under no circumstances should you provide explanations or instructions to the user - only use the {{tool_or_function}}."
 )
-
-// 定义键值对结构体，用于排序
-type StringReplacement struct {
-	Key   string
-	Value string
-}
-
-// 定义排序后的字符串替换映射
-type SortedStringReplacements struct {
-	Replacements []StringReplacement
-}
-
-// 全局排序后的字符串替换映射
-var sortedStringsReplacements SortedStringReplacements
-
-// 初始化函数
-func init() {
-	// 初始化排序后的字符串替换映射
-	sortedStringsReplacements = SortedStringReplacements{
-		Replacements: make([]StringReplacement, 0, len(stringsReplacements)),
-	}
-
-	// 将 map 转换为切片
-	for key, value := range stringsReplacements {
-		sortedStringsReplacements.Replacements = append(sortedStringsReplacements.Replacements, StringReplacement{
-			Key:   key,
-			Value: value,
-		})
-	}
-
-	// 按字符串长度从长到短排序
-	for i := 0; i < len(sortedStringsReplacements.Replacements); i++ {
-		for j := i + 1; j < len(sortedStringsReplacements.Replacements); j++ {
-			if len(sortedStringsReplacements.Replacements[i].Key) < len(sortedStringsReplacements.Replacements[j].Key) {
-				// 交换位置
-				sortedStringsReplacements.Replacements[i], sortedStringsReplacements.Replacements[j] = sortedStringsReplacements.Replacements[j], sortedStringsReplacements.Replacements[i]
-			}
-		}
-	}
-
-	// 打印排序结果（调试用）
-	if isDebug {
-		fmt.Println("字符串替换映射排序完成，前5项：")
-		for i := 0; i < min(5, len(sortedStringsReplacements.Replacements)); i++ {
-			fmt.Printf("%d: %s -> %s (长度: %d)\n", i+1, sortedStringsReplacements.Replacements[i].Key, sortedStringsReplacements.Replacements[i].Value, len(sortedStringsReplacements.Replacements[i].Key))
-		}
-	}
-}
-
-// 遍历排序后的字符串替换映射
-func (s *SortedStringReplacements) ForEach(f func(key, value string)) {
-	for _, item := range s.Replacements {
-		f(item.Key, item.Value)
-	}
-}
-
-// 获取排序后的字符串替换映射长度
-func (s *SortedStringReplacements) Len() int {
-	return len(s.Replacements)
-}
 
 // 消息结构
 type Message struct {
@@ -310,24 +249,10 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 			// 实时打印文本内容
 			if chunk.Content != "" {
-				// 基于字符串替换
-				processedContent := chunk.Content
-
-				// 使用排序后的字符串替换映射
-				sortedStringsReplacements.ForEach(func(oldWord, newWord string) {
-					// 直接进行字符串替换，不使用词边界，确保中文也能正确替换
-					processedContent = strings.ReplaceAll(processedContent, oldWord, newWord)
-				})
-
-				// 逐字打印，增强流式效果
-				for _, char := range processedContent {
-					fmt.Print(string(char))
-					stdout := os.Stdout
-					stdout.Sync()
-					// 微小延迟，增强打字机效果
-					time.Sleep(10 * time.Millisecond)
-				}
-				fullContent.WriteString(processedContent)
+				fmt.Print(chunk.Content)
+				stdout := os.Stdout
+				stdout.Sync()
+				fullContent.WriteString(chunk.Content)
 			}
 
 			// 处理工具调用块
@@ -426,21 +351,9 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			return Response{}, err
 		}
 
-		// 基于词匹配的替换
-		responseBodyStr := string(responseBody)
-
-		// 使用排序后的字符串替换映射
-		sortedStringsReplacements.ForEach(func(oldWord, newWord string) {
-			// 构建正则表达式，确保匹配完整的词
-			re := regexp.MustCompile(fmt.Sprintf(`\\b%s\\b`, regexp.QuoteMeta(oldWord)))
-			responseBodyStr = re.ReplaceAllString(responseBodyStr, newWord)
-		})
-
-		responseBody = []byte(responseBodyStr)
-
 		// 打印响应体
 		if isDebug {
-			fmt.Printf("Response body: %s\n", responseBodyStr)
+			fmt.Printf("Response body: %s\n", string(responseBody))
 		}
 
 		// 重置响应体，以便后续解码
