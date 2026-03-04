@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/toon-format/toon-go"
 )
@@ -48,6 +49,7 @@ func loadConfig() (Config, error) {
 		defaultConfig.APIConfig.Temperature = 0.7
 		defaultConfig.APIConfig.MaxTokens = 4096
 		defaultConfig.APIConfig.Stream = true
+		defaultConfig.APIConfig.Thinking = false
 
 		// 直接序列化为 TOON 格式
 		toonData, err := toon.Marshal(defaultConfig)
@@ -140,6 +142,84 @@ func loadConfig() (Config, error) {
 			} else if thinking, ok := apiConfigMap["Thinking"].(bool); ok {
 				config.APIConfig.Thinking = thinking
 			}
+		}
+	}
+
+	// 处理环境变量覆盖
+	// API类型
+	if apiTypeStr := os.Getenv("API_TYPE"); apiTypeStr != "" {
+		config.APIConfig.APIType = apiTypeStr
+	}
+	// 默认值
+	if config.APIConfig.APIType == "" {
+		config.APIConfig.APIType = "openai" // 默认值
+	}
+
+	// BaseURL
+	if baseURLStr := os.Getenv("BASE_URL"); baseURLStr != "" {
+		config.APIConfig.BaseURL = baseURLStr
+	} else if config.APIConfig.APIType == "openai" {
+		if openaiBaseURL := os.Getenv("OPENAI_BASE_URL"); openaiBaseURL != "" {
+			config.APIConfig.BaseURL = openaiBaseURL
+		}
+	} else if config.APIConfig.APIType == "anthropic" {
+		if anthropicBaseURL := os.Getenv("ANTHROPIC_BASE_URL"); anthropicBaseURL != "" {
+			config.APIConfig.BaseURL = anthropicBaseURL
+		}
+	}
+
+	// APIKey
+	if apiKeyStr := os.Getenv("API_KEY"); apiKeyStr != "" {
+		config.APIConfig.APIKey = apiKeyStr
+	} else if config.APIConfig.APIType == "openai" {
+		if openaiAPIKey := os.Getenv("OPENAI_API_KEY"); openaiAPIKey != "" {
+			config.APIConfig.APIKey = openaiAPIKey
+		}
+	} else if config.APIConfig.APIType == "anthropic" {
+		if anthropicAPIKey := os.Getenv("ANTHROPIC_API_KEY"); anthropicAPIKey != "" {
+			config.APIConfig.APIKey = anthropicAPIKey
+		}
+	}
+
+	// ModelID
+	if modelIDStr := os.Getenv("MODEL_ID"); modelIDStr != "" {
+		config.APIConfig.Model = modelIDStr
+	}
+	// 默认值
+	if config.APIConfig.Model == "" {
+		config.APIConfig.Model = DEFAULT_MODEL_ID
+	}
+
+	// Temperature
+	if tempStr := os.Getenv("TEMPERATURE"); tempStr != "" {
+		if temp, err := strconv.ParseFloat(tempStr, 64); err == nil {
+			config.APIConfig.Temperature = temp
+		}
+	}
+	// 如深度求索的 temperature 默认值有可能取值为零，所以此处不设置默认值
+
+	// MaxTokens
+	if tokensStr := os.Getenv("MAX_TOKENS"); tokensStr != "" {
+		if tokens, err := strconv.Atoi(tokensStr); err == nil {
+			config.APIConfig.MaxTokens = tokens
+		}
+	}
+	// 默认值
+	if config.APIConfig.MaxTokens == 0 {
+		config.APIConfig.MaxTokens = 4096 // 默认值
+	}
+
+	// Stream
+	if streamStr := os.Getenv("STREAM"); streamStr != "" {
+		if streamVal, err := strconv.ParseBool(streamStr); err == nil {
+			config.APIConfig.Stream = streamVal
+		}
+	}
+
+	// Thinking
+	if thinkingStr := os.Getenv("THINKING"); thinkingStr != "" {
+		if thinkingVal, err := strconv.ParseBool(thinkingStr); err == nil {
+			config.APIConfig.Thinking = thinkingVal
 		}
 	}
 

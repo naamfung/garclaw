@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -70,101 +69,15 @@ func main() {
 	// 读取配置文件
 	config, err := loadConfig()
 
-	// 先读取配置文件中的值
+	// 从配置中获取值
 	apiType := config.APIConfig.APIType
-	// 环境变量覆盖
-	if apiTypeStr := os.Getenv("API_TYPE"); apiTypeStr != "" {
-		apiType = apiTypeStr
-	}
-	// 默认值
-	if apiType == "" {
-		apiType = "openai" // 默认值
-	}
-
-	// 先读取配置文件中的值
 	baseURL := config.APIConfig.BaseURL
-	// 环境变量覆盖
-	if baseURLStr := os.Getenv("BASE_URL"); baseURLStr != "" {
-		baseURL = baseURLStr
-	} else if apiType == "openai" {
-		if openaiBaseURL := os.Getenv("OPENAI_BASE_URL"); openaiBaseURL != "" {
-			baseURL = openaiBaseURL
-		}
-	} else if apiType == "anthropic" {
-		if anthropicBaseURL := os.Getenv("ANTHROPIC_BASE_URL"); anthropicBaseURL != "" {
-			baseURL = anthropicBaseURL
-		}
-	}
-
-	// 先读取配置文件中的值
 	apiKey := config.APIConfig.APIKey
-	// 环境变量覆盖
-	if apiKeyStr := os.Getenv("API_KEY"); apiKeyStr != "" {
-		apiKey = apiKeyStr
-	} else if apiType == "openai" {
-		if openaiAPIKey := os.Getenv("OPENAI_API_KEY"); openaiAPIKey != "" {
-			apiKey = openaiAPIKey
-		}
-	} else if apiType == "anthropic" {
-		if anthropicAPIKey := os.Getenv("ANTHROPIC_API_KEY"); anthropicAPIKey != "" {
-			apiKey = anthropicAPIKey
-		}
-	}
-
-	// 先读取配置文件中的值
 	modelID := config.APIConfig.Model
-	// 环境变量覆盖
-	if modelIDStr := os.Getenv("MODEL_ID"); modelIDStr != "" {
-		modelID = modelIDStr
-	}
-	// 默认值
-	if modelID == "" {
-		modelID = DEFAULT_MODEL_ID
-	}
-
-	// 先读取配置文件中的值
 	temperature := config.APIConfig.Temperature
-	// 环境变量覆盖
-	if tempStr := os.Getenv("TEMPERATURE"); tempStr != "" {
-		if temp, err := strconv.ParseFloat(tempStr, 64); err == nil {
-			temperature = temp
-		}
-	}
-	// 如深度求索的　temperature　默认值有可能取值为零，所以此处不设置默认值
-	// if temperature == 0 {
-	// 	temperature = 0.7 // 默认值
-	// }
-
-	// 先读取配置文件中的值
 	maxTokens := config.APIConfig.MaxTokens
-	// 环境变量覆盖
-	if tokensStr := os.Getenv("MAX_TOKENS"); tokensStr != "" {
-		if tokens, err := strconv.Atoi(tokensStr); err == nil {
-			maxTokens = tokens
-		}
-	}
-	// 默认值
-	if maxTokens == 0 {
-		maxTokens = 4096 // 默认值
-	}
-
-	// 读取流式设置
 	stream := config.APIConfig.Stream
-	// 环境变量覆盖
-	if streamStr := os.Getenv("STREAM"); streamStr != "" {
-		if streamVal, err := strconv.ParseBool(streamStr); err == nil {
-			stream = streamVal
-		}
-	}
-
-	// 读取思考模式设置
 	thinking := config.APIConfig.Thinking
-	// 环境变量覆盖
-	if thinkingStr := os.Getenv("THINKING"); thinkingStr != "" {
-		if thinkingVal, err := strconv.ParseBool(thinkingStr); err == nil {
-			thinking = thinkingVal
-		}
-	}
 
 	if err != nil {
 		fmt.Printf("Warning: Error loading config file: %v\n", err)
