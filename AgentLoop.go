@@ -604,7 +604,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
+									ToolUseID: toolID,
 									Content:   output,
 								})
 							case "write_file_line":
@@ -638,7 +638,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
+									ToolUseID: toolID,
 									Content:   output,
 								})
 							case "read_all_lines":
@@ -679,7 +679,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
+									ToolUseID: toolID,
 									Content:   output,
 								})
 							case "write_all_lines":
@@ -719,7 +719,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
+									ToolUseID: toolID,
 									Content:   output,
 								})
 							case "search":
@@ -759,7 +759,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
+									ToolUseID: toolID,
 									Content:   output,
 								})
 							case "visit":
@@ -789,7 +789,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
+									ToolUseID: toolID,
 									Content:   output,
 								})
 							case "download":
@@ -819,7 +819,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
+									ToolUseID: toolID,
 									Content:   output,
 								})
 							case "todo":
@@ -863,7 +863,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								results = append(results, ToolResult{
 									Type:      "tool_result",
-									ToolUseID: toolUse["id"].(string),
+									ToolUseID: toolID,
 									Content:   output,
 								})
 								usedTodo = true
