@@ -749,9 +749,15 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 									Content:   output,
 								})
 							case "download":
-								url := input["url"].(string)
+								url, _ := input["url"].(string)
 								if url == "" {
 									fmt.Printf("Warning: empty url in download tool call\n")
+									// 即使参数无效，也要添加一个错误结果
+									results = append(results, ToolResult{
+										Type:      "tool_result",
+										ToolUseID: toolID,
+										Content:   "Error: Empty url in download tool call",
+									})
 									continue
 								}
 
