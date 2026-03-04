@@ -526,6 +526,11 @@ func handleNonStreamResponse(resp *http.Response, apiType string) (Response, err
 	// 打印响应体
 	if isDebug {
 		fmt.Printf("Response body: %s\n", string(responseBody))
+		// 调试模式：将响应数据写入本地文件
+		debugFile := fmt.Sprintf("debug_response_%d.json", time.Now().Unix())
+		if err := os.WriteFile(debugFile, responseBody, 0644); err == nil {
+			fmt.Printf("Debug response data written to: %s\n", debugFile)
+		}
 	}
 
 	// 重置响应体，以便后续解码
@@ -574,6 +579,17 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 	data, endpoint, err := prepareRequestData(messages, apiType, baseURL, modelID, temperature, maxTokens, stream, thinking)
 	if err != nil {
 		return Response{}, err
+	}
+
+	// 调试模式：将请求数据写入本地文件
+	if isDebug {
+		debugData, err := json.MarshalIndent(data, "", "  ")
+		if err == nil {
+			debugFile := fmt.Sprintf("debug_request_%d.json", time.Now().Unix())
+			if err := os.WriteFile(debugFile, debugData, 0644); err == nil {
+				fmt.Printf("Debug request data written to: %s\n", debugFile)
+			}
+		}
 	}
 
 	// 发送请求
