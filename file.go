@@ -19,6 +19,9 @@ func ReadFileLine(filename string, lineNum int) (string, error) {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	// 设置更大的缓冲区大小（10MB），以处理长行
+	buf := make([]byte, 10*1024*1024)
+	scanner.Buffer(buf, bufio.MaxScanTokenSize)
 	currentLine := 0
 	for scanner.Scan() {
 		currentLine++
@@ -72,6 +75,9 @@ func ReadAllLines(filename string) ([]string, error) {
 
 	var lines []string
 	scanner := bufio.NewScanner(file)
+	// 设置更大的缓冲区大小（10MB），以处理长行
+	buf := make([]byte, 10*1024*1024)
+	scanner.Buffer(buf, bufio.MaxScanTokenSize)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
