@@ -169,24 +169,7 @@ func getTools(apiType string) interface{} {
 					},
 				},
 			},
-			{
-				"type": "function",
-				"function": map[string]interface{}{
-					"name":        "download_novel",
-					"description": "Download a novel from a given URL.",
-					"parameters": map[string]interface{}{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"novel_url": map[string]interface{}{
-								"type":        "string",
-								"description": "The URL of the novel to download.",
-							},
-						},
-						"required":             []string{"novel_url"},
-						"additionalProperties": false,
-					},
-				},
-			},
+
 			{
 				"type": "function",
 				"function": map[string]interface{}{
@@ -367,21 +350,7 @@ func getTools(apiType string) interface{} {
 					"additionalProperties": false,
 				},
 			},
-			{
-				"name":        "download_novel",
-				"description": "Download a novel from a given URL.",
-				"input_schema": map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"novel_url": map[string]interface{}{
-							"type":        "string",
-							"description": "The URL of the novel to download.",
-						},
-					},
-					"required":             []string{"novel_url"},
-					"additionalProperties": false,
-				},
-			},
+
 			{
 				"name":        "todo",
 				"description": "Update task list. Track progress on multi-step tasks.",
