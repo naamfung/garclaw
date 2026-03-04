@@ -157,6 +157,15 @@ func main() {
 		}
 	}
 
+	// 读取思考模式设置
+	thinking := config.APIConfig.Thinking
+	// 环境变量覆盖
+	if thinkingStr := os.Getenv("THINKING"); thinkingStr != "" {
+		if thinkingVal, err := strconv.ParseBool(thinkingStr); err == nil {
+			thinking = thinkingVal
+		}
+	}
+
 	if err != nil {
 		fmt.Printf("Warning: Error loading config file: %v\n", err)
 		fmt.Println("Using environment variables for configuration")
@@ -198,7 +207,7 @@ func main() {
 			Content: query,
 		})
 
-		AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream)
+		AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		// 输出逻辑在CallModel函数中实时打印，这里不再重复打印
 		// 只打印一个空行作为分隔
 		fmt.Println()

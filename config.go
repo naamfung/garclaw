@@ -18,6 +18,7 @@ type Config struct {
 		Temperature float64 `json:"temperature"`
 		MaxTokens   int     `json:"max_tokens"`
 		Stream      bool    `json:"stream"`
+		Thinking    bool    `json:"thinking"`
 	} `json:"api_config"`
 }
 
@@ -117,19 +118,28 @@ func loadConfig() (Config, error) {
 			}
 
 			if maxTokens, ok := apiConfigMap["max_tokens"].(float64); ok {
-					config.APIConfig.MaxTokens = int(maxTokens)
-				} else if maxTokens, ok := apiConfigMap["MaxTokens"].(float64); ok {
-					config.APIConfig.MaxTokens = int(maxTokens)
-				}
+				config.APIConfig.MaxTokens = int(maxTokens)
+			} else if maxTokens, ok := apiConfigMap["MaxTokens"].(float64); ok {
+				config.APIConfig.MaxTokens = int(maxTokens)
+			}
 
-				// 设置默认值为 true
-				config.APIConfig.Stream = true
-				// 如果配置文件中有 stream 字段，则覆盖默认值
-				if stream, ok := apiConfigMap["stream"].(bool); ok {
-					config.APIConfig.Stream = stream
-				} else if stream, ok := apiConfigMap["Stream"].(bool); ok {
-					config.APIConfig.Stream = stream
-				}
+			// 设置默认值为 true
+			config.APIConfig.Stream = true
+			// 如果配置文件中有 stream 字段，则覆盖默认值
+			if stream, ok := apiConfigMap["stream"].(bool); ok {
+				config.APIConfig.Stream = stream
+			} else if stream, ok := apiConfigMap["Stream"].(bool); ok {
+				config.APIConfig.Stream = stream
+			}
+
+			// 设置默认值为 false
+			config.APIConfig.Thinking = false
+			// 如果配置文件中有 thinking 字段，则覆盖默认值
+			if thinking, ok := apiConfigMap["thinking"].(bool); ok {
+				config.APIConfig.Thinking = thinking
+			} else if thinking, ok := apiConfigMap["Thinking"].(bool); ok {
+				config.APIConfig.Thinking = thinking
+			}
 		}
 	}
 

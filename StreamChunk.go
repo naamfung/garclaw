@@ -48,7 +48,7 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 					continue
 				}
 
-				// 处理 OpenAI 格式
+				// 处理 OpenAI 格式（包括深度求索的 OpenAI 兼容 API）
 				if choices, ok := response["choices"].([]interface{}); ok && len(choices) > 0 {
 					choice := choices[0]
 					if choiceMap, ok := choice.(map[string]interface{}); ok {

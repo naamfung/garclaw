@@ -71,7 +71,7 @@ func convertToOpenAIFormat(messages []Message) []map[string]interface{} {
 }
 
 // 准备请求数据
-func prepareRequestData(messages []Message, apiType, baseURL, modelID string, temperature float64, maxTokens int, stream bool) (map[string]interface{}, string, error) {
+func prepareRequestData(messages []Message, apiType, baseURL, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) (map[string]interface{}, string, error) {
 	var data map[string]interface{}
 	var endpoint string
 
@@ -92,6 +92,12 @@ func prepareRequestData(messages []Message, apiType, baseURL, modelID string, te
 			"max_tokens":  maxTokens,
 			"temperature": temperature,
 			"stream":      stream,
+		}
+		// 添加thinking参数（Anthropic格式）
+		if thinking {
+			data["thinking"] = map[string]interface{}{
+				"type": "enabled",
+			}
 		}
 		endpoint = "/messages"
 
@@ -128,6 +134,14 @@ func prepareRequestData(messages []Message, apiType, baseURL, modelID string, te
 			"temperature": temperature,
 			"stream":      stream, // 启用流式
 			"system":      systemPrompt,
+		}
+		// 添加thinking参数（OpenAI格式，使用extra_body）
+		if thinking {
+			data["extra_body"] = map[string]interface{}{
+				"thinking": map[string]interface{}{
+					"type": "enabled",
+				},
+			}
 		}
 		endpoint = "/chat/completions"
 
@@ -522,7 +536,7 @@ func handleResponse(resp *http.Response, apiType string, stream bool) (Response,
 }
 
 // 调用LLM API
-func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool) (Response, error) {
+func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) (Response, error) {
 	// 确保有默认值
 	if apiType == "" {
 		apiType = DEFAULT_API_TYPE
@@ -532,7 +546,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 	}
 
 	// 准备请求数据
-	data, endpoint, err := prepareRequestData(messages, apiType, baseURL, modelID, temperature, maxTokens, stream)
+	data, endpoint, err := prepareRequestData(messages, apiType, baseURL, modelID, temperature, maxTokens, stream, thinking)
 	if err != nil {
 		return Response{}, err
 	}

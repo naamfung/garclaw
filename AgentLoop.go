@@ -10,10 +10,10 @@ import (
 )
 
 // 核心agent循环
-func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool) {
+func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) {
 	roundsSinceTodo := 0
 	for {
-		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream)
+		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		if err != nil {
 			fmt.Printf("Error calling model: %v\n", err)
 			return
