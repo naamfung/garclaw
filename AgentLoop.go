@@ -64,51 +64,55 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 		// 处理不同API的工具调用格式
 		if apiType == "openai" {
-			// DeepSeek与OpenAI的工具调用格式
-			// 尝试将 resp.Content 转换为 []map[string]interface{}
-			var toolCalls []map[string]interface{}
-
-			// 兼容两种可能的类型：[]interface{} 与 []map[string]interface{}
-			if contentArray, ok := resp.Content.([]interface{}); ok {
-				for _, item := range contentArray {
-					if toolUse, ok := item.(map[string]interface{}); ok {
-						toolCalls = append(toolCalls, toolUse)
-					} else {
-						// 即使item不是map，也要创建一个错误的toolUse
-						toolUse := map[string]interface{}{
-							"id":   "error_" + fmt.Sprintf("%d", len(toolCalls)),
-							"type": "function",
-							"function": map[string]interface{}{
-								"name":      "error",
-								"arguments": "{}",
-							},
-						}
-						toolCalls = append(toolCalls, toolUse)
+			// 确保 resp.Content 是切片
+			toolCallsSlice, ok := resp.Content.([]interface{})
+			if !ok {
+				// 尝试转换为 []map[string]interface{}
+				if mapSlice, ok := resp.Content.([]map[string]interface{}); ok {
+					toolCallsSlice = make([]interface{}, len(mapSlice))
+					for i, m := range mapSlice {
+						toolCallsSlice[i] = m
 					}
+				} else {
+					if isDebug {
+						fmt.Printf("Warning: resp.Content is not a slice of tool calls: %T\n", resp.Content)
+					}
+					// 跳过处理
+					continue
 				}
-			} else if contentMapSlice, ok := resp.Content.([]map[string]interface{}); ok {
-				toolCalls = contentMapSlice
-			} else {
-				if isDebug {
-					fmt.Printf("Warning: resp.Content is not a slice of maps: %T\n", resp.Content)
-				}
-				// 即使resp.Content不是预期类型，也要创建一个错误的toolUse
-				toolUse := map[string]interface{}{
-					"id":   "error_0",
-					"type": "function",
-					"function": map[string]interface{}{
-						"name":      "error",
-						"arguments": "{}",
-					},
-				}
-				toolCalls = append(toolCalls, toolUse)
 			}
 
-			for _, toolUse := range toolCalls {
+			for _, item := range toolCallsSlice {
+				toolUse, ok := item.(map[string]interface{})
+				if !ok {
+					if isDebug {
+						fmt.Printf("Warning: invalid tool call item: %v\n", item)
+					}
+					continue // 跳过，不添加结果
+				}
+
+				// 提取 toolID，确保为字符串
+				toolID, ok := toolUse["id"].(string)
+				if !ok {
+					if idVal, exists := toolUse["id"]; exists {
+						toolID = fmt.Sprint(idVal)
+					} else {
+						if isDebug {
+							fmt.Printf("Warning: tool call missing id: %v\n", toolUse)
+						}
+						continue
+					}
+				}
+				if toolID == "" {
+					if isDebug {
+						fmt.Printf("Warning: tool call has empty id: %v\n", toolUse)
+					}
+					continue
+				}
+
 				// 标准OpenAI格式：type="function", id, function
 				if toolUse["type"] != "function" {
 					// 即使类型不正确，也要添加一个错误结果
-					toolID, _ := toolUse["id"].(string)
 					results = append(results, ToolResult{
 						Type:      "tool_result",
 						ToolUseID: toolID,
@@ -116,7 +120,6 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					})
 					continue
 				}
-				toolID, _ := toolUse["id"].(string)
 				function, ok := toolUse["function"].(map[string]interface{})
 				if !ok {
 					// 即使function字段不存在，也要添加一个错误结果
@@ -133,7 +136,9 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				// 解析arguments JSON
 				var argsMap map[string]interface{}
 				if err := json.Unmarshal([]byte(argsStr), &argsMap); err != nil {
-					fmt.Printf("Failed to parse arguments: %v\n", err)
+					if isDebug {
+						fmt.Printf("Failed to parse arguments: %v\n", err)
+					}
 					// 即使解析失败，也要添加一个错误结果
 					results = append(results, ToolResult{
 						Type:      "tool_result",
