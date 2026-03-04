@@ -13,7 +13,7 @@ import (
 
 // 全局 HTTP 客户端
 var httpClient = &http.Client{
-	Timeout: 30 * time.Second,
+	Timeout: 10 * time.Minute, // 如DesspSeek的默认超时时间就是10分钟
 }
 
 // 生成系统提示
