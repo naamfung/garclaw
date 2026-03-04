@@ -61,6 +61,10 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 							if content, ok := delta["content"].(string); ok {
 								chunk.Content = content
 							}
+							// 思考内容
+							if reasoningContent, ok := delta["reasoning_content"].(string); ok {
+								chunk.ReasoningContent = reasoningContent
+							}
 							// 工具调用
 							if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
 								var tcs []map[string]interface{}
