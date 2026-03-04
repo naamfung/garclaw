@@ -131,7 +131,7 @@ func handleWindowsTouch(command string) CmdResult {
 // truncateOutput 截断过长的输出（仅当isDebug为true时截断，否则保留完整）
 func truncateOutput(output string) string {
 	if len(output) > 50000 && isDebug { // 仅在调试模式下截断　防止过多信息干扰排查其他问题　此处可手工修改切换
-		return output[:50000] + "... (truncated)"
+		return TruncateString(output, 50000)
 	}
 	return output // 非调试模式下，返回完整输出 以便模型获得完整信息
 }
@@ -192,13 +192,13 @@ func translateUnixToWindows(command string) string {
 		// cat 命令转换为 type
 		return "type " + strings.Join(args, " ")
 	case "echo":
-			// echo 命令在Windows中也可用
-			return command
-		case "date":
-			// date 命令转换为 date /t
-			return "date /t"
-		default:
-			// 其他命令保持不变
-			return command
+		// echo 命令在Windows中也可用
+		return command
+	case "date":
+		// date 命令转换为 date /t
+		return "date /t"
+	default:
+		// 其他命令保持不变
+		return command
 	}
 }

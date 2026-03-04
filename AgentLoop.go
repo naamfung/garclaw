@@ -38,8 +38,8 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 		} else {
 			// 对于普通回复，使用Content字段
 			messages = append(messages, Message{
-				Role:            "assistant",
-				Content:         resp.Content,
+				Role:             "assistant",
+				Content:          resp.Content,
 				ReasoningContent: resp.ReasoningContent,
 			})
 		}
@@ -130,7 +130,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 					// 打印命令输出（截断）
 					if len(output) > 512 && isDebug {
-						fmt.Println(output[:512] + "...")
+						fmt.Println(TruncateString(output, 512))
 					} else {
 						fmt.Println(output)
 					}
@@ -446,7 +446,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								// 打印输出（截断）
 								if len(output) > 200 {
-									fmt.Println(output[:200] + "...")
+									fmt.Println(TruncateString(output, 200))
 								} else {
 									fmt.Println(output)
 								}
@@ -508,7 +508,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 								// 打印输出（截断）
 								if len(output) > 200 {
-									fmt.Println(output[:200] + "...")
+									fmt.Println(TruncateString(output, 200))
 								} else {
 									fmt.Println(output)
 								}
