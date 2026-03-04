@@ -186,6 +186,18 @@ func sendRequest(data map[string]interface{}, endpoint, apiKey, apiType string) 
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
+	// 检查响应状态码
+	if resp.StatusCode != http.StatusOK {
+		// 读取错误响应体
+		errorBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close() // 关闭响应体
+		if isDebug {
+			fmt.Printf("Error response status: %d\n", resp.StatusCode)
+			fmt.Printf("Error response body: %s\n", string(errorBody))
+		}
+		return nil, fmt.Errorf("API returned error status: %d, body: %s", resp.StatusCode, string(errorBody))
+	}
+
 	return resp, nil
 }
 
