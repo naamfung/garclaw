@@ -122,6 +122,9 @@ func loadConfig() (Config, error) {
 					config.APIConfig.MaxTokens = int(maxTokens)
 				}
 
+				// 设置默认值为 true
+				config.APIConfig.Stream = true
+				// 如果配置文件中有 stream 字段，则覆盖默认值
 				if stream, ok := apiConfigMap["stream"].(bool); ok {
 					config.APIConfig.Stream = stream
 				} else if stream, ok := apiConfigMap["Stream"].(bool); ok {

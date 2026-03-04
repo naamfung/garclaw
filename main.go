@@ -1405,7 +1405,10 @@ func main() {
 		fmt.Printf("Warning: Error loading config file: %v\n", err)
 		fmt.Println("Using environment variables for configuration")
 	} else {
-		fmt.Printf("Configuration loaded from config.toon (API type: %s)\n", apiType)
+		fmt.Println("Configuration loaded from config.toon")
+		if isDebug {
+			fmt.Printf("API type: %s\n", apiType)
+		}
 	}
 
 	// 打印最终使用的配置
