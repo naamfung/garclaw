@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	isAlpine  = false
-	isWindows = false
+	isAlpine    = false
+	isWindows   = false
+	browserPath = ""
 )
 
 func init() {
@@ -91,6 +92,7 @@ func init() {
 				fullPath := drive + ":/" + basePath
 				if _, err := os.Stat(fullPath); err == nil {
 					hasBrowser = true
+					browserPath = fullPath
 					break
 				}
 			}
@@ -112,14 +114,8 @@ func init() {
 	}
 }
 
-// 搜索结果结构
-type SearchResult struct {
-	Title string `json:"title"`
-	Link  string `json:"link"`
-}
-
-// 搜索功能
-func Search(keyword string) ([]SearchResult, error) {
+// 启动浏览器并创建页面
+func launchBrowser() (*playwright.Playwright, playwright.Browser, playwright.Page, error) {
 	// 启动 Playwright
 	pw, err := playwright.Run(&playwright.RunOptions{
 		SkipInstallBrowsers: true,
@@ -127,16 +123,12 @@ func Search(keyword string) ([]SearchResult, error) {
 	})
 	if err != nil {
 		log.Printf("启动 Playwright 失败: %v", err)
-		return nil, err
+		return nil, nil, nil, err
 	}
-	defer pw.Stop()
 
 	var browser playwright.Browser
 
-	// --- 关键点2: 启动时指定使用本地 Chromium ---
-	// 方案 A: 使用 "Channel" 指向系统安装的 Chromium (更优雅)
-	// 这里的 "chrome" 是一个约定，让 Playwright 去系统的 PATH 环境变量里找 Chrome/Chromium。
-	// 它通常会找到 /usr/bin/chromium-browser。
+	// 使用 "Channel" 指向系统安装的 Chromium
 	launchOptions := playwright.BrowserTypeLaunchOptions{
 		Channel:  playwright.String("chrome"), // 告诉 Playwright 启动系统 Chrome/Chromium
 		Headless: playwright.Bool(true),
@@ -146,16 +138,57 @@ func Search(keyword string) ([]SearchResult, error) {
 	// 启动浏览器
 	browser, err = pw.Chromium.Launch(launchOptions)
 	if err != nil {
-		log.Printf("启动浏览器失败: %v", err)
-		return nil, err
+		if isDebug {
+			log.Printf("使用 Channel 方式启动浏览器失败: %v", err)
+		}
+		// 如果有浏览器路径，尝试使用指定路径的方式启动
+		if browserPath != "" {
+			if isDebug {
+				log.Printf("尝试使用指定路径启动浏览器: %s", browserPath)
+			}
+			launchOptionsWithPath := playwright.BrowserTypeLaunchOptions{
+				ExecutablePath: playwright.String(browserPath),
+				Headless:       playwright.Bool(true),
+				Args:           []string{"--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"},
+			}
+			browser, err = pw.Chromium.Launch(launchOptionsWithPath)
+			if err != nil {
+				log.Printf("使用指定路径启动浏览器失败: %v", err)
+				pw.Stop()
+				return nil, nil, nil, err
+			}
+		} else {
+			pw.Stop()
+			return nil, nil, nil, err
+		}
 	}
-	defer browser.Close()
 
 	page, err := browser.NewPage()
 	if err != nil {
 		log.Printf("创建页面失败: %v", err)
+		browser.Close()
+		pw.Stop()
+		return nil, nil, nil, err
+	}
+
+	return pw, browser, page, nil
+}
+
+// 搜索结果结构
+type SearchResult struct {
+	Title string `json:"title"`
+	Link  string `json:"link"`
+}
+
+// 搜索功能
+func Search(keyword string) ([]SearchResult, error) {
+	// 启动浏览器并创建页面
+	pw, browser, page, err := launchBrowser()
+	if err != nil {
 		return nil, err
 	}
+	defer pw.Stop()
+	defer browser.Close()
 	defer page.Close()
 
 	// 移除超时设置，使用 Playwright 自带的等待机制
@@ -167,39 +200,13 @@ func Search(keyword string) ([]SearchResult, error) {
 
 // 访问功能
 func Visit(url string) (string, error) {
-	// 启动 Playwright
-	pw, err := playwright.Run(&playwright.RunOptions{
-		SkipInstallBrowsers: true,
-		Verbose:             false,
-	})
+	// 启动浏览器并创建页面
+	pw, browser, page, err := launchBrowser()
 	if err != nil {
-		log.Printf("启动 Playwright 失败: %v", err)
 		return "", err
 	}
 	defer pw.Stop()
-
-	var browser playwright.Browser
-
-	// 使用 "Channel" 指向系统安装的 Chromium
-	launchOptions := playwright.BrowserTypeLaunchOptions{
-		Channel:  playwright.String("chrome"), // 告诉 Playwright 启动系统 Chrome/Chromium
-		Headless: playwright.Bool(true),
-		Args:     []string{"--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"},
-	}
-
-	// 启动浏览器
-	browser, err = pw.Chromium.Launch(launchOptions)
-	if err != nil {
-		log.Printf("启动浏览器失败: %v", err)
-		return "", err
-	}
 	defer browser.Close()
-
-	page, err := browser.NewPage()
-	if err != nil {
-		log.Printf("创建页面失败: %v", err)
-		return "", err
-	}
 	defer page.Close()
 
 	// 移除超时设置，使用 Playwright 自带的等待机制
@@ -210,39 +217,13 @@ func Visit(url string) (string, error) {
 
 // 通用下载功能
 func Download(url string) (string, error) {
-	// 启动 Playwright
-	pw, err := playwright.Run(&playwright.RunOptions{
-		SkipInstallBrowsers: true,
-		Verbose:             false,
-	})
+	// 启动浏览器并创建页面
+	pw, browser, page, err := launchBrowser()
 	if err != nil {
-		log.Printf("启动 Playwright 失败: %v", err)
 		return "", err
 	}
 	defer pw.Stop()
-
-	var browser playwright.Browser
-
-	// 使用 "Channel" 指向系统安装的 Chromium
-	launchOptions := playwright.BrowserTypeLaunchOptions{
-		Channel:  playwright.String("chrome"), // 告诉 Playwright 启动系统 Chrome/Chromium
-		Headless: playwright.Bool(true),
-		Args:     []string{"--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"},
-	}
-
-	// 启动浏览器
-	browser, err = pw.Chromium.Launch(launchOptions)
-	if err != nil {
-		log.Printf("启动浏览器失败: %v", err)
-		return "", err
-	}
 	defer browser.Close()
-
-	page, err := browser.NewPage()
-	if err != nil {
-		log.Printf("创建页面失败: %v", err)
-		return "", err
-	}
 	defer page.Close()
 
 	// 移除超时设置，使用 Playwright 自带的等待机制
