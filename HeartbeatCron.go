@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/robfig/cron/v3"
 )
 
@@ -26,6 +27,7 @@ type HeartbeatRunner struct {
 	outputQueue   []string
 	queueLock     sync.Mutex
 	lastOutput    string
+	watcher       *fsnotify.Watcher // 文件系统监控器
 }
 
 // 定时任务
@@ -33,7 +35,7 @@ type CronJob struct {
 	ID                string                 `json:"id"`
 	Name              string                 `json:"name"`
 	Enabled           bool                   `json:"enabled"`
-	ScheduleKind      string                 `json:"schedule_kind"`      // "at" | "every" | "cron"
+	ScheduleKind      string                 `json:"schedule_kind"` // "at" | "every" | "cron"
 	ScheduleConfig    map[string]interface{} `json:"schedule_config"`
 	Payload           map[string]interface{} `json:"payload"`
 	DeleteAfterRun    bool                   `json:"delete_after_run"`
@@ -50,6 +52,7 @@ type CronService struct {
 	queueLock   sync.Mutex
 	runLog      string
 	cron        *cron.Cron
+	watcher     *fsnotify.Watcher // 文件系统监控器
 }
 
 // 工作区目录
@@ -58,18 +61,33 @@ var workspaceDir = "workspace"
 // 初始化心跳运行器
 func NewHeartbeatRunner(laneLock *sync.Mutex) *HeartbeatRunner {
 	heartbeatPath := filepath.Join(workspaceDir, "HEARTBEAT.md")
+
+	// 初始化fsnotify
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		fmt.Printf("Error creating watcher: %v\n", err)
+	}
+
+	// 监控工作目录
+	if watcher != nil {
+		if err := watcher.Add(workspaceDir); err != nil {
+			fmt.Printf("Error watching workspace directory: %v\n", err)
+		}
+	}
+
 	return &HeartbeatRunner{
 		workspace:     workspaceDir,
 		heartbeatPath: heartbeatPath,
 		laneLock:      laneLock,
 		interval:      30 * time.Minute, // 默认30分钟
-		activeHours:   [2]int{9, 22},     // 默认9:00-22:00
+		activeHours:   [2]int{9, 22},    // 默认9:00-22:00
 		maxQueueSize:  10,
 		lastRunAt:     time.Time{},
 		running:       false,
 		stopped:       false,
 		thread:        make(chan struct{}),
 		outputQueue:   make([]string, 0),
+		watcher:       watcher,
 	}
 }
 
@@ -208,6 +226,9 @@ func (h *HeartbeatRunner) Start() {
 func (h *HeartbeatRunner) Stop() {
 	h.stopped = true
 	close(h.thread)
+	if h.watcher != nil {
+		h.watcher.Close()
+	}
 }
 
 // 清空输出队列
@@ -273,15 +294,15 @@ func (h *HeartbeatRunner) Status() map[string]interface{} {
 	h.queueLock.Unlock()
 
 	return map[string]interface{}{
-		"enabled":       h.heartbeatPath != "",
-		"running":       h.running,
-		"should_run":    ok,
-		"reason":        reason,
-		"last_run":      h.lastRunAt.Format(time.RFC3339),
-		"next_in":       nextIn.String(),
-		"interval":      h.interval.String(),
-		"active_hours":  fmt.Sprintf("%d:00-%d:00", h.activeHours[0], h.activeHours[1]),
-		"queue_size":    qsize,
+		"enabled":      h.heartbeatPath != "",
+		"running":      h.running,
+		"should_run":   ok,
+		"reason":       reason,
+		"last_run":     h.lastRunAt.Format(time.RFC3339),
+		"next_in":      nextIn.String(),
+		"interval":     h.interval.String(),
+		"active_hours": fmt.Sprintf("%d:00-%d:00", h.activeHours[0], h.activeHours[1]),
+		"queue_size":   qsize,
 	}
 }
 
@@ -298,17 +319,35 @@ func NewCronService() *CronService {
 	// 创建cron实例
 	c := cron.New()
 
+	// 初始化fsnotify
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		fmt.Printf("Error creating watcher: %v\n", err)
+	}
+
+	// 监控工作目录
+	if watcher != nil {
+		if err := watcher.Add(workspaceDir); err != nil {
+			fmt.Printf("Error watching workspace directory: %v\n", err)
+		}
+	}
+
 	cs := &CronService{
 		cronFile:    cronFile,
 		jobs:        make([]CronJob, 0),
 		outputQueue: make([]string, 0),
 		runLog:      runLog,
 		cron:        c,
+		watcher:     watcher,
 	}
 
 	cs.loadJobs()
 	// 启动cron
 	cs.cron.Start()
+
+	// 启动文件监控协程
+	go cs.startWatcher()
+
 	return cs
 }
 
@@ -461,9 +500,9 @@ func (cs *CronService) runJob(job *CronJob) {
 
 		// 记录运行日志
 		entry := map[string]interface{}{
-			"job_id":        job.ID,
-			"run_at":        now.Format(time.RFC3339),
-			"status":        status,
+			"job_id":         job.ID,
+			"run_at":         now.Format(time.RFC3339),
+			"status":         status,
 			"output_preview": output[:min(200, len(output))],
 		}
 		if errMsg != "" {
@@ -550,13 +589,13 @@ func (cs *CronService) ListJobs() []map[string]interface{} {
 		}
 
 		jobInfo := map[string]interface{}{
-			"id":         j.ID,
-			"name":       j.Name,
-			"enabled":    j.Enabled,
-			"kind":       j.ScheduleKind,
-			"errors":     j.ConsecutiveErrors,
-			"last_run":   j.LastRunAt.Format(time.RFC3339),
-			"next_run":   j.NextRunAt.Format(time.RFC3339),
+			"id":       j.ID,
+			"name":     j.Name,
+			"enabled":  j.Enabled,
+			"kind":     j.ScheduleKind,
+			"errors":   j.ConsecutiveErrors,
+			"last_run": j.LastRunAt.Format(time.RFC3339),
+			"next_run": j.NextRunAt.Format(time.RFC3339),
 		}
 
 		if nextIn != nil {
@@ -569,9 +608,59 @@ func (cs *CronService) ListJobs() []map[string]interface{} {
 	return result
 }
 
+// 启动文件监控协程
+func (cs *CronService) startWatcher() {
+	if cs.watcher == nil {
+		return
+	}
+
+	for {
+		select {
+		case event, ok := <-cs.watcher.Events:
+			if !ok {
+				return
+			}
+
+			// 只关心写入和创建事件
+			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
+				// 检查是否是CRON.json文件
+				if filepath.Base(event.Name) == "CRON.json" {
+					fmt.Println("[cron] CRON.json changed, reloading jobs...")
+					cs.reloadJobs()
+					fmt.Println("[cron] Jobs reloaded successfully")
+				}
+			}
+
+		case err, ok := <-cs.watcher.Errors:
+			if !ok {
+				return
+			}
+			fmt.Printf("[cron] Watcher error: %v\n", err)
+		}
+	}
+}
+
+// 重新加载定时任务
+func (cs *CronService) reloadJobs() {
+	// 停止当前的cron服务
+	cs.cron.Stop()
+
+	// 创建新的cron实例
+	cs.cron = cron.New()
+
+	// 重新加载任务
+	cs.loadJobs()
+
+	// 启动新的cron服务
+	cs.cron.Start()
+}
+
 // 停止定时任务服务
 func (cs *CronService) Stop() {
 	cs.cron.Stop()
+	if cs.watcher != nil {
+		cs.watcher.Close()
+	}
 }
 
 // 辅助函数：获取最小值
