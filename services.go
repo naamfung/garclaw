@@ -67,20 +67,34 @@ func init() {
 
 	// 如果在视窗系统上，直接检查常见的浏览器安装路径
 	if isWindows && !hasBrowser {
-		commonBrowserPaths := []string{
-			"C:/Program Files/Google/Chrome/Application/chrome.exe",
-			"C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-			"C:/Users/" + os.Getenv("USERNAME") + "/AppData/Local/Google/Chrome/Application/chrome.exe",
-			"C:/Users/" + os.Getenv("USERNAME") + "/AppData/Local/Chromium/Application/chrome.exe",
-			"C:/Program Files/Microsoft/Edge/Application/msedge.exe",
-			"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-			"C:/Program Files/Mozilla Firefox/firefox.exe",
-			"C:/Program Files (x86)/Mozilla Firefox/firefox.exe",
+		// 生成所有可能的磁盘盘符（A-Z）
+		driveLetters := make([]string, 0, 26)
+		for i := 'A'; i <= 'Z'; i++ {
+			driveLetters = append(driveLetters, string(i))
 		}
 
-		for _, path := range commonBrowserPaths {
-			if _, err := os.Stat(path); err == nil {
-				hasBrowser = true
+		// 定义基础路径模板
+		basePaths := []string{
+			"Program Files/Google/Chrome/Application/chrome.exe",
+			"Program Files (x86)/Google/Chrome/Application/chrome.exe",
+			"Users/" + os.Getenv("USERNAME") + "/AppData/Local/Google/Chrome/Application/chrome.exe",
+			"Users/" + os.Getenv("USERNAME") + "/AppData/Local/Chromium/Application/chrome.exe",
+			"Program Files/Microsoft/Edge/Application/msedge.exe",
+			"Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+			"Program Files/Mozilla Firefox/firefox.exe",
+			"Program Files (x86)/Mozilla Firefox/firefox.exe",
+		}
+
+		// 检查所有磁盘盘符的所有基础路径
+		for _, drive := range driveLetters {
+			for _, basePath := range basePaths {
+				fullPath := drive + ":/" + basePath
+				if _, err := os.Stat(fullPath); err == nil {
+					hasBrowser = true
+					break
+				}
+			}
+			if hasBrowser {
 				break
 			}
 		}
