@@ -23,7 +23,7 @@ func generateSystemPrompt(apiType string) string {
 	if apiType == "openai" {
 		toolOrFunction = "function"
 	}
-	return fmt.Sprintf("当前系统时间：%s\n", currentTime) + strings.ReplaceAll(SYSTEM_PROMPT_TEMPLATE, "{{tool_or_function}}", toolOrFunction)
+	return fmt.Sprintf("当前系统时间：%s\n", currentTime) + strings.ReplaceAll(SYSTEM_PROMPT, "{{tool_or_function}}", toolOrFunction)
 }
 
 // 转换为Ollama格式
