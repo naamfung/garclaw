@@ -10,6 +10,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/robfig/cron/v3"
+	"github.com/toon-format/toon-go"
 )
 
 // 心跳运行器
@@ -53,6 +54,8 @@ type CronService struct {
 	runLog      string
 	cron        *cron.Cron
 	watcher     *fsnotify.Watcher // 文件系统监控器
+	lastEvent   time.Time         // 上次事件时间，用于防抖
+	eventMutex  sync.Mutex        // 事件锁，用于防抖
 }
 
 // 工作区目录
@@ -308,7 +311,7 @@ func (h *HeartbeatRunner) Status() map[string]interface{} {
 
 // 初始化定时任务服务
 func NewCronService() *CronService {
-	cronFile := filepath.Join(workspaceDir, "CRON.json")
+	cronFile := filepath.Join(workspaceDir, "CRON.toon")
 	runLog := filepath.Join(workspaceDir, "cron", "cron-runs.jsonl")
 
 	// 创建cron目录
@@ -351,59 +354,55 @@ func NewCronService() *CronService {
 	return cs
 }
 
+// 定义TOON配置结构体
+type CronConfig struct {
+	Jobs []struct {
+		ID      string `toon:"id"`
+		Name    string `toon:"name"`
+		Enabled bool   `toon:"enabled"`
+		Expr    string `toon:"expr"`
+	} `toon:"jobs"`
+}
+
 // 加载定时任务
 func (cs *CronService) loadJobs() {
 	cs.jobs = make([]CronJob, 0)
 
 	if _, err := os.Stat(cs.cronFile); os.IsNotExist(err) {
+		fmt.Printf("CRON.toon not found: %v\n", err)
 		return
 	}
 
 	content, err := os.ReadFile(cs.cronFile)
 	if err != nil {
-		fmt.Printf("Error reading CRON.json: %v\n", err)
+		fmt.Printf("Error reading CRON.toon: %v\n", err)
 		return
 	}
 
-	var data map[string]interface{}
-	if err := json.Unmarshal(content, &data); err != nil {
-		fmt.Printf("Error parsing CRON.json: %v\n", err)
+	// 解析TOON格式到结构体
+	var config CronConfig
+	err = toon.Unmarshal(content, &config)
+	if err != nil {
+		fmt.Printf("Error parsing CRON.toon: %v\n", err)
 		return
 	}
 
-	jobsData, ok := data["jobs"].([]interface{})
-	if !ok {
-		return
-	}
+	fmt.Printf("Found %d jobs in CRON.toon\n", len(config.Jobs))
 
 	now := time.Now()
-	for _, jd := range jobsData {
-		jobMap, ok := jd.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		sched, ok := jobMap["schedule"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		kind, ok := sched["kind"].(string)
-		if !ok || (kind != "at" && kind != "every" && kind != "cron") {
-			continue
+	for i, jobData := range config.Jobs {
+		sched := map[string]interface{}{
+			"kind": "cron",
+			"expr": jobData.Expr,
 		}
 
 		job := CronJob{
-			ID:             jobMap["id"].(string),
-			Name:           jobMap["name"].(string),
-			Enabled:        jobMap["enabled"].(bool),
-			ScheduleKind:   kind,
+			ID:             jobData.ID,
+			Name:           jobData.Name,
+			Enabled:        jobData.Enabled,
+			ScheduleKind:   "cron",
 			ScheduleConfig: sched,
-			Payload:        jobMap["payload"].(map[string]interface{}),
-		}
-
-		if deleteAfterRun, ok := jobMap["delete_after_run"].(bool); ok {
-			job.DeleteAfterRun = deleteAfterRun
+			Payload:        make(map[string]interface{}),
 		}
 
 		job.NextRunAt = cs.computeNext(&job, now)
@@ -413,7 +412,11 @@ func (cs *CronService) loadJobs() {
 		if job.Enabled && !job.NextRunAt.IsZero() && job.ScheduleKind == "cron" {
 			cs.scheduleJob(&job)
 		}
+
+		fmt.Printf("Loaded job %d: %s - %s\n", i, jobData.ID, jobData.Name)
 	}
+
+	fmt.Printf("Loaded %d jobs successfully\n", len(cs.jobs))
 }
 
 // 计算下次运行时间
@@ -623,11 +626,27 @@ func (cs *CronService) startWatcher() {
 
 			// 只关心写入和创建事件
 			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
-				// 检查是否是CRON.json文件
-				if filepath.Base(event.Name) == "CRON.json" {
-					fmt.Println("[cron] CRON.json changed, reloading jobs...")
+				// 检查是否是CRON.toon文件
+				if filepath.Base(event.Name) == "CRON.toon" {
+					// 防抖处理：忽略100ms内的重复事件
+					cs.eventMutex.Lock()
+					now := time.Now()
+					if now.Sub(cs.lastEvent) < 100*time.Millisecond {
+						cs.eventMutex.Unlock()
+						continue
+					}
+					cs.lastEvent = now
+					cs.eventMutex.Unlock()
+
+					cs.queueLock.Lock()
+					cs.outputQueue = append(cs.outputQueue, "CRON.toon changed, reloading jobs...")
+					cs.queueLock.Unlock()
+
 					cs.reloadJobs()
-					fmt.Println("[cron] Jobs reloaded successfully")
+
+					cs.queueLock.Lock()
+					cs.outputQueue = append(cs.outputQueue, "Jobs reloaded successfully")
+					cs.queueLock.Unlock()
 				}
 			}
 
@@ -635,7 +654,9 @@ func (cs *CronService) startWatcher() {
 			if !ok {
 				return
 			}
-			fmt.Printf("[cron] Watcher error: %v\n", err)
+			cs.queueLock.Lock()
+			cs.outputQueue = append(cs.outputQueue, fmt.Sprintf("Watcher error: %v", err))
+			cs.queueLock.Unlock()
 		}
 	}
 }
