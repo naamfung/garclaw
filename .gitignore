@@ -21,6 +21,7 @@ vendor/
 
 # IDE and editor directories and files
 .vscode/
+.trae/
 .idea/
 *.swp
 *.swo
