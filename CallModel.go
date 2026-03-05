@@ -16,6 +16,145 @@ var httpClient = &http.Client{
 	Timeout: 10 * time.Minute, // 如DesspSeek的默认超时时间就是10分钟
 }
 
+// StreamReplacer 用于流式文本替换（最长匹配）
+type StreamReplacer struct {
+	buffer             []rune
+	maxKeyLen          int
+	sortedReplacements []StringReplacement
+	out                func(r rune)
+}
+
+// NewStreamReplacer 创建流式替换器
+func NewStreamReplacer(out func(r rune)) *StreamReplacer {
+	sr := &StreamReplacer{
+		buffer:             make([]rune, 0),
+		sortedReplacements: sortedStringsReplacements.Replacements,
+		out:                out,
+	}
+	// 计算最长键的字符数
+	for _, rep := range sr.sortedReplacements {
+		if len([]rune(rep.Key)) > sr.maxKeyLen {
+			sr.maxKeyLen = len([]rune(rep.Key))
+		}
+	}
+	return sr
+}
+
+// Write 处理新文本
+func (sr *StreamReplacer) Write(text string) {
+	runes := []rune(text)
+	for _, r := range runes {
+		sr.buffer = append(sr.buffer, r)
+		sr.flushSafe()
+	}
+}
+
+// Flush 输出缓冲区剩余内容
+func (sr *StreamReplacer) Flush() {
+	for _, r := range sr.buffer {
+		sr.out(r)
+	}
+	sr.buffer = sr.buffer[:0]
+}
+
+// flushSafe 处理缓冲区，输出安全字符
+func (sr *StreamReplacer) flushSafe() {
+	for {
+		if len(sr.buffer) == 0 {
+			break
+		}
+		// 尝试从起始位置匹配最长键
+		matched := false
+		for _, rep := range sr.sortedReplacements {
+			keyRunes := []rune(rep.Key)
+			if len(keyRunes) <= len(sr.buffer) {
+				eq := true
+				for i := 0; i < len(keyRunes); i++ {
+					if sr.buffer[i] != keyRunes[i] {
+						eq = false
+						break
+					}
+				}
+				if eq {
+					// 输出替换值
+					for _, r := range []rune(rep.Value) {
+						sr.out(r)
+					}
+					// 移除匹配部分
+					sr.buffer = sr.buffer[len(keyRunes):]
+					matched = true
+					break
+				}
+			}
+		}
+		if matched {
+			continue
+		}
+
+		// 检查起始位置是否是某个键的前缀
+		isPrefix := false
+		for _, rep := range sr.sortedReplacements {
+			keyRunes := []rune(rep.Key)
+			if len(keyRunes) > 0 && len(sr.buffer) < len(keyRunes) {
+				eq := true
+				for i := 0; i < len(sr.buffer); i++ {
+					if sr.buffer[i] != keyRunes[i] {
+						eq = false
+						break
+					}
+				}
+				if eq {
+					isPrefix = true
+					break
+				}
+			}
+		}
+		if isPrefix {
+			// 是某个键的前缀，等待更多字符
+			break
+		}
+
+		// 不是前缀，输出第一个字符
+		sr.out(sr.buffer[0])
+		sr.buffer = sr.buffer[1:]
+		// 继续循环
+	}
+}
+
+// applyReplacements 对字符串应用替换（最长匹配，非递归）
+func applyReplacements(text string) string {
+	runes := []rune(text)
+	result := make([]rune, 0, len(runes))
+	i := 0
+	for i < len(runes) {
+		matched := false
+		for _, rep := range sortedStringsReplacements.Replacements {
+			keyRunes := []rune(rep.Key)
+			if i+len(keyRunes) <= len(runes) {
+				eq := true
+				for j := 0; j < len(keyRunes); j++ {
+					if runes[i+j] != keyRunes[j] {
+						eq = false
+						break
+					}
+				}
+				if eq {
+					// 替换
+					result = append(result, []rune(rep.Value)...)
+					i += len(keyRunes)
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			result = append(result, runes[i])
+			i++
+		}
+	}
+	return string(result)
+}
+
 // 生成系统提示
 func generateSystemPrompt(apiType string) string {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
@@ -218,25 +357,33 @@ func handleStreamResponse(chunkChan <-chan StreamChunk) (Response, error) {
 	}
 	pendingTools := make(map[int]*pendingToolCall)
 
+	// 创建内容替换器
+	contentReplacer := NewStreamReplacer(func(r rune) {
+		fmt.Print(string(r))
+		os.Stdout.Sync()
+		fullContent.WriteRune(r)
+	})
+
+	// 创建思考内容替换器
+	reasoningReplacer := NewStreamReplacer(func(r rune) {
+		fmt.Print(string(r))
+		os.Stdout.Sync()
+		fullReasoningContent.WriteRune(r)
+	})
+
 	for chunk := range chunkChan {
 		if chunk.Error != nil {
 			return Response{}, chunk.Error
 		}
 
-		// 实时打印文本内容
+		// 处理文本内容
 		if chunk.Content != "" {
-			fmt.Print(chunk.Content)
-			stdout := os.Stdout
-			stdout.Sync()
-			fullContent.WriteString(chunk.Content)
+			contentReplacer.Write(chunk.Content)
 		}
 
-		// 实时打印思考内容
+		// 处理思考内容
 		if chunk.ReasoningContent != "" {
-			fmt.Print(chunk.ReasoningContent)
-			stdout := os.Stdout
-			stdout.Sync()
-			fullReasoningContent.WriteString(chunk.ReasoningContent)
+			reasoningReplacer.Write(chunk.ReasoningContent)
 		}
 
 		// 处理工具调用块
@@ -286,6 +433,9 @@ func handleStreamResponse(chunkChan <-chan StreamChunk) (Response, error) {
 			if chunk.FinishReason != "" {
 				finishReason = chunk.FinishReason
 			}
+			// 刷新替换器，输出缓冲区剩余内容
+			contentReplacer.Flush()
+			reasoningReplacer.Flush()
 			fmt.Println() // 换行
 			stdout := os.Stdout
 			stdout.Sync()
@@ -411,10 +561,18 @@ func handleOpenAIResponse(resp *http.Response) (Response, error) {
 				// 强制设置stop_reason为function_call
 				result.StopReason = "function_call"
 			} else {
-				// 纯文本回复，直接作为结果内容（不需要额外打印，因为上面已经打印了）
-				result.Content = choice.Message.Content
-				// 保存思考内容
-				result.ReasoningContent = choice.Message.ReasoningContent
+				// 纯文本回复，应用替换
+				if contentStr, ok := choice.Message.Content.(string); ok {
+					result.Content = applyReplacements(contentStr)
+				} else {
+					result.Content = choice.Message.Content
+				}
+				// 保存思考内容并应用替换
+				if reasoningStr, ok := choice.Message.ReasoningContent.(string); ok {
+					result.ReasoningContent = applyReplacements(reasoningStr)
+				} else {
+					result.ReasoningContent = choice.Message.ReasoningContent
+				}
 			}
 		}
 	}
@@ -444,6 +602,9 @@ func handleOllamaResponse(resp *http.Response) (Response, error) {
 	}
 
 	result.Content = ollamaResp.Message.Content
+	if contentStr, ok := result.Content.(string); ok {
+		result.Content = applyReplacements(contentStr)
+	}
 	if ollamaResp.Done {
 		result.StopReason = "stop"
 	} else {
@@ -513,13 +674,18 @@ func handleAnthropicResponse(resp *http.Response) (Response, error) {
 	}
 
 	if hasToolUse {
-		content = toolCalls
+		result.Content = toolCalls
 		result.StopReason = "function_call"
 	} else {
 		result.StopReason = anthropicResp.StopReason
+		// 对文本内容应用替换
+		if str, ok := content.(string); ok {
+			result.Content = applyReplacements(str)
+		} else {
+			result.Content = content
+		}
 	}
 
-	result.Content = content
 	return result, nil
 }
 
