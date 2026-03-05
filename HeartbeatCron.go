@@ -396,13 +396,18 @@ func (cs *CronService) loadJobs() {
 			"expr": jobData.Expr,
 		}
 
+		// 为任务设置默认的payload
+		payload := make(map[string]interface{})
+		payload["kind"] = "system_event"
+		payload["text"] = fmt.Sprintf("Cron job %s executed", jobData.ID)
+
 		job := CronJob{
 			ID:             jobData.ID,
 			Name:           jobData.Name,
 			Enabled:        jobData.Enabled,
 			ScheduleKind:   "cron",
 			ScheduleConfig: sched,
-			Payload:        make(map[string]interface{}),
+			Payload:        payload,
 		}
 
 		job.NextRunAt = cs.computeNext(&job, now)

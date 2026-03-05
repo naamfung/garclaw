@@ -45,6 +45,7 @@ Thumbs.db
 # Log files
 *.log
 logs/
+workspace/cron/cron-runs.jsonl
 
 # Temporary files
 tmp/
