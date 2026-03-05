@@ -617,6 +617,9 @@ func (cs *CronService) startWatcher() {
 		return
 	}
 
+	// 初始化lastEvent为当前时间减去1秒，确保第一次事件不会被防抖
+	cs.lastEvent = time.Now().Add(-1 * time.Second)
+
 	for {
 		select {
 		case event, ok := <-cs.watcher.Events:
@@ -628,10 +631,10 @@ func (cs *CronService) startWatcher() {
 			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
 				// 检查是否是CRON.toon文件
 				if filepath.Base(event.Name) == "CRON.toon" {
-					// 防抖处理：忽略100ms内的重复事件
+					// 防抖处理：忽略200ms内的重复事件
 					cs.eventMutex.Lock()
 					now := time.Now()
-					if now.Sub(cs.lastEvent) < 100*time.Millisecond {
+					if now.Sub(cs.lastEvent) < 200*time.Millisecond {
 						cs.eventMutex.Unlock()
 						continue
 					}
