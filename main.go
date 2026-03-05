@@ -5,28 +5,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"unicode/utf8"
 )
 
 const (
 	isDebug = false // 控制调试信息的显示
 )
-
-// TruncateString 安全地截断 UTF-8 字符串，确保不会在字符中间切断
-func TruncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-
-	// 确保我们不会在 UTF-8 字符的中间截断
-	for i := maxLen; i > 0; i-- {
-		if utf8.RuneStart(s[i]) {
-			return s[:i] + "..."
-		}
-	}
-
-	return "..."
-}
 
 // 消息结构
 type Message struct {

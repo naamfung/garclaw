@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 
@@ -14,10 +13,14 @@ import (
 )
 
 var (
-	isAlpine = false
+	isAlpine  = false
+	isWindows = false
 )
 
 func init() {
+	// 检测是否为视窗系统
+	isWindows = os.PathSeparator == '\\'
+
 	// 检测是否为 Alpine Linux 系统
 	osRelease, err := os.ReadFile("/etc/os-release")
 	if err == nil {
@@ -33,11 +36,15 @@ func init() {
 		SkipInstallBrowsers: true, // 核心参数：跳过浏览器二进制文件的下载
 	}
 
-	if isAlpine {
+	if isAlpine || isWindows {
 		// 执行安装（主要是安装驱动程序，浏览器我们手动管理）
 		err = playwright.Install(installOptions)
 		if err != nil {
-			log.Printf("Alpine Linux 系统安装 Playwright 驱动失败: %v", err)
+			if isAlpine {
+				log.Printf("Alpine Linux 系统安装 Playwright 驱动失败: %v", err)
+			} else {
+				log.Printf("视窗系统安装 Playwright 驱动失败: %v", err)
+			}
 		}
 	} else {
 		err = playwright.Install() // 其他系统安装驱动程序无须特殊处理
@@ -49,10 +56,33 @@ func init() {
 	// 检查是否已安装浏览器
 	browserPaths := []string{"chromium", "chromium-browser", "google-chrome"}
 	hasBrowser := false
+
+	// 首先尝试在系统 PATH 中查找
 	for _, browser := range browserPaths {
 		if _, err := exec.LookPath(browser); err == nil {
 			hasBrowser = true
 			break
+		}
+	}
+
+	// 如果在视窗系统上，直接检查常见的浏览器安装路径
+	if isWindows && !hasBrowser {
+		commonBrowserPaths := []string{
+			"C:/Program Files/Google/Chrome/Application/chrome.exe",
+			"C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+			"C:/Users/" + os.Getenv("USERNAME") + "/AppData/Local/Google/Chrome/Application/chrome.exe",
+			"C:/Users/" + os.Getenv("USERNAME") + "/AppData/Local/Chromium/Application/chrome.exe",
+			"C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+			"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+			"C:/Program Files/Mozilla Firefox/firefox.exe",
+			"C:/Program Files (x86)/Mozilla Firefox/firefox.exe",
+		}
+
+		for _, path := range commonBrowserPaths {
+			if _, err := os.Stat(path); err == nil {
+				hasBrowser = true
+				break
+			}
 		}
 	}
 	if !hasBrowser {
@@ -60,9 +90,11 @@ func init() {
 		return
 	}
 
-	// 在 Alpine Linux 上，使用系统安装的 Chromium
+	// 在 Alpine Linux 或视窗系统上，使用系统安装的浏览器
 	if isAlpine {
 		log.Println("在 Alpine Linux 上使用系统安装的 Chromium")
+	} else if isWindows {
+		log.Println("在视窗系统上使用系统安装的浏览器")
 	}
 }
 
@@ -364,13 +396,4 @@ func visitURL(ctx context.Context, page playwright.Page, url string) (string, er
 		fmt.Println(pageText)
 	}
 	return pageText, nil
-}
-
-// 清理文件名
-func cleanFileName(name string) string {
-	invalidChars := regexp.MustCompile(`[<>:"/\|?*]`)
-	cleaned := invalidChars.ReplaceAllString(name, "_")
-	cleaned = regexp.MustCompile(`_+`).ReplaceAllString(cleaned, "_")
-	cleaned = strings.Trim(cleaned, "_")
-	return cleaned
 }
