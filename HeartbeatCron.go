@@ -29,6 +29,7 @@ type HeartbeatRunner struct {
 	queueLock     sync.Mutex
 	lastOutput    string
 	watcher       *fsnotify.Watcher // 文件系统监控器
+	memoryStore   *MemoryStore      // 记忆存储
 }
 
 // 定时任务
@@ -78,6 +79,9 @@ func NewHeartbeatRunner(laneLock *sync.Mutex) *HeartbeatRunner {
 		}
 	}
 
+	// 初始化记忆存储
+	memoryStore := NewMemoryStore(workspaceDir)
+
 	return &HeartbeatRunner{
 		workspace:     workspaceDir,
 		heartbeatPath: heartbeatPath,
@@ -91,6 +95,7 @@ func NewHeartbeatRunner(laneLock *sync.Mutex) *HeartbeatRunner {
 		thread:        make(chan struct{}),
 		outputQueue:   make([]string, 0),
 		watcher:       watcher,
+		memoryStore:   memoryStore,
 	}
 }
 
@@ -152,31 +157,14 @@ func (h *HeartbeatRunner) buildHeartbeatPrompt() (string, string) {
 	}
 
 	// 加载记忆
-	memPath := filepath.Join(h.workspace, "MEMORY.md")
 	memContent := ""
-
-	// 检查 MEMORY.md 文件是否存在，如果不存在则创建
-	if _, err := os.Stat(memPath); os.IsNotExist(err) {
-		// 创建空的 MEMORY.md 文件
-		if err := os.WriteFile(memPath, []byte(""), 0644); err != nil {
-			h.queueLock.Lock()
-			h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error creating MEMORY.md: %v", err))
-			h.queueLock.Unlock()
-		} else {
-			h.queueLock.Lock()
-			h.outputQueue = append(h.outputQueue, "Created MEMORY.md file")
-			h.queueLock.Unlock()
-		}
-	} else if err == nil {
-		// 文件存在，读取内容
-		if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
-			memContent = fmt.Sprintf("## Known Context\n\n%s\n\n", string(mem))
-		}
+	evergreen := h.memoryStore.LoadEvergreen()
+	if evergreen != "" {
+		memContent = fmt.Sprintf("## Known Context\n\n%s\n\n", evergreen)
 	}
 
 	// 构建额外信息
-	_ = fmt.Sprintf("%sCurrent time: %s", memContent, time.Now().Format("2006-01-02 15:04:05"))
-	sysPrompt := "You are a helpful assistant performing a background check."
+	sysPrompt := fmt.Sprintf("%sCurrent time: %s", memContent, time.Now().Format("2006-01-02 15:04:05"))
 
 	return string(instructions), sysPrompt
 }
@@ -249,58 +237,9 @@ func (h *HeartbeatRunner) execute() {
 	h.queueLock.Unlock()
 
 	// 将心跳结果写入每日记忆
-	h.writeToDailyMemory(meaningful)
-}
-
-// 写入每日记忆
-func (h *HeartbeatRunner) writeToDailyMemory(content string) {
-	// 确保memory目录存在
-	memoryDir := filepath.Join(h.workspace, "memory", "daily")
-	if err := os.MkdirAll(memoryDir, 0755); err != nil {
-		h.queueLock.Lock()
-		h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error creating memory directory: %v", err))
-		h.queueLock.Unlock()
-		return
-	}
-
-	// 写入每日JSONL文件
-	today := time.Now().Format("2006-01-02")
-	jsonlPath := filepath.Join(memoryDir, today+".jsonl")
-
-	entry := map[string]interface{}{
-		"ts":       time.Now().Unix(),
-		"content":  content,
-		"category": "heartbeat",
-	}
-
-	data, err := json.Marshal(entry)
-	if err != nil {
-		h.queueLock.Lock()
-		h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error marshaling memory entry: %v", err))
-		h.queueLock.Unlock()
-		return
-	}
-
-	f, err := os.OpenFile(jsonlPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		h.queueLock.Lock()
-		h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error opening memory file: %v", err))
-		h.queueLock.Unlock()
-		return
-	}
-	defer f.Close()
-
-	_, err = f.WriteString(string(data) + "\n")
-	if err != nil {
-		h.queueLock.Lock()
-		h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error writing to memory file: %v", err))
-		h.queueLock.Unlock()
-		return
-	}
-
-	// 写入成功，添加到输出队列
+	result := h.memoryStore.WriteDailyMemory(meaningful, "heartbeat")
 	h.queueLock.Lock()
-	h.outputQueue = append(h.outputQueue, fmt.Sprintf("Successfully wrote heartbeat to daily memory"))
+	h.outputQueue = append(h.outputQueue, result)
 	h.queueLock.Unlock()
 }
 
