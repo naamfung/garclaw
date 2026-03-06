@@ -124,7 +124,9 @@ func (m *MailChannel) Send(to string, text string, kwargs map[string]interface{}
 	tlsSuccess := true
 	if err = c.StartTLS(tlsConfig); err != nil {
 		if m.IsMailHog {
-			fmt.Printf("Warning: Failed to start TLS, continuing without encryption: %v\n", err)
+			if isDebug {
+				fmt.Printf("Warning: Failed to start TLS, continuing without encryption: %v\n", err)
+			}
 			tlsSuccess = false
 			// 不返回错误，继续使用非 TLS 连接
 		} else {
@@ -264,7 +266,7 @@ func InitializeChannels() *ChannelManager {
 			}
 		}
 
-		// 即使没有认证信息，也允许注册邮件通道（例如 MailHog）
+		// 即使没有认证信息，也允许注册邮件通道（例如 MailHog测试时可以不配置认证信息）
 		if from != "" {
 			mailChannel := &MailChannel{
 				AccountID: "mail-primary",
