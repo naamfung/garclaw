@@ -117,7 +117,7 @@ func main() {
 
 			// 打印心跳消息
 			for _, msg := range heartbeatMsgs {
-				fmt.Printf("[heartbeat] %s\n", msg)
+				fmt.Printf("[heartbeat] %s", msg)
 			}
 
 			// 打印定时任务消息
