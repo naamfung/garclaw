@@ -14,6 +14,146 @@ import (
 	"github.com/toon-format/toon-go"
 )
 
+// evaluateExpression 解析和计算数学表达式
+func evaluateExpression(expr string) (float64, error) {
+	// 移除表达式中的空格
+	expr = strings.ReplaceAll(expr, " ", "")
+
+	// 定义解析器状态
+	type parser struct {
+		expr string
+		pos  int
+	}
+
+	// 声明内部函数
+	var parseExpression func(*parser) (float64, error)
+	var parseTerm func(*parser) (float64, error)
+	var parseFactor func(*parser) (float64, error)
+
+	// 解析表达式（处理加减运算）
+	parseExpression = func(p *parser) (float64, error) {
+		result, err := parseTerm(p)
+		if err != nil {
+			return 0, err
+		}
+
+		for p.pos < len(p.expr) {
+			op := p.expr[p.pos]
+			if op != '+' && op != '-' {
+				break
+			}
+			p.pos++
+
+			right, err := parseTerm(p)
+			if err != nil {
+				return 0, err
+			}
+
+			if op == '+' {
+				result += right
+			} else {
+				result -= right
+			}
+		}
+
+		return result, nil
+	}
+
+	// 解析项（处理乘除运算）
+	parseTerm = func(p *parser) (float64, error) {
+		result, err := parseFactor(p)
+		if err != nil {
+			return 0, err
+		}
+
+		for p.pos < len(p.expr) {
+			op := p.expr[p.pos]
+			if op != '*' && op != '/' {
+				break
+			}
+			p.pos++
+
+			right, err := parseFactor(p)
+			if err != nil {
+				return 0, err
+			}
+
+			if op == '*' {
+				result *= right
+			} else {
+				if right == 0 {
+					return 0, errors.New("division by zero")
+				}
+				result /= right
+			}
+		}
+
+		return result, nil
+	}
+
+	// 解析因子（处理数字和括号）
+	parseFactor = func(p *parser) (float64, error) {
+		if p.pos >= len(p.expr) {
+			return 0, errors.New("invalid expression: unexpected end")
+		}
+
+		// 处理括号
+		if p.expr[p.pos] == '(' {
+			p.pos++
+			result, err := parseExpression(p)
+			if err != nil {
+				return 0, err
+			}
+			if p.pos >= len(p.expr) || p.expr[p.pos] != ')' {
+				return 0, errors.New("invalid expression: missing closing parenthesis")
+			}
+			p.pos++
+			return result, nil
+		}
+
+		// 处理数字
+		start := p.pos
+		if p.expr[p.pos] == '+' || p.expr[p.pos] == '-' {
+			p.pos++
+		}
+
+		for p.pos < len(p.expr) {
+			c := p.expr[p.pos]
+			if (c < '0' || c > '9') && c != '.' {
+				break
+			}
+			p.pos++
+		}
+
+		if p.pos == start {
+			return 0, errors.New("invalid expression: expected number or parenthesis")
+		}
+
+		numStr := p.expr[start:p.pos]
+		num, err := strconv.ParseFloat(numStr, 64)
+		if err != nil {
+			return 0, errors.New("invalid expression: invalid number")
+		}
+
+		return num, nil
+	}
+
+	p := &parser{expr: expr}
+
+	// 解析表达式
+	result, err := parseExpression(p)
+	if err != nil {
+		return 0, err
+	}
+
+	// 确保解析完整个表达式
+	if p.pos < len(p.expr) {
+		return 0, errors.New("invalid expression: unexpected characters at end")
+	}
+
+	return result, nil
+}
+
 // executeTool 执行单个工具调用，返回 ToolResult 和是否使用了 todo
 func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolResult, bool) {
 	usedTodo := false
@@ -340,40 +480,19 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		}
 
 	case "calculate":
-		operation, _ := argsMap["operation"].(string)
-		num1Float, _ := argsMap["num1"].(float64)
-		num2Float, _ := argsMap["num2"].(float64)
+		expression, _ := argsMap["expression"].(string)
 
-		if operation == "" {
-			content = "Error: Empty operation"
+		if expression == "" {
+			content = "Error: Empty expression"
 		} else {
-			var result float64
-			var err error
-
-			switch strings.ToLower(operation) {
-			case "add":
-				result = num1Float + num2Float
-			case "subtract":
-				result = num1Float - num2Float
-			case "multiply":
-				result = num1Float * num2Float
-			case "divide":
-				if num2Float == 0 {
-					err = errors.New("division by zero")
-				} else {
-					result = num1Float / num2Float
-				}
-			default:
-				err = errors.New("invalid operation, must be: add, subtract, multiply, divide")
-			}
-
+			result, err := evaluateExpression(expression)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = fmt.Sprintf("%.6f", result)
 			}
 
-			fmt.Printf("Calculated: %.6f %s %.6f = %s\n", num1Float, operation, num2Float, content)
+			fmt.Printf("Calculated: %s = %s\n", expression, content)
 		}
 
 	default:

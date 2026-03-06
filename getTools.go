@@ -171,107 +171,99 @@ func getTools(apiType string) interface{} {
 			},
 
 			{
-			"type": "function",
-			"function": map[string]interface{}{
-				"name":        "todo",
-				"description": "Update task list. Track progress on multi-step tasks.",
-				"parameters": map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"items": map[string]interface{}{
-							"type": "array",
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "todo",
+					"description": "Update task list. Track progress on multi-step tasks.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
 							"items": map[string]interface{}{
-								"type": "object",
-								"properties": map[string]interface{}{
-									"id": map[string]interface{}{
-										"type":        "string",
-										"description": "Task ID.",
+								"type": "array",
+								"items": map[string]interface{}{
+									"type": "object",
+									"properties": map[string]interface{}{
+										"id": map[string]interface{}{
+											"type":        "string",
+											"description": "Task ID.",
+										},
+										"text": map[string]interface{}{
+											"type":        "string",
+											"description": "Task description.",
+										},
+										"status": map[string]interface{}{
+											"type":        "string",
+											"enum":        []string{"pending", "in_progress", "completed"},
+											"description": "Task status: pending, in_progress, or completed.",
+										},
 									},
-									"text": map[string]interface{}{
-										"type":        "string",
-										"description": "Task description.",
-									},
-									"status": map[string]interface{}{
-										"type":        "string",
-										"enum":        []string{"pending", "in_progress", "completed"},
-										"description": "Task status: pending, in_progress, or completed.",
-									},
+									"required": []string{"id", "text", "status"},
 								},
-								"required": []string{"id", "text", "status"},
+								"description": "List of tasks.",
 							},
-							"description": "List of tasks.",
 						},
+						"required":             []string{"items"},
+						"additionalProperties": false,
 					},
-					"required":             []string{"items"},
-					"additionalProperties": false,
 				},
 			},
-		},
-		{
-			"type": "function",
-			"function": map[string]interface{}{
-				"name":        "memory_write",
-				"description": "Write content to memory. Use this to store information that should be remembered for future interactions.",
-				"parameters": map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"content": map[string]interface{}{
-							"type":        "string",
-							"description": "The content to write to memory.",
+			{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "memory_write",
+					"description": "Write content to memory. Use this to store information that should be remembered for future interactions.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"content": map[string]interface{}{
+								"type":        "string",
+								"description": "The content to write to memory.",
+							},
 						},
+						"required":             []string{"content"},
+						"additionalProperties": false,
 					},
-					"required":             []string{"content"},
-					"additionalProperties": false,
 				},
 			},
-		},
-		{
-			"type": "function",
-			"function": map[string]interface{}{
-				"name":        "memory_search",
-				"description": "Search memory for content. Use this to retrieve information that was previously stored in memory.",
-				"parameters": map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"query": map[string]interface{}{
-							"type":        "string",
-							"description": "The search query to find in memory.",
+			{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "memory_search",
+					"description": "Search memory for content. Use this to retrieve information that was previously stored in memory.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"query": map[string]interface{}{
+								"type":        "string",
+								"description": "The search query to find in memory.",
+							},
 						},
+						"required":             []string{"query"},
+						"additionalProperties": false,
 					},
-					"required":             []string{"query"},
-					"additionalProperties": false,
 				},
 			},
-		},
-		{
-			"type": "function",
-			"function": map[string]interface{}{
-				"name":        "calculate",
-				"description": "Perform arithmetic operations on two numbers. Use this when the user asks to calculate or compute mathematical expressions.",
-				"parameters": map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"operation": map[string]interface{}{
-							"type":        "string",
-							"description": "The arithmetic operation to perform: add, subtract, multiply, divide.",
+			{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "calculate",
+					"description": "Perform arithmetic operations on numbers. Use this when the user asks to calculate or compute mathematical expressions. Accepts a string expression like '1+2*3/4'.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"expression": map[string]interface{}{
+								"type":        "string",
+								"description": "The arithmetic expression to evaluate, e.g., '1+2*3/4' or '(1+2)*(3-4)'. Supports +, -, *, / operators and parentheses.",
+							},
 						},
-						"num1": map[string]interface{}{
-							"type":        "number",
-							"description": "The first number for the operation.",
-						},
-						"num2": map[string]interface{}{
-							"type":        "number",
-							"description": "The second number for the operation.",
-						},
+						"required":             []string{"expression"},
+						"additionalProperties": false,
 					},
-					"required":             []string{"operation", "num1", "num2"},
-					"additionalProperties": false,
 				},
 			},
-		},
-	}
+		}
 
-default:
+	default:
 		// Anthropic与Ollama使用tools格式
 		return []map[string]interface{}{
 			{
@@ -415,92 +407,84 @@ default:
 			},
 
 			{
-			"name":        "todo",
-			"description": "Update task list. Track progress on multi-step tasks.",
-			"input_schema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"items": map[string]interface{}{
-						"type": "array",
+				"name":        "todo",
+				"description": "Update task list. Track progress on multi-step tasks.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
 						"items": map[string]interface{}{
-							"type": "object",
-							"properties": map[string]interface{}{
-								"id": map[string]interface{}{
-									"type":        "string",
-									"description": "Task ID.",
+							"type": "array",
+							"items": map[string]interface{}{
+								"type": "object",
+								"properties": map[string]interface{}{
+									"id": map[string]interface{}{
+										"type":        "string",
+										"description": "Task ID.",
+									},
+									"text": map[string]interface{}{
+										"type":        "string",
+										"description": "Task description.",
+									},
+									"status": map[string]interface{}{
+										"type":        "string",
+										"enum":        []string{"pending", "in_progress", "completed"},
+										"description": "Task status: pending, in_progress, or completed.",
+									},
 								},
-								"text": map[string]interface{}{
-									"type":        "string",
-									"description": "Task description.",
-								},
-								"status": map[string]interface{}{
-									"type":        "string",
-									"enum":        []string{"pending", "in_progress", "completed"},
-									"description": "Task status: pending, in_progress, or completed.",
-								},
+								"required": []string{"id", "text", "status"},
 							},
-							"required": []string{"id", "text", "status"},
+							"description": "List of tasks.",
 						},
-						"description": "List of tasks.",
 					},
+					"required":             []string{"items"},
+					"additionalProperties": false,
 				},
-				"required":             []string{"items"},
-				"additionalProperties": false,
 			},
-		},
-		{
-			"name":        "memory_write",
-			"description": "Write content to memory. Use this to store information that should be remembered for future interactions.",
-			"input_schema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"content": map[string]interface{}{
-						"type":        "string",
-						"description": "The content to write to memory.",
+			{
+				"name":        "memory_write",
+				"description": "Write content to memory. Use this to store information that should be remembered for future interactions.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"content": map[string]interface{}{
+							"type":        "string",
+							"description": "The content to write to memory.",
+						},
 					},
+					"required":             []string{"content"},
+					"additionalProperties": false,
 				},
-				"required":             []string{"content"},
-				"additionalProperties": false,
 			},
-		},
-		{
-			"name":        "memory_search",
-			"description": "Search memory for content. Use this to retrieve information that was previously stored in memory.",
-			"input_schema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"query": map[string]interface{}{
-						"type":        "string",
-						"description": "The search query to find in memory.",
+			{
+				"name":        "memory_search",
+				"description": "Search memory for content. Use this to retrieve information that was previously stored in memory.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"query": map[string]interface{}{
+							"type":        "string",
+							"description": "The search query to find in memory.",
+						},
 					},
+					"required":             []string{"query"},
+					"additionalProperties": false,
 				},
-				"required":             []string{"query"},
-				"additionalProperties": false,
 			},
-		},
-		{
-			"name":        "calculate",
-			"description": "Perform arithmetic operations on two numbers. Use this when the user asks to calculate or compute mathematical expressions.",
-			"input_schema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"operation": map[string]interface{}{
-						"type":        "string",
-						"description": "The arithmetic operation to perform: add, subtract, multiply, divide.",
+			{
+				"name":        "calculate",
+				"description": "Perform arithmetic operations on numbers. Use this when the user asks to calculate or compute mathematical expressions. Accepts a string expression like '1+2*3/4'.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"expression": map[string]interface{}{
+							"type":        "string",
+							"description": "The arithmetic expression to evaluate, e.g., '1+2*3/4' or '(1+2)*(3-4)'. Supports +, -, *, / operators and parentheses.",
+						},
 					},
-					"num1": map[string]interface{}{
-						"type":        "number",
-						"description": "The first number for the operation.",
-					},
-					"num2": map[string]interface{}{
-						"type":        "number",
-						"description": "The second number for the operation.",
-					},
+					"required":             []string{"expression"},
+					"additionalProperties": false,
 				},
-				"required":             []string{"operation", "num1", "num2"},
-				"additionalProperties": false,
 			},
-		},
-	}
+		}
 	}
 }
