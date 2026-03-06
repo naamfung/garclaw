@@ -104,14 +104,6 @@ func (m *MailChannel) Send(to string, text string, kwargs map[string]interface{}
 	// 连接到 SMTP 服务器
 	serverAddr := fmt.Sprintf("%s:%s", m.SMTPHost, m.SMTPPort)
 
-	var err error
-	// 使用 TLS 加密连接
-	// 创建 TLS 配置
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true, // 跳过证书验证，适用于测试环境
-		ServerName:         m.SMTPHost,
-	}
-
 	// 直接连接到 SMTP 服务器
 	c, err := smtp.Dial(serverAddr)
 	if err != nil {
@@ -120,14 +112,23 @@ func (m *MailChannel) Send(to string, text string, kwargs map[string]interface{}
 	}
 	defer c.Close()
 
-	// 升级到 TLS 连接
-	if err = c.StartTLS(tlsConfig); err != nil {
-		fmt.Printf("Error starting TLS: %v\n", err)
-		return false
+	// 尝试升级到 TLS 连接
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true, // 跳过证书验证，适用于测试环境
+		ServerName:         m.SMTPHost,
 	}
 
-	// 如果有认证信息，使用认证
-	if m.Username != "" && m.Password != "" {
+	// 尝试 TLS 连接
+	tlsSuccess := true
+	if err = c.StartTLS(tlsConfig); err != nil {
+		fmt.Printf("Warning: Failed to start TLS, continuing without encryption: %v\n", err)
+		tlsSuccess = false
+		// 不返回错误，继续使用非 TLS 连接
+	}
+
+	// 如果有认证信息且 TLS 成功，使用认证
+	// 对于非 TLS 连接，跳过认证（如 MailHog 等测试服务器）
+	if m.Username != "" && m.Password != "" && tlsSuccess {
 		auth := smtp.PlainAuth("", m.Username, m.Password, m.SMTPHost)
 		if err = c.Auth(auth); err != nil {
 			fmt.Printf("Error authenticating: %v\n", err)
@@ -168,8 +169,9 @@ func (m *MailChannel) Send(to string, text string, kwargs map[string]interface{}
 
 	err = c.Quit()
 	if err != nil {
-		fmt.Printf("Error quitting SMTP session: %v\n", err)
-		return false
+		// 有些 SMTP 服务器（如 MailHog）在非 TLS 连接下可能不支持 QUIT 命令
+		// 这里不返回错误，因为邮件已经发送成功
+		fmt.Printf("Warning: Error quitting SMTP session: %v\n", err)
 	}
 
 	return true
