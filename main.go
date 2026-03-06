@@ -172,8 +172,8 @@ func main() {
 			fmt.Printf("Error checking overflow: %v\n", overflowErr)
 		}
 
-		// 调用 AgentLoop
-		AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+		// 调用 AgentLoop 并获取更新后的消息
+		history = AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 
 		// 保存助手回复到会话文件
 		if len(history) > 0 {

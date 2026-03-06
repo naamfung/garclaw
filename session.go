@@ -11,18 +11,38 @@ import (
 
 // 会话管理器
 type SessionManager struct {
-	sessionFile string
-	maxMessages int
+	sessionFile      string
+	indexFile        string
+	sessions         map[string]SessionMeta
+	maxMessages      int
 	summaryThreshold int
+	currentSessionID string
 }
+
+// 会话消息类型
+const (
+	MessageTypeUser       = "user"
+	MessageTypeAssistant  = "assistant"
+	MessageTypeToolUse    = "tool_use"
+	MessageTypeToolResult = "tool_result"
+)
 
 // 会话消息
 type SessionMessage struct {
-	Role      string      `json:"role"`
+	Type      string      `json:"type"`
 	Content   interface{} `json:"content"`
-	ToolCalls interface{} `json:"tool_calls,omitempty"`
-	ToolCallID string      `json:"tool_call_id,omitempty"`
-	Timestamp time.Time    `json:"timestamp"`
+	ToolUseID string      `json:"tool_use_id,omitempty"`
+	ToolName  string      `json:"name,omitempty"`
+	ToolInput interface{} `json:"input,omitempty"`
+	Timestamp int64       `json:"ts"` // Unix 时间戳
+}
+
+// 会话元数据
+type SessionMeta struct {
+	Label        string `json:"label"`
+	CreatedAt    string `json:"created_at"`
+	LastActive   string `json:"last_active"`
+	MessageCount int    `json:"message_count"`
 }
 
 // 初始化会话管理器
@@ -33,10 +53,66 @@ func NewSessionManager(sessionFile string, maxMessages, summaryThreshold int) *S
 		fmt.Printf("Error creating session directory: %v\n", err)
 	}
 
+	// 会话索引文件
+	indexFile := filepath.Join(dir, "sessions.json")
+
+	// 加载会话索引
+	sessions := loadSessionIndex(indexFile)
+
+	// 选择当前会话
+	currentSessionID := "default"
+	if len(sessions) == 0 {
+		// 创建默认会话
+		sessions[currentSessionID] = SessionMeta{
+			Label:        "Default Session",
+			CreatedAt:    time.Now().Format(time.RFC3339),
+			LastActive:   time.Now().Format(time.RFC3339),
+			MessageCount: 0,
+		}
+		saveSessionIndex(indexFile, sessions)
+	}
+
 	return &SessionManager{
-		sessionFile: sessionFile,
-		maxMessages: maxMessages,
+		sessionFile:      sessionFile,
+		indexFile:        indexFile,
+		sessions:         sessions,
+		maxMessages:      maxMessages,
 		summaryThreshold: summaryThreshold,
+		currentSessionID: currentSessionID,
+	}
+}
+
+// 加载会话索引
+func loadSessionIndex(indexFile string) map[string]SessionMeta {
+	if _, err := os.Stat(indexFile); os.IsNotExist(err) {
+		return make(map[string]SessionMeta)
+	}
+
+	content, err := os.ReadFile(indexFile)
+	if err != nil {
+		fmt.Printf("Error reading session index: %v\n", err)
+		return make(map[string]SessionMeta)
+	}
+
+	var sessions map[string]SessionMeta
+	if err := json.Unmarshal(content, &sessions); err != nil {
+		fmt.Printf("Error unmarshaling session index: %v\n", err)
+		return make(map[string]SessionMeta)
+	}
+
+	return sessions
+}
+
+// 保存会话索引
+func saveSessionIndex(indexFile string, sessions map[string]SessionMeta) {
+	data, err := json.MarshalIndent(sessions, "", "  ")
+	if err != nil {
+		fmt.Printf("Error marshaling session index: %v\n", err)
+		return
+	}
+
+	if err := os.WriteFile(indexFile, data, 0644); err != nil {
+		fmt.Printf("Error writing session index: %v\n", err)
 	}
 }
 
@@ -54,9 +130,15 @@ func (sm *SessionManager) LoadHistory() []Message {
 		return []Message{}
 	}
 
-	// 解析 JSONL 文件
-	var sessionMessages []SessionMessage
+	// 解析 JSONL 文件并重建消息历史
+	return sm._rebuildHistory(content)
+}
+
+// 从 JSONL 内容重建 API 格式的消息列表
+func (sm *SessionManager) _rebuildHistory(content []byte) []Message {
+	messages := []Message{}
 	lines := strings.Split(string(content), "\n")
+
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -68,17 +150,86 @@ func (sm *SessionManager) LoadHistory() []Message {
 			continue
 		}
 
-		sessionMessages = append(sessionMessages, msg)
-	}
+		switch msg.Type {
+		case MessageTypeUser:
+			messages = append(messages, Message{
+				Role:    "user",
+				Content: msg.Content,
+			})
 
-	// 转换为 Message 类型
-	messages := make([]Message, len(sessionMessages))
-	for i, msg := range sessionMessages {
-		messages[i] = Message{
-			Role:      msg.Role,
-			Content:   msg.Content,
-			ToolCalls: msg.ToolCalls,
-			ToolCallID: msg.ToolCallID,
+		case MessageTypeAssistant:
+			content := msg.Content
+			if contentStr, ok := content.(string); ok {
+				content = []map[string]interface{}{
+					{
+						"type": "text",
+						"text": contentStr,
+					},
+				}
+			}
+			messages = append(messages, Message{
+				Role:    "assistant",
+				Content: content,
+			})
+
+		case MessageTypeToolUse:
+			toolUseBlock := map[string]interface{}{
+				"type":  "tool_use",
+				"id":    msg.ToolUseID,
+				"name":  msg.ToolName,
+				"input": msg.ToolInput,
+			}
+
+			// 将工具调用添加到最后一条助手消息中
+			if len(messages) > 0 && messages[len(messages)-1].Role == "assistant" {
+				if content, ok := messages[len(messages)-1].Content.([]map[string]interface{}); ok {
+					messages[len(messages)-1].Content = append(content, toolUseBlock)
+				} else {
+					// 如果助手消息内容不是列表，转换为列表
+					messages[len(messages)-1].Content = []map[string]interface{}{
+						{
+							"type": "text",
+							"text": fmt.Sprintf("%v", messages[len(messages)-1].Content),
+						},
+						toolUseBlock,
+					}
+				}
+			} else {
+				// 如果没有助手消息，创建一个新的
+				messages = append(messages, Message{
+					Role:    "assistant",
+					Content: []map[string]interface{}{toolUseBlock},
+				})
+			}
+
+		case MessageTypeToolResult:
+			toolResultBlock := map[string]interface{}{
+				"type":        "tool_result",
+				"tool_use_id": msg.ToolUseID,
+				"content":     msg.Content,
+			}
+
+			// 将工具结果添加到最后一条用户消息中
+			if len(messages) > 0 && messages[len(messages)-1].Role == "user" {
+				if content, ok := messages[len(messages)-1].Content.([]map[string]interface{}); ok {
+					messages[len(messages)-1].Content = append(content, toolResultBlock)
+				} else {
+					// 如果用户消息内容不是列表，转换为列表
+					messages[len(messages)-1].Content = []map[string]interface{}{
+						{
+							"type": "text",
+							"text": fmt.Sprintf("%v", messages[len(messages)-1].Content),
+						},
+						toolResultBlock,
+					}
+				}
+			} else {
+				// 如果没有用户消息，创建一个新的
+				messages = append(messages, Message{
+					Role:    "user",
+					Content: []map[string]interface{}{toolResultBlock},
+				})
+			}
 		}
 	}
 
@@ -87,17 +238,104 @@ func (sm *SessionManager) LoadHistory() []Message {
 
 // 保存会话消息
 func (sm *SessionManager) SaveMessage(msg Message) error {
-	// 创建会话消息
-	sessionMsg := SessionMessage{
-		Role:      msg.Role,
-		Content:   msg.Content,
-		ToolCalls: msg.ToolCalls,
-		ToolCallID: msg.ToolCallID,
-		Timestamp: time.Now(),
+	// 根据消息类型创建会话消息
+	var sessionMsg SessionMessage
+	switch msg.Role {
+	case "user":
+		sessionMsg = SessionMessage{
+			Type:      MessageTypeUser,
+			Content:   msg.Content,
+			Timestamp: time.Now().Unix(),
+		}
+	case "assistant":
+		// 检查是否包含工具调用
+		if toolCalls, ok := msg.ToolCalls.([]interface{}); ok && len(toolCalls) > 0 {
+			// 保存助手消息文本（如果有）
+			if msg.Content != nil {
+				sessionMsg = SessionMessage{
+					Type:      MessageTypeAssistant,
+					Content:   msg.Content,
+					Timestamp: time.Now().Unix(),
+				}
+				// 序列化并写入消息
+				if err := sm.writeSessionMessage(sessionMsg); err != nil {
+					return err
+				}
+			}
+
+			// 保存工具调用
+			for _, toolCall := range toolCalls {
+				if tc, ok := toolCall.(map[string]interface{}); ok {
+					toolUseID := ""
+					if id, ok := tc["id"].(string); ok {
+						toolUseID = id
+					}
+					toolName := ""
+					if name, ok := tc["name"].(string); ok {
+						toolName = name
+					} else if function, ok := tc["function"].(map[string]interface{}); ok {
+						if name, ok := function["name"].(string); ok {
+							toolName = name
+						}
+					}
+					toolInput := map[string]interface{}{}
+					if input, ok := tc["input"].(map[string]interface{}); ok {
+						toolInput = input
+					} else if function, ok := tc["function"].(map[string]interface{}); ok {
+						if args, ok := function["arguments"].(string); ok {
+							var argsMap map[string]interface{}
+							if err := json.Unmarshal([]byte(args), &argsMap); err == nil {
+								toolInput = argsMap
+							}
+						}
+					}
+
+					toolUseMsg := SessionMessage{
+						Type:      MessageTypeToolUse,
+						ToolUseID: toolUseID,
+						ToolName:  toolName,
+						ToolInput: toolInput,
+						Timestamp: time.Now().Unix(),
+					}
+					if err := sm.writeSessionMessage(toolUseMsg); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		} else {
+			sessionMsg = SessionMessage{
+				Type:      MessageTypeAssistant,
+				Content:   msg.Content,
+				Timestamp: time.Now().Unix(),
+			}
+		}
+	case "tool":
+		sessionMsg = SessionMessage{
+			Type:      MessageTypeToolResult,
+			Content:   msg.Content,
+			ToolUseID: msg.ToolCallID,
+			Timestamp: time.Now().Unix(),
+		}
+	default:
+		return fmt.Errorf("unknown message role: %s", msg.Role)
 	}
 
+	// 写入消息
+	if err := sm.writeSessionMessage(sessionMsg); err != nil {
+		return err
+	}
+
+	// 更新会话元数据
+	sm.updateSessionMeta()
+
+	return nil
+}
+
+// 写入会话消息到文件
+func (sm *SessionManager) writeSessionMessage(msg SessionMessage) error {
 	// 序列化消息
-	data, err := json.Marshal(sessionMsg)
+	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal session message: %w", err)
 	}
@@ -115,6 +353,16 @@ func (sm *SessionManager) SaveMessage(msg Message) error {
 	}
 
 	return nil
+}
+
+// 更新会话元数据
+func (sm *SessionManager) updateSessionMeta() {
+	if meta, ok := sm.sessions[sm.currentSessionID]; ok {
+		meta.LastActive = time.Now().Format(time.RFC3339)
+		meta.MessageCount++
+		sm.sessions[sm.currentSessionID] = meta
+		saveSessionIndex(sm.indexFile, sm.sessions)
+	}
 }
 
 // 清理会话文件
@@ -146,9 +394,29 @@ func (sm *SessionManager) CheckOverflow(messages []Message) ([]Message, error) {
 	for _, msg := range messagesToSummarizeSlice {
 		switch msg.Role {
 		case "user":
-			summaryPrompt += fmt.Sprintf("User: %v\n", msg.Content)
+			if contentStr, ok := msg.Content.(string); ok {
+				summaryPrompt += fmt.Sprintf("User: %s\n", contentStr)
+			} else if contentList, ok := msg.Content.([]map[string]interface{}); ok {
+				for _, block := range contentList {
+					if block["type"] == "text" {
+						summaryPrompt += fmt.Sprintf("User: %s\n", block["text"])
+					} else if block["type"] == "tool_result" {
+						summaryPrompt += fmt.Sprintf("Tool Result: %s\n", block["content"])
+					}
+				}
+			}
 		case "assistant":
-			summaryPrompt += fmt.Sprintf("Assistant: %v\n", msg.Content)
+			if contentStr, ok := msg.Content.(string); ok {
+				summaryPrompt += fmt.Sprintf("Assistant: %s\n", contentStr)
+			} else if contentList, ok := msg.Content.([]map[string]interface{}); ok {
+				for _, block := range contentList {
+					if block["type"] == "text" {
+						summaryPrompt += fmt.Sprintf("Assistant: %s\n", block["text"])
+					} else if block["type"] == "tool_use" {
+						summaryPrompt += fmt.Sprintf("Assistant called tool: %s\n", block["name"])
+					}
+				}
+			}
 		case "tool":
 			summaryPrompt += fmt.Sprintf("Tool: %v\n", msg.Content)
 		}

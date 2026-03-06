@@ -277,13 +277,13 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 }
 
 // 核心agent循环
-func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) {
+func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) []Message {
 	roundsSinceTodo := 0
 	for {
 		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		if err != nil {
 			fmt.Printf("Error calling model: %v\n", err)
-			return
+			return messages
 		}
 
 		// 打印响应信息，用于调试
@@ -315,7 +315,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			if resp.Content == nil || fmt.Sprint(resp.Content) == "" {
 				fmt.Println("模型终止响应..")
 			}
-			return
+			return messages
 		}
 
 		// 执行工具调用
