@@ -184,10 +184,40 @@ func (h *HeartbeatRunner) execute() {
 		return
 	}
 
-	// 这里应该调用模型，但为了简化，我们暂时返回一个模拟响应
-	// 实际实现中应该调用 CallModel 函数
-	response := "HEARTBEAT_OK"
-	meaningful := h.parseResponse(response)
+	// 使用全局配置
+	config := globalConfig
+
+	// 构建消息
+	messages := []Message{
+		{
+			Role:    "user",
+			Content: instructions,
+		},
+	}
+
+	// 调用模型
+	response, err := CallModel(
+		messages,
+		config.APIConfig.APIType,
+		config.APIConfig.BaseURL,
+		config.APIConfig.APIKey,
+		config.APIConfig.Model,
+		config.APIConfig.Temperature,
+		config.APIConfig.MaxTokens,
+		config.APIConfig.Stream,
+		config.APIConfig.Thinking,
+	)
+	if err != nil {
+		return
+	}
+
+	// 处理响应
+	responseStr := ""
+	if content, ok := response.Content.(string); ok {
+		responseStr = content
+	}
+
+	meaningful := h.parseResponse(responseStr)
 
 	if meaningful == "" {
 		return
@@ -263,9 +293,40 @@ func (h *HeartbeatRunner) Trigger() string {
 		return "HEARTBEAT.md is empty"
 	}
 
-	// 这里应该调用模型，但为了简化，我们暂时返回一个模拟响应
-	response := "HEARTBEAT_OK"
-	meaningful := h.parseResponse(response)
+	// 使用全局配置
+	config := globalConfig
+
+	// 构建消息
+	messages := []Message{
+		{
+			Role:    "user",
+			Content: instructions,
+		},
+	}
+
+	// 调用模型
+	response, err := CallModel(
+		messages,
+		config.APIConfig.APIType,
+		config.APIConfig.BaseURL,
+		config.APIConfig.APIKey,
+		config.APIConfig.Model,
+		config.APIConfig.Temperature,
+		config.APIConfig.MaxTokens,
+		config.APIConfig.Stream,
+		config.APIConfig.Thinking,
+	)
+	if err != nil {
+		return "Error calling model: " + err.Error()
+	}
+
+	// 处理响应
+	responseStr := ""
+	if content, ok := response.Content.(string); ok {
+		responseStr = content
+	}
+
+	meaningful := h.parseResponse(responseStr)
 
 	if meaningful == "" {
 		return "HEARTBEAT_OK (nothing to report)"
@@ -545,9 +606,45 @@ func (cs *CronService) runJob(job *CronJob) {
 			return
 		}
 
-		// 这里应该调用模型，但为了简化，我们暂时返回一个模拟响应
-		_ = fmt.Sprintf("You are performing a scheduled background task. Be concise. Current time: %s", now.Format("2006-01-02 15:04:05"))
-		output = "Cron job executed successfully"
+		// 使用全局配置
+		config := globalConfig
+
+		// 构建消息
+		systemPrompt := fmt.Sprintf("You are performing a scheduled background task. Be concise. Current time: %s", now.Format("2006-01-02 15:04:05"))
+		messages := []Message{
+			{
+				Role:    "system",
+				Content: systemPrompt,
+			},
+			{
+				Role:    "user",
+				Content: msg,
+			},
+		}
+
+		// 调用模型
+		response, err := CallModel(
+			messages,
+			config.APIConfig.APIType,
+			config.APIConfig.BaseURL,
+			config.APIConfig.APIKey,
+			config.APIConfig.Model,
+			config.APIConfig.Temperature,
+			config.APIConfig.MaxTokens,
+			config.APIConfig.Stream,
+			config.APIConfig.Thinking,
+		)
+		if err != nil {
+			output, status, errMsg = "[error calling model]", "error", "Error calling model: "+err.Error()
+			return
+		}
+
+		// 处理响应
+		if content, ok := response.Content.(string); ok {
+			output = content
+		} else {
+			output = "Cron job executed successfully"
+		}
 	case "system_event":
 		text, ok := payload["text"].(string)
 		if !ok || text == "" {

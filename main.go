@@ -12,6 +12,9 @@ const (
 	isDebug = false // 控制调试信息的显示
 )
 
+// 全局配置变量
+var globalConfig Config
+
 // 消息结构
 type Message struct {
 	Role             string      `json:"role"`
@@ -45,17 +48,18 @@ type Response struct {
 
 func main() {
 	// 读取配置文件
-	config, err := loadConfig()
+	var err error
+	globalConfig, err = loadConfig()
 
 	// 从配置中获取值
-	apiType := config.APIConfig.APIType
-	baseURL := config.APIConfig.BaseURL
-	apiKey := config.APIConfig.APIKey
-	modelID := config.APIConfig.Model
-	temperature := config.APIConfig.Temperature
-	maxTokens := config.APIConfig.MaxTokens
-	stream := config.APIConfig.Stream
-	thinking := config.APIConfig.Thinking
+	apiType := globalConfig.APIConfig.APIType
+	baseURL := globalConfig.APIConfig.BaseURL
+	apiKey := globalConfig.APIConfig.APIKey
+	modelID := globalConfig.APIConfig.Model
+	temperature := globalConfig.APIConfig.Temperature
+	maxTokens := globalConfig.APIConfig.MaxTokens
+	stream := globalConfig.APIConfig.Stream
+	thinking := globalConfig.APIConfig.Thinking
 
 	if err != nil {
 		fmt.Printf("Warning: Error loading config file: %v\n", err)
@@ -93,16 +97,27 @@ func main() {
 	// 打印帮助信息
 	printHelp()
 
+	// 打印初始命令提示符
+	fmt.Print("GarClaw /> ")
+
 	for {
 		// 处理心跳和定时任务的输出
+		outputMessages := false
 		for _, msg := range heartbeat.DrainOutput() {
-			fmt.Printf("[heartbeat] %s\n", msg)
+			fmt.Printf("\n[heartbeat] %s\n", msg)
+			outputMessages = true
 		}
 		for _, msg := range cronService.DrainOutput() {
-			fmt.Printf("[cron] %s\n", msg)
+			fmt.Printf("\n[cron] %s\n", msg)
+			outputMessages = true
 		}
 
-		fmt.Print("GarClaw /> ")
+		// 如果有输出，重新打印命令提示符
+		if outputMessages {
+			fmt.Print("GarClaw /> ")
+		}
+
+		// 处理用户输入
 		if !scanner.Scan() {
 			break
 		}
@@ -118,6 +133,8 @@ func main() {
 		// 处理命令
 		if strings.HasPrefix(query, "/") {
 			handleCommand(query, heartbeat, cronService, laneLock)
+			// 命令执行后重新打印提示符
+			fmt.Print("GarClaw /> ")
 			continue
 		}
 
@@ -134,6 +151,9 @@ func main() {
 		// 输出逻辑在CallModel函数中实时打印，这里不再重复打印
 		// 只打印一个空行作为分隔
 		fmt.Println()
+
+		// 处理完查询后重新打印命令提示符
+		fmt.Print("GarClaw /> ")
 	}
 }
 
