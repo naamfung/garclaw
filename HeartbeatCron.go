@@ -83,7 +83,7 @@ func NewHeartbeatRunner(laneLock *sync.Mutex) *HeartbeatRunner {
 		heartbeatPath: heartbeatPath,
 		laneLock:      laneLock,
 		interval:      30 * time.Minute, // 默认30分钟
-		activeHours:   [2]int{9, 22},    // 默认9:00-22:00
+		activeHours:   [2]int{0, 24},    // 默认9:00-22:00
 		maxQueueSize:  10,
 		lastRunAt:     time.Time{},
 		running:       false,
@@ -526,7 +526,7 @@ func (cs *CronService) runJob(job *CronJob) {
 
 		if output != "" && status != "skipped" {
 			cs.queueLock.Lock()
-			cs.outputQueue = append(cs.outputQueue, fmt.Sprintf("[%s] %s", job.Name, output))
+			cs.outputQueue = append(cs.outputQueue, fmt.Sprintf("[%s] [%s] %s", job.Name, now.Format("15:04:05"), output))
 			cs.queueLock.Unlock()
 		}
 	}()
@@ -690,12 +690,4 @@ func (cs *CronService) Stop() {
 	if cs.watcher != nil {
 		cs.watcher.Close()
 	}
-}
-
-// 辅助函数：获取最小值
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
