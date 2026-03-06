@@ -11,9 +11,11 @@ import (
 	"time"
 )
 
-// 全局 HTTP 客户端
-var httpClient = &http.Client{
-	Timeout: 10 * time.Minute, // 如DesspSeek的默认超时时间就是10分钟
+// 创建 HTTP 客户端
+func createHTTPClient(timeout int) *http.Client {
+	return &http.Client{
+		Timeout: time.Duration(timeout) * time.Minute,
+	}
 }
 
 // StreamReplacer 用于流式文本替换（最长匹配）
@@ -292,7 +294,7 @@ func prepareRequestData(messages []Message, apiType, baseURL, modelID string, te
 }
 
 // 发送请求
-func sendRequest(data map[string]interface{}, endpoint, apiKey, apiType string) (*http.Response, error) {
+func sendRequest(data map[string]interface{}, endpoint, apiKey, apiType string, timeout int) (*http.Response, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request data: %w", err)
@@ -317,6 +319,8 @@ func sendRequest(data map[string]interface{}, endpoint, apiKey, apiType string) 
 		fmt.Printf("Request data: %v\n", data)
 	}
 
+	// 使用配置的超时时间创建HTTP客户端
+	httpClient := createHTTPClient(timeout)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		if isDebug {
@@ -760,7 +764,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 	}
 
 	// 发送请求
-	resp, err := sendRequest(data, endpoint, apiKey, apiType)
+	resp, err := sendRequest(data, endpoint, apiKey, apiType, globalConfig.APIConfig.Timeout)
 	if err != nil {
 		return Response{}, err
 	}

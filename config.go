@@ -30,6 +30,7 @@ type Config struct {
 		MaxTokens   int     `json:"max_tokens"`
 		Stream      bool    `json:"stream"`
 		Thinking    bool    `json:"thinking"`
+		Timeout     int     `json:"timeout"` // 超时时间（分钟）
 	} `json:"api_config"`
 }
 
@@ -152,6 +153,15 @@ func loadConfig() (Config, error) {
 			} else if thinking, ok := apiConfigMap["Thinking"].(bool); ok {
 				config.APIConfig.Thinking = thinking
 			}
+
+			// 设置默认值为 10 分钟
+			config.APIConfig.Timeout = 10
+			// 如果配置文件中有 timeout 字段，则覆盖默认值
+			if timeout, ok := apiConfigMap["timeout"].(float64); ok {
+				config.APIConfig.Timeout = int(timeout)
+			} else if timeout, ok := apiConfigMap["Timeout"].(float64); ok {
+				config.APIConfig.Timeout = int(timeout)
+			}
 		}
 	}
 
@@ -231,6 +241,17 @@ func loadConfig() (Config, error) {
 		if thinkingVal, err := strconv.ParseBool(thinkingStr); err == nil {
 			config.APIConfig.Thinking = thinkingVal
 		}
+	}
+
+	// Timeout
+	if timeoutStr := os.Getenv("TIMEOUT"); timeoutStr != "" {
+		if timeout, err := strconv.Atoi(timeoutStr); err == nil {
+			config.APIConfig.Timeout = timeout
+		}
+	}
+	// 默认值
+	if config.APIConfig.Timeout == 0 {
+		config.APIConfig.Timeout = 10 // 默认值 10 分钟
 	}
 
 	// 打印解析后的配置
