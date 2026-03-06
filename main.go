@@ -102,18 +102,26 @@ func main() {
 
 	for {
 		// 处理心跳和定时任务的输出
-		outputMessages := false
-		for _, msg := range heartbeat.DrainOutput() {
-			fmt.Printf("\n[heartbeat] %s\n", msg)
-			outputMessages = true
+		hasOutput := false
+
+		// 处理心跳输出
+		heartbeatMsgs := heartbeat.DrainOutput()
+		for _, msg := range heartbeatMsgs {
+			fmt.Println() // 先换行
+			fmt.Printf("[heartbeat] %s\n", msg)
+			hasOutput = true
 		}
-		for _, msg := range cronService.DrainOutput() {
-			fmt.Printf("\n[cron] %s\n", msg)
-			outputMessages = true
+
+		// 处理定时任务输出
+		cronMsgs := cronService.DrainOutput()
+		for _, msg := range cronMsgs {
+			fmt.Println() // 先换行
+			fmt.Printf("[cron] %s\n", msg)
+			hasOutput = true
 		}
 
 		// 如果有输出，重新打印命令提示符
-		if outputMessages {
+		if hasOutput {
 			fmt.Print("GarClaw /> ")
 		}
 
