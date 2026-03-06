@@ -169,6 +169,28 @@ func autoRecallMemories(query string) string {
 
 	// 搜索每日JSONL文件
 	memoryDir := "workspace/memory/daily"
+	// 确保memory目录存在
+	if err := os.MkdirAll(memoryDir, 0755); err != nil {
+		// 目录创建失败，只搜索MEMORY.md
+		matches := []string{}
+		// 搜索MEMORY.md
+		if text != "" {
+			for _, line := range strings.Split(text, "\n") {
+				if strings.Contains(strings.ToLower(line), strings.ToLower(query)) {
+					matches = append(matches, fmt.Sprintf("[MEMORY.md] %s", line))
+				}
+			}
+		}
+		// 限制返回结果数量
+		maxMatches := 3
+		if len(matches) > maxMatches {
+			matches = matches[:maxMatches]
+		}
+		if len(matches) > 0 {
+			return "\n\n### 相关记忆\n" + strings.Join(matches, "\n")
+		}
+		return ""
+	}
 	matches := []string{}
 
 	// 搜索MEMORY.md
