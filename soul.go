@@ -20,10 +20,20 @@ func NewSoulSystem(workspaceDir string) *SoulSystem {
 	}
 }
 
-// Load 加载灵魂信息
+// Load 加载灵魂信息，不存在时生成模板
 func (ss *SoulSystem) Load() {
 	soulPath := filepath.Join(ss.workspaceDir, "SOUL.md")
-	if content, err := os.ReadFile(soulPath); err == nil && len(content) > 0 {
+	if _, err := os.Stat(soulPath); os.IsNotExist(err) {
+		// 确保目录存在
+		if err := os.MkdirAll(ss.workspaceDir, 0755); err != nil {
+			return
+		}
+		// 写入模板文件
+		if err := os.WriteFile(soulPath, []byte(SOUL_TEMPLATE), 0644); err != nil {
+			return
+		}
+		ss.soulContent = SOUL_TEMPLATE
+	} else if content, err := os.ReadFile(soulPath); err == nil && len(content) > 0 {
 		ss.soulContent = string(content)
 	}
 }

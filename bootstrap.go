@@ -30,11 +30,41 @@ func NewBootstrapLoader(workspaceDir string) *BootstrapLoader {
 	}
 }
 
-// loadFile 加载单个文件
+// loadFile 加载单个文件，不存在时生成模板
 func (bl *BootstrapLoader) loadFile(name string) string {
 	path := filepath.Join(bl.workspaceDir, name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return ""
+		// 生成模板文件
+		var template string
+		switch name {
+		case "SOUL.md":
+			template = SOUL_TEMPLATE
+		case "IDENTITY.md":
+			template = IDENTITY_TEMPLATE
+		case "TOOLS.md":
+			template = TOOLS_TEMPLATE
+		case "USER.md":
+			template = USER_TEMPLATE
+		case "HEARTBEAT.md":
+			template = HEARTBEAT_TEMPLATE
+		case "BOOTSTRAP.md":
+			template = BOOTSTRAP_TEMPLATE
+		case "AGENTS.md":
+			template = AGENTS_TEMPLATE
+		case "MEMORY.md":
+			template = MEMORY_TEMPLATE
+		default:
+			return ""
+		}
+		// 确保目录存在
+		if err := os.MkdirAll(bl.workspaceDir, 0755); err != nil {
+			return ""
+		}
+		// 写入模板文件
+		if err := os.WriteFile(path, []byte(template), 0644); err != nil {
+			return ""
+		}
+		return template
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
