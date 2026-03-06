@@ -48,6 +48,9 @@ type Response struct {
 }
 
 func main() {
+	// 加载 .env 文件
+	loadEnv()
+
 	// 读取配置文件
 	var err error
 	globalConfig, err = loadConfig()

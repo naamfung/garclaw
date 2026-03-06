@@ -1,13 +1,67 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/toon-format/toon-go"
 )
+
+// 加载 .env 文件
+func loadEnv() {
+	// 检查 .env 文件是否存在
+	envPath := ".env"
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		// .env 文件不存在，尝试在工作目录中查找
+		execPath, err := os.Executable()
+		if err == nil {
+			execDir := filepath.Dir(execPath)
+			envPath = filepath.Join(execDir, ".env")
+		}
+	}
+
+	// 读取 .env 文件
+	file, err := os.Open(envPath)
+	if err != nil {
+		// .env 文件不存在，不做处理
+		return
+	}
+	defer file.Close()
+
+	// 扫描文件内容
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// 跳过空行和注释
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// 解析键值对
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		// 移除引号
+		value = strings.Trim(value, `"'`)
+
+		// 设置环境变量
+		os.Setenv(key, value)
+	}
+
+	if scanner.Err() != nil {
+		fmt.Printf("Error scanning .env file: %v\n", scanner.Err())
+	}
+}
 
 // 配置
 const (

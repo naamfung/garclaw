@@ -101,10 +101,61 @@ func (m *MailChannel) Send(to string, text string, kwargs map[string]interface{}
 	message += text
 
 	// 连接到 SMTP 服务器
-	auth := smtp.PlainAuth("", m.Username, m.Password, m.SMTPHost)
 	serverAddr := fmt.Sprintf("%s:%s", m.SMTPHost, m.SMTPPort)
 
-	err := smtp.SendMail(serverAddr, auth, m.From, []string{to}, []byte(message))
+	var err error
+	// 如果有认证信息，使用认证
+	if m.Username != "" && m.Password != "" {
+		auth := smtp.PlainAuth("", m.Username, m.Password, m.SMTPHost)
+		err = smtp.SendMail(serverAddr, auth, m.From, []string{to}, []byte(message))
+	} else {
+		// 没有认证信息，使用无认证方式
+		// 直接连接到 SMTP 服务器
+		c, err := smtp.Dial(serverAddr)
+		if err != nil {
+			fmt.Printf("Error dialing SMTP server: %v\n", err)
+			return false
+		}
+		defer c.Close()
+
+		// 设置发件人
+		if err = c.Mail(m.From); err != nil {
+			fmt.Printf("Error setting sender: %v\n", err)
+			return false
+		}
+
+		// 设置收件人
+		if err = c.Rcpt(to); err != nil {
+			fmt.Printf("Error setting recipient: %v\n", err)
+			return false
+		}
+
+		// 发送邮件内容
+		data, err := c.Data()
+		if err != nil {
+			fmt.Printf("Error getting data writer: %v\n", err)
+			return false
+		}
+
+		_, err = data.Write([]byte(message))
+		if err != nil {
+			fmt.Printf("Error writing message: %v\n", err)
+			return false
+		}
+
+		err = data.Close()
+		if err != nil {
+			fmt.Printf("Error closing data writer: %v\n", err)
+			return false
+		}
+
+		err = c.Quit()
+		if err != nil {
+			fmt.Printf("Error quitting SMTP session: %v\n", err)
+			return false
+		}
+	}
+
 	if err != nil {
 		fmt.Printf("Error sending email: %v\n", err)
 		return false
@@ -185,7 +236,8 @@ func InitializeChannels() *ChannelManager {
 		password := os.Getenv("SMTP_PASSWORD")
 		from := os.Getenv("SMTP_FROM")
 
-		if username != "" && password != "" && from != "" {
+		// 即使没有认证信息，也允许注册邮件通道（例如 MailHog）
+		if from != "" {
 			mailChannel := &MailChannel{
 				AccountID: "mail-primary",
 				SMTPHost:  smtpHost,
