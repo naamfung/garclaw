@@ -34,8 +34,25 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 		scanner := bufio.NewScanner(body)
 		scanner.Buffer(make([]byte, 64*1024), 10*1024*1024) // 10MB max
 
+		// 从全局配置中获取超时设置
+		timeoutMinutes := 30 // 默认30分钟
+		if globalConfig.APIConfig.Timeout > 0 {
+			timeoutMinutes = globalConfig.APIConfig.Timeout
+		}
+		timeout := time.Duration(timeoutMinutes) * time.Minute
+		lastActivity := time.Now()
+
 		for scanner.Scan() {
+			// 检查是否超时
+			if time.Since(lastActivity) > timeout {
+				chunkChan <- StreamChunk{Error: fmt.Errorf("stream timeout: no activity for %v", timeout)}
+				return
+			}
+
 			line := scanner.Text()
+
+			// 更新最后活动时间
+			lastActivity = time.Now()
 
 			// 调试模式：收集响应行
 			if isDebug {
