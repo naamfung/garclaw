@@ -165,6 +165,19 @@ func autoRecallMemories(query string) string {
 	text := ""
 	if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
 		text = string(mem)
+	} else if os.IsNotExist(err) || (err == nil && len(mem) == 0) {
+		// 文件不存在或为空，创建模板文件
+		if err := os.MkdirAll("workspace", 0755); err != nil {
+			fmt.Printf("Failed to create directory workspace: %v\n", err)
+		} else {
+			template := MEMORY_TEMPLATE
+			if err := os.WriteFile(memPath, []byte(template), 0644); err != nil {
+				fmt.Printf("Failed to write template file %s: %v\n", memPath, err)
+			} else {
+				text = template
+				fmt.Printf("Created template file %s\n", memPath)
+			}
+		}
 	}
 
 	// 搜索每日JSONL文件
