@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -157,14 +158,82 @@ func applyReplacements(text string) string {
 	return string(result)
 }
 
+// 自动搜索相关记忆
+func autoRecallMemories(query string) string {
+	// 搜索MEMORY.md文件
+	memPath := "workspace/MEMORY.md"
+	text := ""
+	if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
+		text = string(mem)
+	}
+
+	// 搜索每日JSONL文件
+	memoryDir := "workspace/memory/daily"
+	matches := []string{}
+
+	// 搜索MEMORY.md
+	if text != "" {
+		for _, line := range strings.Split(text, "\n") {
+			if strings.Contains(strings.ToLower(line), strings.ToLower(query)) {
+				matches = append(matches, fmt.Sprintf("[MEMORY.md] %s", line))
+			}
+		}
+	}
+
+	// 搜索每日JSONL文件
+	if _, err := os.Stat(memoryDir); err == nil {
+		files, err := os.ReadDir(memoryDir)
+		if err == nil {
+			for _, file := range files {
+				if strings.HasSuffix(file.Name(), ".jsonl") {
+					filePath := filepath.Join(memoryDir, file.Name())
+					data, err := os.ReadFile(filePath)
+					if err == nil {
+						lines := strings.Split(string(data), "\n")
+						for _, line := range lines {
+							if line == "" {
+								continue
+							}
+							var entry map[string]interface{}
+							if err := json.Unmarshal([]byte(line), &entry); err == nil {
+								if content, ok := entry["content"].(string); ok {
+									if strings.Contains(strings.ToLower(content), strings.ToLower(query)) {
+										matches = append(matches, fmt.Sprintf("[%s] %s", file.Name(), content))
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 限制返回结果数量
+	maxMatches := 3
+	if len(matches) > maxMatches {
+		matches = matches[:maxMatches]
+	}
+
+	if len(matches) > 0 {
+		return "\n\n### 相关记忆\n" + strings.Join(matches, "\n")
+	}
+
+	return ""
+}
+
 // 生成系统提示
-func generateSystemPrompt(apiType string) string {
+func generateSystemPrompt(apiType string, userQuery string) string {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 	toolOrFunction := "tool"
 	if apiType == "openai" {
 		toolOrFunction = "function"
 	}
-	return fmt.Sprintf("当前系统时间：%s\n", currentTime) + strings.ReplaceAll(SYSTEM_PROMPT, "{{tool_or_function}}", toolOrFunction)
+
+	// 自动搜索相关记忆
+	memoryContext := autoRecallMemories(userQuery)
+
+	return fmt.Sprintf("当前系统时间：%s\n", currentTime) + strings.ReplaceAll(SYSTEM_PROMPT, "{{tool_or_function}}", toolOrFunction) + memoryContext
 }
 
 // 转换为Ollama格式
@@ -216,8 +285,19 @@ func prepareRequestData(messages []Message, apiType, baseURL, modelID string, te
 	var data map[string]interface{}
 	var endpoint string
 
+	// 提取用户查询
+	userQuery := ""
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			if content, ok := messages[i].Content.(string); ok {
+				userQuery = content
+				break
+			}
+		}
+	}
+
 	// 生成系统提示
-	systemPrompt := generateSystemPrompt(apiType)
+	systemPrompt := generateSystemPrompt(apiType, userQuery)
 
 	switch apiType {
 	case "anthropic":

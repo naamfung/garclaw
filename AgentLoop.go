@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/toon-format/toon-go"
 )
@@ -206,24 +208,63 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if contentStr == "" {
 			content = "Error: Empty content in memory_write tool call"
 		} else {
-			memPath := "workspace/MEMORY.md"
-			// 读取现有内容
-			existing := ""
-			if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
-				existing = string(mem)
+			// 确保memory目录存在
+			memoryDir := "workspace/memory/daily"
+			if err := os.MkdirAll(memoryDir, 0755); err != nil {
+				content = "Error creating memory directory: " + err.Error()
+				fmt.Println(content)
+				return ToolResult{
+					Type:      "tool_result",
+					ToolUseID: toolID,
+					Content:   content,
+				}, usedTodo
 			}
-			// 追加新内容
-			updated := existing
-			if updated != "" {
-				updated += "\n\n"
+
+			// 写入每日JSONL文件
+			today := time.Now().Format("2006-01-02")
+			jsonlPath := filepath.Join(memoryDir, today+".jsonl")
+
+			entry := map[string]interface{}{
+				"ts":       time.Now().Unix(),
+				"content":  contentStr,
+				"category": argsMap["category"],
 			}
-			updated += contentStr
-			// 写入文件
-			if err := os.WriteFile(memPath, []byte(updated), 0644); err != nil {
-				content = "Error: " + err.Error()
-			} else {
-				content = "Successfully wrote " + strconv.Itoa(len(contentStr)) + " characters to memory"
+
+			data, err := json.Marshal(entry)
+			if err != nil {
+				content = "Error marshaling memory entry: " + err.Error()
+				fmt.Println(content)
+				return ToolResult{
+					Type:      "tool_result",
+					ToolUseID: toolID,
+					Content:   content,
+				}, usedTodo
 			}
+
+			f, err := os.OpenFile(jsonlPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				content = "Error opening memory file: " + err.Error()
+				fmt.Println(content)
+				return ToolResult{
+					Type:      "tool_result",
+					ToolUseID: toolID,
+					Content:   content,
+				}, usedTodo
+			}
+			defer f.Close()
+
+			_, err = f.WriteString(string(data) + "\n")
+			if err != nil {
+				content = "Error writing to memory file: " + err.Error()
+				fmt.Println(content)
+				return ToolResult{
+					Type:      "tool_result",
+					ToolUseID: toolID,
+					Content:   content,
+				}, usedTodo
+			}
+
+			content = "Successfully wrote " + strconv.Itoa(len(contentStr)) + " characters to memory"
 			fmt.Println(content)
 		}
 
@@ -232,34 +273,66 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if query == "" {
 			content = "Error: Empty query in memory_search tool call"
 		} else {
+			// 搜索MEMORY.md文件
 			memPath := "workspace/MEMORY.md"
-			// 读取文件内容
 			text := ""
 			if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
 				text = string(mem)
 			}
-			if text == "" {
-				content = "No memories found."
-			} else {
-				// 搜索匹配的行
-				matches := []string{}
+
+			// 搜索每日JSONL文件
+			memoryDir := "workspace/memory/daily"
+			matches := []string{}
+
+			// 搜索MEMORY.md
+			if text != "" {
 				for _, line := range strings.Split(text, "\n") {
 					if strings.Contains(strings.ToLower(line), strings.ToLower(query)) {
-						matches = append(matches, line)
+						matches = append(matches, fmt.Sprintf("[MEMORY.md] %s", line))
 					}
 				}
-				if len(matches) == 0 {
-					content = "No memories matching '" + query + "'."
-				} else {
-					// 限制返回结果数量
-					maxMatches := 10
-					if len(matches) > maxMatches {
-						matches = matches[:maxMatches]
+			}
+
+			// 搜索每日JSONL文件
+			if _, err := os.Stat(memoryDir); err == nil {
+				files, err := os.ReadDir(memoryDir)
+				if err == nil {
+					for _, file := range files {
+						if strings.HasSuffix(file.Name(), ".jsonl") {
+							filePath := filepath.Join(memoryDir, file.Name())
+							data, err := os.ReadFile(filePath)
+							if err == nil {
+								lines := strings.Split(string(data), "\n")
+								for _, line := range lines {
+									if line == "" {
+										continue
+									}
+									var entry map[string]interface{}
+									if err := json.Unmarshal([]byte(line), &entry); err == nil {
+										if content, ok := entry["content"].(string); ok {
+											if strings.Contains(strings.ToLower(content), strings.ToLower(query)) {
+												matches = append(matches, fmt.Sprintf("[%s] %s", file.Name(), content))
+											}
+										}
+									}
+								}
+							}
+						}
 					}
-					content = "Search results:\n"
-					for i, match := range matches {
-						content += fmt.Sprintf("%d: %s\n", i+1, match)
-					}
+				}
+			}
+
+			if len(matches) == 0 {
+				content = "No memories matching '" + query + "'."
+			} else {
+				// 限制返回结果数量
+				maxMatches := 10
+				if len(matches) > maxMatches {
+					matches = matches[:maxMatches]
+				}
+				content = "Search results:\n"
+				for i, match := range matches {
+					content += fmt.Sprintf("%d: %s\n", i+1, match)
 				}
 			}
 			fmt.Println("Memory search completed")
