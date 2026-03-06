@@ -166,9 +166,10 @@ func main() {
 		sessionManager.SaveMessage(userMsg)
 
 		// 检查并处理上下文溢出
-		history, err := sessionManager.CheckOverflow(history)
-		if err != nil {
-			fmt.Printf("Error checking overflow: %v\n", err)
+		var overflowErr error
+		history, overflowErr = sessionManager.CheckOverflow(history)
+		if overflowErr != nil {
+			fmt.Printf("Error checking overflow: %v\n", overflowErr)
 		}
 
 		// 调用 AgentLoop
