@@ -243,6 +243,32 @@ func getTools(apiType string) interface{} {
 				},
 			},
 		},
+		{
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":        "calculate",
+				"description": "Perform arithmetic operations on two numbers. Use this when the user asks to calculate or compute mathematical expressions.",
+				"parameters": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"operation": map[string]interface{}{
+							"type":        "string",
+							"description": "The arithmetic operation to perform: add, subtract, multiply, divide.",
+						},
+						"num1": map[string]interface{}{
+							"type":        "number",
+							"description": "The first number for the operation.",
+						},
+						"num2": map[string]interface{}{
+							"type":        "number",
+							"description": "The second number for the operation.",
+						},
+					},
+					"required":             []string{"operation", "num1", "num2"},
+					"additionalProperties": false,
+				},
+			},
+		},
 	}
 
 default:
@@ -449,6 +475,29 @@ default:
 					},
 				},
 				"required":             []string{"query"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			"name":        "calculate",
+			"description": "Perform arithmetic operations on two numbers. Use this when the user asks to calculate or compute mathematical expressions.",
+			"input_schema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"operation": map[string]interface{}{
+						"type":        "string",
+						"description": "The arithmetic operation to perform: add, subtract, multiply, divide.",
+					},
+					"num1": map[string]interface{}{
+						"type":        "number",
+						"description": "The first number for the operation.",
+					},
+					"num2": map[string]interface{}{
+						"type":        "number",
+						"description": "The second number for the operation.",
+					},
+				},
+				"required":             []string{"operation", "num1", "num2"},
 				"additionalProperties": false,
 			},
 		},

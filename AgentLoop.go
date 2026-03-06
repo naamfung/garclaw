@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -336,6 +337,43 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 				}
 			}
 			fmt.Println("Memory search completed")
+		}
+
+	case "calculate":
+		operation, _ := argsMap["operation"].(string)
+		num1Float, _ := argsMap["num1"].(float64)
+		num2Float, _ := argsMap["num2"].(float64)
+
+		if operation == "" {
+			content = "Error: Empty operation"
+		} else {
+			var result float64
+			var err error
+
+			switch strings.ToLower(operation) {
+			case "add":
+				result = num1Float + num2Float
+			case "subtract":
+				result = num1Float - num2Float
+			case "multiply":
+				result = num1Float * num2Float
+			case "divide":
+				if num2Float == 0 {
+					err = errors.New("division by zero")
+				} else {
+					result = num1Float / num2Float
+				}
+			default:
+				err = errors.New("invalid operation, must be: add, subtract, multiply, divide")
+			}
+
+			if err != nil {
+				content = "Error: " + err.Error()
+			} else {
+				content = fmt.Sprintf("%.6f", result)
+			}
+
+			fmt.Printf("Calculated: %.6f %s %.6f = %s\n", num1Float, operation, num2Float, content)
 		}
 
 	default:
