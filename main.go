@@ -92,6 +92,10 @@ func main() {
 	cronService := NewCronService()
 	defer cronService.Stop()
 
+	// 初始化通道管理器
+	channelManager := InitializeChannels()
+	defer channelManager.CloseAll()
+
 	// 初始化会话管理器
 	sessionFile := filepath.Join(workspaceDir, "session.jsonl")
 	sessionManager := NewSessionManager(sessionFile, 50, 30) // 最大消息数 50，总结阈值 30
@@ -148,7 +152,7 @@ func main() {
 
 		// 处理命令
 		if strings.HasPrefix(query, "/") {
-			handleCommand(query, heartbeat, cronService, laneLock)
+			handleCommand(query, heartbeat, cronService, channelManager, laneLock)
 			// 命令执行后，循环会自动重新打印提示符
 			continue
 		}
@@ -202,6 +206,7 @@ func printHelp() {
 	fmt.Println("  /trigger           -- Force heartbeat now")
 	fmt.Println("  /cron              -- List cron jobs")
 	fmt.Println("  /cron-trigger <id> -- Trigger a cron job")
+	fmt.Println("  /channels          -- List registered channels")
 	fmt.Println("  /lanes             -- Show lane lock status")
 	fmt.Println("  /help              -- Show this help")
 	fmt.Println("  q / exit           -- Exit")
@@ -209,7 +214,7 @@ func printHelp() {
 }
 
 // 处理命令
-func handleCommand(cmd string, heartbeat *HeartbeatRunner, cronService *CronService, laneLock *sync.Mutex) {
+func handleCommand(cmd string, heartbeat *HeartbeatRunner, cronService *CronService, channelManager *ChannelManager, laneLock *sync.Mutex) {
 	parts := strings.Split(cmd, " ")
 	command := strings.ToLower(parts[0])
 
@@ -261,6 +266,16 @@ func handleCommand(cmd string, heartbeat *HeartbeatRunner, cronService *CronServ
 		// 处理触发后的输出
 		for _, msg := range cronService.DrainOutput() {
 			fmt.Printf("[cron] %s\n", msg)
+		}
+	case "/channels":
+		channels := channelManager.ListChannels()
+		if len(channels) == 0 {
+			fmt.Println("  No channels registered.")
+			return
+		}
+		fmt.Println("  Registered channels:")
+		for _, ch := range channels {
+			fmt.Printf("  - %s\n", ch)
 		}
 	case "/lanes":
 		locked := !laneLock.TryLock()
