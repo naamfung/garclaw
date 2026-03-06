@@ -518,11 +518,6 @@ func handleOpenAIResponse(resp *http.Response) (Response, error) {
 			fmt.Printf("Message structure: %s\n", string(messageJson))
 		}
 
-		// 打印文本内容（如果有） - 这是为了让用户看到模型的回复
-		if content, ok := choice.Message.Content.(string); ok && content != "" {
-			fmt.Println(content)
-		}
-
 		// 检查是否有tool_calls字段（标准OpenAI格式）
 		if len(choice.Message.ToolCalls) > 0 {
 			var content []map[string]interface{}
@@ -596,11 +591,6 @@ func handleOllamaResponse(resp *http.Response) (Response, error) {
 		return Response{}, fmt.Errorf("failed to decode Ollama response: %w", err)
 	}
 
-	// 打印文本内容
-	if content, ok := ollamaResp.Message.Content.(string); ok && content != "" {
-		fmt.Println(content)
-	}
-
 	result.Content = ollamaResp.Message.Content
 	if contentStr, ok := result.Content.(string); ok {
 		result.Content = applyReplacements(contentStr)
@@ -644,7 +634,6 @@ func handleAnthropicResponse(resp *http.Response) (Response, error) {
 
 	for _, item := range anthropicResp.Content {
 		if item.Type == "text" && item.Text != "" {
-			fmt.Println(item.Text)
 			if content == nil {
 				content = item.Text
 			} else if str, ok := content.(string); ok {
