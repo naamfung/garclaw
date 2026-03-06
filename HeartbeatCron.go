@@ -204,7 +204,7 @@ func (h *HeartbeatRunner) execute() {
 		config.APIConfig.Model,
 		config.APIConfig.Temperature,
 		config.APIConfig.MaxTokens,
-		config.APIConfig.Stream,
+		false, // 禁用流式输出，避免直接打印到终端
 		config.APIConfig.Thinking,
 	)
 	if err != nil {
@@ -313,7 +313,7 @@ func (h *HeartbeatRunner) Trigger() string {
 		config.APIConfig.Model,
 		config.APIConfig.Temperature,
 		config.APIConfig.MaxTokens,
-		config.APIConfig.Stream,
+		false, // 禁用流式输出，避免直接打印到终端
 		config.APIConfig.Thinking,
 	)
 	if err != nil {
@@ -631,7 +631,7 @@ func (cs *CronService) runJob(job *CronJob) {
 			config.APIConfig.Model,
 			config.APIConfig.Temperature,
 			config.APIConfig.MaxTokens,
-			config.APIConfig.Stream,
+			false, // 禁用流式输出，避免直接打印到终端
 			config.APIConfig.Thinking,
 		)
 		if err != nil {

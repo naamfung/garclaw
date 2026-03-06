@@ -133,3 +133,4 @@
 {"job_id":"test-job","output_preview":"Cron job test-job executed","run_at":"2026-03-06T11:05:00+08:00","status":"ok"}
 {"job_id":"test-job","output_preview":"Cron job test-job executed","run_at":"2026-03-06T11:10:00+08:00","status":"ok"}
 {"job_id":"test-job","output_preview":"Cron job test-job executed","run_at":"2026-03-06T11:20:00+08:00","status":"ok"}
+{"job_id":"test-job","output_preview":"Cron job test-job executed","run_at":"2026-03-06T11:25:00+08:00","status":"ok"}
