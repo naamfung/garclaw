@@ -147,12 +147,19 @@ func loadConfig() (Config, error) {
 
 	// 手动解析配置
 	var apiConfig interface{}
+	var mailConfig interface{}
 	var ok bool
 
 	// 尝试解析小写形式的 api_config
 	if apiConfig, ok = parsed.(map[string]interface{})["api_config"]; !ok {
 		// 如果失败，尝试解析大写形式的 APIConfig
 		apiConfig, ok = parsed.(map[string]interface{})["APIConfig"]
+	}
+
+	// 尝试解析小写形式的 mail_config
+	if mailConfig, ok = parsed.(map[string]interface{})["mail_config"]; !ok {
+		// 如果失败，尝试解析大写形式的 MailConfig
+		mailConfig, ok = parsed.(map[string]interface{})["MailConfig"]
 	}
 
 	if ok {
@@ -220,6 +227,25 @@ func loadConfig() (Config, error) {
 				config.APIConfig.Timeout = int(timeout)
 			} else if timeout, ok := apiConfigMap["Timeout"].(float64); ok {
 				config.APIConfig.Timeout = int(timeout)
+			}
+		}
+	}
+
+	// 解析邮件配置
+	if mailConfig, ok = parsed.(map[string]interface{})["mail_config"]; !ok {
+		// 如果失败，尝试解析大写形式的 MailConfig
+		mailConfig, ok = parsed.(map[string]interface{})["MailConfig"]
+	}
+
+	if ok {
+		if mailConfigMap, ok := mailConfig.(map[string]interface{}); ok {
+			// 设置默认值为 false
+			config.MailConfig.IsMailHog = false
+			// 如果配置文件中有 is_mailhog 字段，则覆盖默认值
+			if isMailHog, ok := mailConfigMap["is_mailhog"].(bool); ok {
+				config.MailConfig.IsMailHog = isMailHog
+			} else if isMailHog, ok := mailConfigMap["IsMailHog"].(bool); ok {
+				config.MailConfig.IsMailHog = isMailHog
 			}
 		}
 	}
@@ -311,6 +337,18 @@ func loadConfig() (Config, error) {
 	// 默认值
 	if config.APIConfig.Timeout == 0 {
 		config.APIConfig.Timeout = 10 // 默认值 10 分钟
+	}
+
+	// MailConfig
+	// IsMailHog
+	if isMailHogStr := os.Getenv("IS_MAILHOG"); isMailHogStr != "" {
+		if isMailHog, err := strconv.ParseBool(isMailHogStr); err == nil {
+			config.MailConfig.IsMailHog = isMailHog
+		}
+	}
+	// 默认值
+	if !config.MailConfig.IsMailHog {
+		config.MailConfig.IsMailHog = false // 默认不是MailHog环境
 	}
 
 	// 打印解析后的配置

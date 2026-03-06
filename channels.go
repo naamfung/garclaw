@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/smtp"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -71,6 +72,7 @@ type MailChannel struct {
 	Username  string
 	Password  string
 	From      string
+	IsMailHog bool // 是否为MailHog测试环境
 }
 
 // Name 返回通道名称
@@ -121,9 +123,14 @@ func (m *MailChannel) Send(to string, text string, kwargs map[string]interface{}
 	// 尝试 TLS 连接
 	tlsSuccess := true
 	if err = c.StartTLS(tlsConfig); err != nil {
-		fmt.Printf("Warning: Failed to start TLS, continuing without encryption: %v\n", err)
-		tlsSuccess = false
-		// 不返回错误，继续使用非 TLS 连接
+		if m.IsMailHog {
+			fmt.Printf("Warning: Failed to start TLS, continuing without encryption: %v\n", err)
+			tlsSuccess = false
+			// 不返回错误，继续使用非 TLS 连接
+		} else {
+			fmt.Printf("Error starting TLS: %v\n", err)
+			return false
+		}
 	}
 
 	// 如果有认证信息且 TLS 成功，使用认证
@@ -249,6 +256,14 @@ func InitializeChannels() *ChannelManager {
 		password := os.Getenv("SMTP_PASSWORD")
 		from := os.Getenv("SMTP_FROM")
 
+		// 检查是否为MailHog环境
+		isMailHog := false
+		if isMailHogStr := os.Getenv("IS_MAILHOG"); isMailHogStr != "" {
+			if val, err := strconv.ParseBool(isMailHogStr); err == nil {
+				isMailHog = val
+			}
+		}
+
 		// 即使没有认证信息，也允许注册邮件通道（例如 MailHog）
 		if from != "" {
 			mailChannel := &MailChannel{
@@ -258,6 +273,7 @@ func InitializeChannels() *ChannelManager {
 				Username:  username,
 				Password:  password,
 				From:      from,
+				IsMailHog: isMailHog,
 			}
 			cm.Register(mailChannel)
 
@@ -266,9 +282,10 @@ func InitializeChannels() *ChannelManager {
 				Channel:   "mail",
 				AccountID: "mail-primary",
 				Config: map[string]interface{}{
-					"smtp_host": smtpHost,
-					"smtp_port": smtpPort,
-					"from":      from,
+					"smtp_host":  smtpHost,
+					"smtp_port":  smtpPort,
+					"from":       from,
+					"is_mailhog": isMailHog,
 				},
 			})
 		}
