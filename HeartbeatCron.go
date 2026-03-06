@@ -154,8 +154,24 @@ func (h *HeartbeatRunner) buildHeartbeatPrompt() (string, string) {
 	// 加载记忆
 	memPath := filepath.Join(h.workspace, "MEMORY.md")
 	memContent := ""
-	if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
-		memContent = fmt.Sprintf("## Known Context\n\n%s\n\n", string(mem))
+
+	// 检查 MEMORY.md 文件是否存在，如果不存在则创建
+	if _, err := os.Stat(memPath); os.IsNotExist(err) {
+		// 创建空的 MEMORY.md 文件
+		if err := os.WriteFile(memPath, []byte(""), 0644); err != nil {
+			h.queueLock.Lock()
+			h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error creating MEMORY.md: %v", err))
+			h.queueLock.Unlock()
+		} else {
+			h.queueLock.Lock()
+			h.outputQueue = append(h.outputQueue, "Created MEMORY.md file")
+			h.queueLock.Unlock()
+		}
+	} else if err == nil {
+		// 文件存在，读取内容
+		if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
+			memContent = fmt.Sprintf("## Known Context\n\n%s\n\n", string(mem))
+		}
 	}
 
 	// 构建额外信息
@@ -204,7 +220,7 @@ func (h *HeartbeatRunner) execute() {
 		config.APIConfig.Model,
 		config.APIConfig.Temperature,
 		config.APIConfig.MaxTokens,
-		false, // 禁用流式输出，避免直接打印到终端
+		false, // 心跳禁用流式输出，避免直接打印到终端
 		config.APIConfig.Thinking,
 	)
 	if err != nil {

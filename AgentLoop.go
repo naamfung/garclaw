@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/toon-format/toon-go"
 )
@@ -197,6 +199,70 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 			}
 			fmt.Println(content)
 			usedTodo = true
+		}
+
+	case "memory_write":
+		contentStr, _ := argsMap["content"].(string)
+		if contentStr == "" {
+			content = "Error: Empty content in memory_write tool call"
+		} else {
+			memPath := "workspace/MEMORY.md"
+			// 读取现有内容
+			existing := ""
+			if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
+				existing = string(mem)
+			}
+			// 追加新内容
+			updated := existing
+			if updated != "" {
+				updated += "\n\n"
+			}
+			updated += contentStr
+			// 写入文件
+			if err := os.WriteFile(memPath, []byte(updated), 0644); err != nil {
+				content = "Error: " + err.Error()
+			} else {
+				content = "Successfully wrote " + strconv.Itoa(len(contentStr)) + " characters to memory"
+			}
+			fmt.Println(content)
+		}
+
+	case "memory_search":
+		query, _ := argsMap["query"].(string)
+		if query == "" {
+			content = "Error: Empty query in memory_search tool call"
+		} else {
+			memPath := "workspace/MEMORY.md"
+			// 读取文件内容
+			text := ""
+			if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
+				text = string(mem)
+			}
+			if text == "" {
+				content = "No memories found."
+			} else {
+				// 搜索匹配的行
+				matches := []string{}
+				for _, line := range strings.Split(text, "\n") {
+					if strings.Contains(strings.ToLower(line), strings.ToLower(query)) {
+						matches = append(matches, line)
+					}
+				}
+				if len(matches) == 0 {
+					content = "No memories matching '" + query + "'."
+				} else {
+					// 限制返回结果数量
+					maxMatches := 10
+					if len(matches) > maxMatches {
+						matches = matches[:maxMatches]
+					}
+					content = "Search results:\n"
+					for i, match := range matches {
+						content += fmt.Sprintf("%d: %s\n", i+1, match)
+					}
+				}
+			}
+			fmt.Println("Memory search completed")
 		}
 
 	default:
