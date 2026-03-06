@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/smtp"
 	"os"
@@ -104,60 +105,70 @@ func (m *MailChannel) Send(to string, text string, kwargs map[string]interface{}
 	serverAddr := fmt.Sprintf("%s:%s", m.SMTPHost, m.SMTPPort)
 
 	var err error
+	// 使用 TLS 加密连接
+	// 创建 TLS 配置
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true, // 跳过证书验证，适用于测试环境
+		ServerName:         m.SMTPHost,
+	}
+
+	// 直接连接到 SMTP 服务器
+	c, err := smtp.Dial(serverAddr)
+	if err != nil {
+		fmt.Printf("Error dialing SMTP server: %v\n", err)
+		return false
+	}
+	defer c.Close()
+
+	// 升级到 TLS 连接
+	if err = c.StartTLS(tlsConfig); err != nil {
+		fmt.Printf("Error starting TLS: %v\n", err)
+		return false
+	}
+
 	// 如果有认证信息，使用认证
 	if m.Username != "" && m.Password != "" {
 		auth := smtp.PlainAuth("", m.Username, m.Password, m.SMTPHost)
-		err = smtp.SendMail(serverAddr, auth, m.From, []string{to}, []byte(message))
-	} else {
-		// 没有认证信息，使用无认证方式
-		// 直接连接到 SMTP 服务器
-		c, err := smtp.Dial(serverAddr)
-		if err != nil {
-			fmt.Printf("Error dialing SMTP server: %v\n", err)
-			return false
-		}
-		defer c.Close()
-
-		// 设置发件人
-		if err = c.Mail(m.From); err != nil {
-			fmt.Printf("Error setting sender: %v\n", err)
-			return false
-		}
-
-		// 设置收件人
-		if err = c.Rcpt(to); err != nil {
-			fmt.Printf("Error setting recipient: %v\n", err)
-			return false
-		}
-
-		// 发送邮件内容
-		data, err := c.Data()
-		if err != nil {
-			fmt.Printf("Error getting data writer: %v\n", err)
-			return false
-		}
-
-		_, err = data.Write([]byte(message))
-		if err != nil {
-			fmt.Printf("Error writing message: %v\n", err)
-			return false
-		}
-
-		err = data.Close()
-		if err != nil {
-			fmt.Printf("Error closing data writer: %v\n", err)
-			return false
-		}
-
-		err = c.Quit()
-		if err != nil {
-			fmt.Printf("Error quitting SMTP session: %v\n", err)
+		if err = c.Auth(auth); err != nil {
+			fmt.Printf("Error authenticating: %v\n", err)
 			return false
 		}
 	}
 
+	// 设置发件人
+	if err = c.Mail(m.From); err != nil {
+		fmt.Printf("Error setting sender: %v\n", err)
+		return false
+	}
+
+	// 设置收件人
+	if err = c.Rcpt(to); err != nil {
+		fmt.Printf("Error setting recipient: %v\n", err)
+		return false
+	}
+
+	// 发送邮件内容
+	data, err := c.Data()
 	if err != nil {
-		fmt.Printf("Error sending email: %v\n", err)
+		fmt.Printf("Error getting data writer: %v\n", err)
+		return false
+	}
+
+	_, err = data.Write([]byte(message))
+	if err != nil {
+		fmt.Printf("Error writing message: %v\n", err)
+		return false
+	}
+
+	err = data.Close()
+	if err != nil {
+		fmt.Printf("Error closing data writer: %v\n", err)
+		return false
+	}
+
+	err = c.Quit()
+	if err != nil {
+		fmt.Printf("Error quitting SMTP session: %v\n", err)
 		return false
 	}
 
