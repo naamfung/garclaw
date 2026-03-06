@@ -14,7 +14,7 @@ import (
 	"github.com/toon-format/toon-go"
 )
 
-// evaluateExpression 解析和计算数学表达式
+// evaluateExpression 解析与计算数学表达式
 func evaluateExpression(expr string) (float64, error) {
 	// 移除表达式中的空格
 	expr = strings.ReplaceAll(expr, " ", "")
@@ -91,7 +91,7 @@ func evaluateExpression(expr string) (float64, error) {
 		return result, nil
 	}
 
-	// 解析因子（处理数字和括号）
+	// 解析因子（处理数字与括号）
 	parseFactor = func(p *parser) (float64, error) {
 		if p.pos >= len(p.expr) {
 			return 0, errors.New("invalid expression: unexpected end")
@@ -154,7 +154,7 @@ func evaluateExpression(expr string) (float64, error) {
 	return result, nil
 }
 
-// executeTool 执行单个工具调用，返回 ToolResult 和是否使用了 todo
+// executeTool 执行单个工具调用，返回 ToolResult 与是否使用了 todo
 func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolResult, bool) {
 	usedTodo := false
 	var content string
