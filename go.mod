@@ -9,6 +9,13 @@ require (
 )
 
 require (
+	github.com/emersion/go-imap v1.2.1 // indirect
+	github.com/emersion/go-message v0.18.2 // indirect
+	github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21 // indirect
+	golang.org/x/text v0.14.0 // indirect
+)
+
+require (
 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect

@@ -7,6 +7,9 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/emersion/go-imap"
+	"github.com/emersion/go-imap/client"
 )
 
 // InboundMessage 所有通道都规范化为此结构。Agent 循环只看到 InboundMessage。
@@ -66,13 +69,17 @@ func (c *CLIChannel) Close() {
 
 // MailChannel 邮件通道
 type MailChannel struct {
-	AccountID string
-	SMTPHost  string
-	SMTPPort  string
-	Username  string
-	Password  string
-	From      string
-	IsMailHog bool // 是否为MailHog测试环境
+	AccountID    string
+	SMTPHost     string
+	SMTPPort     string
+	Username     string
+	Password     string
+	From         string
+	IsMailHog    bool // 是否为MailHog测试环境
+	IMAPHost     string
+	IMAPPort     string
+	LastCheck    time.Time       // 上次检查邮件的时间
+	ProcessedIDs map[string]bool // 已处理的邮件ID
 }
 
 // Name 返回通道名称
@@ -82,8 +89,126 @@ func (m *MailChannel) Name() string {
 
 // Receive 接收邮件
 func (m *MailChannel) Receive() *InboundMessage {
-	// 邮件接收需要实现 IMAP 或 POP3 协议，这里暂时返回 nil
-	// 实际实现时需要定期检查邮件服务器
+	// 如果没有配置IMAP主机，返回nil
+	if m.IMAPHost == "" {
+		return nil
+	}
+
+	// 连接到IMAP服务器
+	c, err := client.Dial(fmt.Sprintf("%s:%s", m.IMAPHost, m.IMAPPort))
+	if err != nil {
+		fmt.Printf("Error connecting to IMAP server: %v\n", err)
+		return nil
+	}
+	defer c.Logout()
+
+	// 登录
+	if m.Username != "" && m.Password != "" {
+		if err := c.Login(m.Username, m.Password); err != nil {
+			fmt.Printf("Error logging in to IMAP server: %v\n", err)
+			return nil
+		}
+	} else if m.IsMailHog {
+		// MailHog不需要认证
+	} else {
+		fmt.Println("No IMAP credentials provided")
+		return nil
+	}
+
+	// 选择收件箱
+	_, err = c.Select("INBOX", false)
+	if err != nil {
+		fmt.Printf("Error selecting inbox: %v\n", err)
+		return nil
+	}
+
+	// 搜索新邮件
+	criteria := imap.NewSearchCriteria()
+	criteria.Since = m.LastCheck
+	ids, err := c.Search(criteria)
+	if err != nil {
+		fmt.Printf("Error searching for emails: %v\n", err)
+		return nil
+	}
+
+	// 处理新邮件
+	if len(ids) > 0 {
+		// 获取邮件
+		seqset := new(imap.SeqSet)
+		seqset.AddNum(ids...)
+
+		// 获取邮件内容
+		messages := make(chan *imap.Message, 10)
+		done := make(chan error, 1)
+		go func() {
+			done <- c.Fetch(seqset, []imap.FetchItem{imap.FetchEnvelope, imap.FetchBody}, messages)
+		}()
+
+		// 处理邮件
+		for msg := range messages {
+			// 检查是否已经处理过
+			msgID := msg.Envelope.MessageId
+			if msgID == "" {
+				// 如果没有MessageID，使用日期和主题生成一个
+				msgID = fmt.Sprintf("%d_%s", msg.Envelope.Date.Unix(), msg.Envelope.Subject)
+			}
+
+			if m.ProcessedIDs[msgID] {
+				continue
+			}
+
+			// 标记为已处理
+			m.ProcessedIDs[msgID] = true
+
+			// 提取发件人
+			sender := ""
+			if len(msg.Envelope.From) > 0 {
+				sender = msg.Envelope.From[0].Address()
+			}
+
+			// 提取邮件内容
+			var body string
+			for _, part := range msg.Body {
+				if part != nil {
+					buf := make([]byte, 1024)
+					n, err := part.Read(buf)
+					if err == nil {
+						body = string(buf[:n])
+					}
+				}
+			}
+
+			// 创建InboundMessage
+			inboundMsg := &InboundMessage{
+				Text:      body,
+				SenderID:  sender,
+				Channel:   "mail",
+				AccountID: m.AccountID,
+				PeerID:    sender,
+				IsGroup:   false,
+				Media:     []map[string]interface{}{},
+				Raw: map[string]interface{}{
+					"message_id": msgID,
+					"subject":    msg.Envelope.Subject,
+					"date":       msg.Envelope.Date,
+				},
+			}
+
+			// 更新最后检查时间
+			m.LastCheck = time.Now()
+
+			return inboundMsg
+		}
+
+		// 等待获取完成
+		if err := <-done; err != nil {
+			fmt.Printf("Error fetching emails: %v\n", err)
+		}
+	}
+
+	// 更新最后检查时间
+	m.LastCheck = time.Now()
+
 	return nil
 }
 
@@ -266,16 +391,30 @@ func InitializeChannels() *ChannelManager {
 			}
 		}
 
+		// 读取IMAP配置
+		imapHost := os.Getenv("IMAP_HOST")
+		imapPort := os.Getenv("IMAP_PORT")
+		if imapPort == "" {
+			imapPort = "143" // 默认 IMAP 端口
+			if isMailHog {
+				imapPort = "143" // MailHog默认IMAP端口
+			}
+		}
+
 		// 即使没有认证信息，也允许注册邮件通道（例如 MailHog测试时可以不配置认证信息）
 		if from != "" {
 			mailChannel := &MailChannel{
-				AccountID: "mail-primary",
-				SMTPHost:  smtpHost,
-				SMTPPort:  smtpPort,
-				Username:  username,
-				Password:  password,
-				From:      from,
-				IsMailHog: isMailHog,
+				AccountID:    "mail-primary",
+				SMTPHost:     smtpHost,
+				SMTPPort:     smtpPort,
+				Username:     username,
+				Password:     password,
+				From:         from,
+				IsMailHog:    isMailHog,
+				IMAPHost:     imapHost,
+				IMAPPort:     imapPort,
+				LastCheck:    time.Now(),
+				ProcessedIDs: make(map[string]bool),
 			}
 			cm.Register(mailChannel)
 
@@ -288,6 +427,8 @@ func InitializeChannels() *ChannelManager {
 					"smtp_port":  smtpPort,
 					"from":       from,
 					"is_mailhog": isMailHog,
+					"imap_host":  imapHost,
+					"imap_port":  imapPort,
 				},
 			})
 		}

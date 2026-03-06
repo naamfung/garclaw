@@ -118,6 +118,64 @@ func main() {
 		heartbeatMsgs := heartbeat.DrainOutput()
 		cronMsgs := cronService.DrainOutput()
 
+		// 检查邮件通道的新邮件
+		mailChannel := channelManager.Get("mail")
+		if mailChannel != nil {
+			if msg := mailChannel.Receive(); msg != nil {
+				// 处理收到的邮件
+				fmt.Println()
+				fmt.Printf("[mail] Received email from %s\n", msg.SenderID)
+				fmt.Printf("[mail] Subject: %s\n", msg.Raw["subject"])
+				fmt.Printf("[mail] Content: %s\n", msg.Text)
+				
+				// 处理邮件内容
+				laneLock.Lock()
+				
+				// 添加邮件消息
+				userMsg := Message{
+					Role:    "user",
+					Content: msg.Text,
+				}
+				history = append(history, userMsg)
+				
+				// 保存用户消息到会话文件
+				sessionManager.SaveMessage(userMsg)
+				
+				// 检查并处理上下文溢出
+				var overflowErr error
+				history, overflowErr = sessionManager.CheckOverflow(history)
+				if overflowErr != nil {
+					fmt.Printf("Error checking overflow: %v\n", overflowErr)
+				}
+				
+				// 调用 AgentLoop 并获取更新后的消息
+				history = AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+				
+				// 保存助手回复到会话文件
+				if len(history) > 0 {
+					assistantMsg := history[len(history)-1]
+					if assistantMsg.Role == "assistant" {
+						sessionManager.SaveMessage(assistantMsg)
+						
+						// 回复邮件
+						if replyText, ok := assistantMsg.Content.(string); ok && replyText != "" {
+							kwargs := map[string]interface{}{
+								"subject": "Re: " + msg.Raw["subject"].(string),
+							}
+							mailChannel.Send(msg.SenderID, replyText, kwargs)
+							fmt.Printf("[mail] Reply sent to %s\n", msg.SenderID)
+						}
+					}
+				}
+				
+				// 释放锁
+				laneLock.Unlock()
+				
+				// 打印一个空行作为分隔
+				fmt.Println()
+			}
+		}
+
 		// 如果有输出，先换行，然后打印所有输出
 		if len(heartbeatMsgs) > 0 || len(cronMsgs) > 0 {
 			fmt.Println() // 先换行，与命令提示符分隔
