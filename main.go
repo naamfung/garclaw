@@ -127,6 +127,8 @@ func main() {
 		}
 
 		// 打印命令提示符
+		fmt.Println()
+		fmt.Println()
 		fmt.Print("GarClaw /> ")
 
 		// 处理用户输入

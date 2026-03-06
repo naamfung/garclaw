@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"runtime"
 	"strings"
 	"time"
@@ -43,8 +44,15 @@ func runShell(command string) CmdResult {
 	// 准备执行命令
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		command = translateUnixToWindows(command)
-		cmd = exec.Command("cmd.exe", "/c", command)
+		// 检查是否在Unix风格的终端中运行
+		if isUnixLikeTerminal() {
+			// 在Unix风格终端中，直接使用sh执行命令
+			cmd = exec.Command("sh", "-c", command)
+		} else {
+			// 否则转换为Windows命令
+			command = translateUnixToWindows(command)
+			cmd = exec.Command("cmd.exe", "/c", command)
+		}
 	} else {
 		cmd = exec.Command("sh", "-c", command)
 	}
@@ -136,6 +144,44 @@ func truncateOutput(output string) string {
 	return output // 非调试模式下，返回完整输出 以便模型获得完整信息
 }
 
+// isUnixLikeTerminal 检测当前是否在支持Unix命令的终端（如gitbash）中运行
+func isUnixLikeTerminal() bool {
+	// 检查环境变量
+	shell := os.Getenv("SHELL")
+	term := os.Getenv("TERM")
+
+	// 检查是否有SHELL环境变量且包含bash或sh
+	if strings.Contains(strings.ToLower(shell), "bash") || strings.Contains(strings.ToLower(shell), "sh") {
+		return true
+	}
+
+	// 检查TERM环境变量是否设置（通常Unix终端会设置）
+	if term != "" && !strings.Contains(strings.ToLower(term), "dumb") {
+		return true
+	}
+
+	// 检查当前可执行文件路径是否在gitbash目录中
+	currentExe, err := os.Executable()
+	if err == nil {
+		if strings.Contains(strings.ToLower(currentExe), "git/bin") || strings.Contains(strings.ToLower(currentExe), "git/usr/bin") {
+			return true
+		}
+	}
+
+	// 检查是否存在gitbash的典型路径
+	usr, err := user.Current()
+	if err == nil {
+		gitbashPath := usr.HomeDir + "/git/bin/bash.exe"
+		if _, err := os.Stat(gitbashPath); err == nil {
+			// 检查父进程是否是bash.exe
+			// 这里简化处理，实际可以通过进程树检查
+			return true
+		}
+	}
+
+	return false
+}
+
 // translateUnixToWindows 将Unix命令转换为等效的Windows命令
 func translateUnixToWindows(command string) string {
 	// 去除命令前后的空格
@@ -203,6 +249,10 @@ func translateUnixToWindows(command string) string {
 	case "date":
 		// date 命令转换为 date /t
 		return "date /t"
+	case "df":
+		// df 命令转换为 wmic logicaldisk get size,freespace,caption
+		// 忽略参数，直接返回 Windows 等效命令
+		return "wmic logicaldisk get size,freespace,caption"
 	default:
 		// 其他命令保持不变
 		return command
