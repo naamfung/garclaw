@@ -51,6 +51,11 @@ func loadEnv() {
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 
+		// 移除注释部分
+		if commentIndex := strings.Index(value, "#"); commentIndex != -1 {
+			value = strings.TrimSpace(value[:commentIndex])
+		}
+
 		// 移除引号
 		value = strings.Trim(value, `"'`)
 

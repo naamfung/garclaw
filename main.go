@@ -210,6 +210,7 @@ func printHelp() {
 	fmt.Println("  /cron              -- List cron jobs")
 	fmt.Println("  /cron-trigger <id> -- Trigger a cron job")
 	fmt.Println("  /channels          -- List registered channels")
+	fmt.Println("  /mail <to> <subject> <message> -- Send an email")
 	fmt.Println("  /lanes             -- Show lane lock status")
 	fmt.Println("  /help              -- Show this help")
 	fmt.Println("  q / exit           -- Exit")
@@ -279,6 +280,32 @@ func handleCommand(cmd string, heartbeat *HeartbeatRunner, cronService *CronServ
 		fmt.Println("  Registered channels:")
 		for _, ch := range channels {
 			fmt.Printf("  - %s\n", ch)
+		}
+	case "/mail":
+		if len(parts) < 3 {
+			fmt.Println("  Usage: /mail <to> <subject> <message>")
+			return
+		}
+		to := parts[1]
+		subject := parts[2]
+		message := strings.Join(parts[3:], " ")
+
+		// 获取邮件通道
+		mailChannel := channelManager.Get("mail")
+		if mailChannel == nil {
+			fmt.Println("  Mail channel not registered.")
+			return
+		}
+
+		// 发送邮件
+		kwargs := map[string]interface{}{
+			"subject": subject,
+		}
+		success := mailChannel.Send(to, message, kwargs)
+		if success {
+			fmt.Printf("  Mail sent to %s successfully.\n", to)
+		} else {
+			fmt.Println("  Failed to send mail.")
 		}
 	case "/lanes":
 		locked := !laneLock.TryLock()
