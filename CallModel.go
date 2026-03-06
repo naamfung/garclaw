@@ -252,10 +252,49 @@ func generateSystemPrompt(apiType string, userQuery string) string {
 		toolOrFunction = "function"
 	}
 
-	// 自动搜索相关记忆
+	// 1. 身份层 - 基础系统提示
+	identityLayer := strings.ReplaceAll(SYSTEM_PROMPT, "{{tool_or_function}}", toolOrFunction)
+
+	// 2. 灵魂层 - 使用 SoulSystem 加载
+	soulLayer := ""
+	soulSystem := NewSoulSystem("workspace")
+	soulSystem.Load()
+	if soulSystem.HasSoul() {
+		soulLayer = "\n## Soul\n" + soulSystem.GetSoulContent()
+	}
+
+	// 3. 工具使用指南层 - 从 TOOLS.md 加载
+	toolsLayer := ""
+	if toolsContent, err := os.ReadFile("workspace/TOOLS.md"); err == nil && len(toolsContent) > 0 {
+		toolsLayer = "\n## Tools Guide\n" + string(toolsContent)
+	}
+
+	// 4. 技能层 - 加载可用技能
+	skillsManager := NewSkillsManager("workspace")
+	skillsManager.Discover()
+	skillsLayer := skillsManager.FormatPromptBlock()
+
+	// 5. 记忆层 - 自动搜索相关记忆
 	memoryContext := autoRecallMemories(userQuery)
 
-	return fmt.Sprintf("当前系统时间：%s\n", currentTime) + strings.ReplaceAll(SYSTEM_PROMPT, "{{tool_or_function}}", toolOrFunction) + memoryContext
+	// 6. Bootstrap 上下文层 - 加载其他 bootstrap 文件
+	bootstrapLoader := NewBootstrapLoader("workspace")
+	bootstrapFiles := bootstrapLoader.loadAll("full")
+	bootstrapLayer := ""
+	for name, content := range bootstrapFiles {
+		if name != "SOUL.md" && name != "TOOLS.md" && name != "MEMORY.md" {
+			bootstrapLayer += fmt.Sprintf("\n## %s\n%s", name, content)
+		}
+	}
+
+	// 7. 运行时上下文层 - 当前时间和环境信息
+	runtimeLayer := fmt.Sprintf("\n## Runtime Context\n当前系统时间：%s\n", currentTime)
+
+	// 8. 渠道提示层 - 空（可根据需要添加）
+	channelLayer := ""
+
+	// 组装所有层
+	return identityLayer + soulLayer + toolsLayer + skillsLayer + memoryContext + bootstrapLayer + runtimeLayer + channelLayer
 }
 
 // 转换为Ollama格式
