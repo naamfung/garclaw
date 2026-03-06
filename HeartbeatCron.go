@@ -247,6 +247,61 @@ func (h *HeartbeatRunner) execute() {
 	h.queueLock.Lock()
 	h.outputQueue = append(h.outputQueue, meaningful)
 	h.queueLock.Unlock()
+
+	// 将心跳结果写入每日记忆
+	h.writeToDailyMemory(meaningful)
+}
+
+// 写入每日记忆
+func (h *HeartbeatRunner) writeToDailyMemory(content string) {
+	// 确保memory目录存在
+	memoryDir := filepath.Join(h.workspace, "memory", "daily")
+	if err := os.MkdirAll(memoryDir, 0755); err != nil {
+		h.queueLock.Lock()
+		h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error creating memory directory: %v", err))
+		h.queueLock.Unlock()
+		return
+	}
+
+	// 写入每日JSONL文件
+	today := time.Now().Format("2006-01-02")
+	jsonlPath := filepath.Join(memoryDir, today+".jsonl")
+
+	entry := map[string]interface{}{
+		"ts":       time.Now().Unix(),
+		"content":  content,
+		"category": "heartbeat",
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		h.queueLock.Lock()
+		h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error marshaling memory entry: %v", err))
+		h.queueLock.Unlock()
+		return
+	}
+
+	f, err := os.OpenFile(jsonlPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		h.queueLock.Lock()
+		h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error opening memory file: %v", err))
+		h.queueLock.Unlock()
+		return
+	}
+	defer f.Close()
+
+	_, err = f.WriteString(string(data) + "\n")
+	if err != nil {
+		h.queueLock.Lock()
+		h.outputQueue = append(h.outputQueue, fmt.Sprintf("Error writing to memory file: %v", err))
+		h.queueLock.Unlock()
+		return
+	}
+
+	// 写入成功，添加到输出队列
+	h.queueLock.Lock()
+	h.outputQueue = append(h.outputQueue, fmt.Sprintf("Successfully wrote heartbeat to daily memory"))
+	h.queueLock.Unlock()
 }
 
 // 启动心跳
