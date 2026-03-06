@@ -97,40 +97,39 @@ func main() {
 	// 打印帮助信息
 	printHelp()
 
-	// 打印初始命令提示符
-	fmt.Print("GarClaw /> ")
-
+	// 主循环
 	for {
 		// 处理心跳和定时任务的输出
-		hasOutput := false
-
-		// 处理心跳输出
+		// 先处理所有输出，确保命令提示符前的输出都已处理
 		heartbeatMsgs := heartbeat.DrainOutput()
-		for _, msg := range heartbeatMsgs {
-			fmt.Println() // 先换行
-			fmt.Printf("[heartbeat] %s\n", msg)
-			hasOutput = true
-		}
-
-		// 处理定时任务输出
 		cronMsgs := cronService.DrainOutput()
-		for _, msg := range cronMsgs {
-			fmt.Println() // 先换行
-			fmt.Printf("[cron] %s\n", msg)
-			hasOutput = true
+
+		// 如果有输出，先换行，然后打印所有输出
+		if len(heartbeatMsgs) > 0 || len(cronMsgs) > 0 {
+			fmt.Println() // 先换行，与命令提示符分隔
+
+			// 打印心跳消息
+			for _, msg := range heartbeatMsgs {
+				fmt.Printf("[heartbeat] %s\n", msg)
+			}
+
+			// 打印定时任务消息
+			for _, msg := range cronMsgs {
+				fmt.Printf("[cron] %s\n", msg)
+			}
 		}
 
-		// 如果有输出，重新打印命令提示符
-		if hasOutput {
-			fmt.Print("GarClaw /> ")
-		}
+		// 打印命令提示符
+		fmt.Print("GarClaw /> ")
 
 		// 处理用户输入
 		if !scanner.Scan() {
 			break
 		}
+
 		var query string
 		query = scanner.Text()
+
 		// 去除空白字符
 		trimmedQuery := strings.TrimSpace(query)
 		if strings.ToLower(trimmedQuery) == "q" || strings.ToLower(trimmedQuery) == "exit" || trimmedQuery == "" {
@@ -141,8 +140,7 @@ func main() {
 		// 处理命令
 		if strings.HasPrefix(query, "/") {
 			handleCommand(query, heartbeat, cronService, laneLock)
-			// 命令执行后重新打印提示符
-			fmt.Print("GarClaw /> ")
+			// 命令执行后，循环会自动重新打印提示符
 			continue
 		}
 
@@ -160,8 +158,7 @@ func main() {
 		// 只打印一个空行作为分隔
 		fmt.Println()
 
-		// 处理完查询后重新打印命令提示符
-		fmt.Print("GarClaw /> ")
+		// 处理完查询后，循环会自动重新打印提示符
 	}
 }
 
