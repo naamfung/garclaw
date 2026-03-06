@@ -34,7 +34,7 @@ type SessionMessage struct {
 	ToolUseID string      `json:"tool_use_id,omitempty"`
 	ToolName  string      `json:"name,omitempty"`
 	ToolInput interface{} `json:"input,omitempty"`
-	Timestamp int64       `json:"ts"` // Unix 时间戳
+	Timestamp int64       `json:"timestamp"` // Unix 时间戳
 }
 
 // 会话元数据

@@ -1,3 +1,12 @@
-{"role":"user","content":"在吗","timestamp":"2026-03-06T12:59:25.1004515+08:00"}
-{"role":"user","content":"你好啊","timestamp":"2026-03-06T13:04:57.5436055+08:00"}
-{"role":"assistant","content":"\n\n你好！我在的，很高兴见到你！有什么可以帮助你的吗？😊","timestamp":"2026-03-06T13:05:13.5943736+08:00"}
+{"type":"user","content":"你好","timestamp":1772775234}
+{"type":"assistant","content":"\n\n你好！有什么我可以帮助你的吗？","timestamp":1772775250}
+{"type":"user","content":"你好","timestamp":1772775705}
+{"type":"assistant","content":"你好！很高兴见到你！有什么我可以为你做的吗？","timestamp":1772775707}
+{"type":"user","content":"你是谁？","timestamp":1772775845}
+{"type":"assistant","content":"我是DeepSeek，一个由深度求索公司开发的AI助手。我很乐意帮助你解答问题、提供信息或协助你完成各种任务！\n\n有甚么特别想了解或需要帮助的吗？","timestamp":1772775848}
+{"type":"user","content":"???????","timestamp":1772776581}
+{"type":"assistant","content":"我看到你发送了一些问号。是不是有甚么困惑或者问题呢？请告诉我具体想了解甚么，我会尽力帮助你！","timestamp":1772776584}
+{"type":"user","content":"???????????","timestamp":1772776599}
+{"type":"assistant","content":"我注意到你发送了很多问号。看起来你可能对某些事情感到困惑，或者想表达疑问。\n\n请告诉我具体是乜让你感到困惑，或者你想了解乜信息？我很乐意帮助你解答问题！","timestamp":1772776602}
+{"type":"user","content":"????????????","timestamp":1772776602}
+{"type":"assistant","content":"我理解你可能想表达疑问或困惑，但为了能真正帮助你，我需要知道具体是乜问题。\n\n你可以告诉我：\n- 你对乜事情感到困惑？\n- 想了解乜信息？\n- 需要乜帮助？\n\n我会耐心等待你的具体问题，然后尽力为你提供有用的回答！","timestamp":1772776605}
