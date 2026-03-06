@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -91,7 +92,13 @@ func main() {
 	cronService := NewCronService()
 	defer cronService.Stop()
 
-	var history []Message
+	// 初始化会话管理器
+	sessionFile := filepath.Join(workspaceDir, "session.jsonl")
+	sessionManager := NewSessionManager(sessionFile, 50, 30) // 最大消息数 50，总结阈值 30
+
+	// 加载历史会话
+	history := sessionManager.LoadHistory()
+
 	scanner := bufio.NewScanner(os.Stdin)
 
 	// 打印帮助信息
@@ -148,12 +155,33 @@ func main() {
 		laneLock.Lock()
 		defer laneLock.Unlock()
 
-		history = append(history, Message{
+		// 添加用户消息
+		userMsg := Message{
 			Role:    "user",
 			Content: query,
-		})
+		}
+		history = append(history, userMsg)
 
+		// 保存用户消息到会话文件
+		sessionManager.SaveMessage(userMsg)
+
+		// 检查并处理上下文溢出
+		history, err := sessionManager.CheckOverflow(history)
+		if err != nil {
+			fmt.Printf("Error checking overflow: %v\n", err)
+		}
+
+		// 调用 AgentLoop
 		AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+
+		// 保存助手回复到会话文件
+		if len(history) > 0 {
+			assistantMsg := history[len(history)-1]
+			if assistantMsg.Role == "assistant" {
+				sessionManager.SaveMessage(assistantMsg)
+			}
+		}
+
 		// 输出逻辑在CallModel函数中实时打印，这里不再重复打印
 		// 只打印一个空行作为分隔
 		fmt.Println()
