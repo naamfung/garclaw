@@ -174,8 +174,14 @@ func translateUnixToWindows(command string) string {
 		// pwd 命令转换为 cd
 		return "cd"
 	case "mkdir":
-		// mkdir 命令转换为 md
-		return "md " + strings.Join(args, " ")
+		// mkdir 命令转换为 md，跳过 -p 参数
+		mdArgs := []string{}
+		for _, arg := range args {
+			if arg != "-p" {
+				mdArgs = append(mdArgs, arg)
+			}
+		}
+		return "md " + strings.Join(mdArgs, " ")
 	case "rm":
 		// rm 命令转换为 del
 		return "del " + strings.Join(args, " ")
