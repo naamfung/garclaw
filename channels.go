@@ -94,122 +94,140 @@ func (m *MailChannel) Receive() *InboundMessage {
 		return nil
 	}
 
-	// 连接到IMAP服务器
-	c, err := client.Dial(fmt.Sprintf("%s:%s", m.IMAPHost, m.IMAPPort))
-	if err != nil {
-		fmt.Printf("Error connecting to IMAP server: %v\n", err)
-		return nil
+	// 使用goroutine和channel实现连接超时
+	type result struct {
+		client *client.Client
+		err    error
 	}
-	defer c.Logout()
 
-	// 登录
-	if m.Username != "" && m.Password != "" {
-		if err := c.Login(m.Username, m.Password); err != nil {
-			fmt.Printf("Error logging in to IMAP server: %v\n", err)
+	ch := make(chan result, 1)
+	go func() {
+		c, err := client.Dial(fmt.Sprintf("%s:%s", m.IMAPHost, m.IMAPPort))
+		ch <- result{client: c, err: err}
+	}()
+
+	// 设置5秒超时
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			fmt.Printf("Error connecting to IMAP server: %v\n", res.err)
 			return nil
 		}
-	} else if m.IsMailHog {
-		// MailHog不需要认证
-	} else {
-		fmt.Println("No IMAP credentials provided")
-		return nil
-	}
+		c := res.client
+		defer c.Logout()
 
-	// 选择收件箱
-	_, err = c.Select("INBOX", false)
-	if err != nil {
-		fmt.Printf("Error selecting inbox: %v\n", err)
-		return nil
-	}
-
-	// 搜索新邮件
-	criteria := imap.NewSearchCriteria()
-	criteria.Since = m.LastCheck
-	ids, err := c.Search(criteria)
-	if err != nil {
-		fmt.Printf("Error searching for emails: %v\n", err)
-		return nil
-	}
-
-	// 处理新邮件
-	if len(ids) > 0 {
-		// 获取邮件
-		seqset := new(imap.SeqSet)
-		seqset.AddNum(ids...)
-
-		// 获取邮件内容
-		messages := make(chan *imap.Message, 10)
-		done := make(chan error, 1)
-		go func() {
-			done <- c.Fetch(seqset, []imap.FetchItem{imap.FetchEnvelope, imap.FetchBody}, messages)
-		}()
-
-		// 处理邮件
-		for msg := range messages {
-			// 检查是否已经处理过
-			msgID := msg.Envelope.MessageId
-			if msgID == "" {
-				// 如果没有MessageID，使用日期和主题生成一个
-				msgID = fmt.Sprintf("%d_%s", msg.Envelope.Date.Unix(), msg.Envelope.Subject)
+		// 登录
+		if m.Username != "" && m.Password != "" {
+			if err := c.Login(m.Username, m.Password); err != nil {
+				fmt.Printf("Error logging in to IMAP server: %v\n", err)
+				return nil
 			}
+		} else if m.IsMailHog {
+			// MailHog不需要认证
+		} else {
+			fmt.Println("No IMAP credentials provided")
+			return nil
+		}
 
-			if m.ProcessedIDs[msgID] {
-				continue
-			}
+		// 选择收件箱
+		_, err := c.Select("INBOX", false)
+		if err != nil {
+			fmt.Printf("Error selecting inbox: %v\n", err)
+			return nil
+		}
 
-			// 标记为已处理
-			m.ProcessedIDs[msgID] = true
+		// 搜索新邮件
+		criteria := imap.NewSearchCriteria()
+		criteria.Since = m.LastCheck
+		ids, err := c.Search(criteria)
+		if err != nil {
+			fmt.Printf("Error searching for emails: %v\n", err)
+			return nil
+		}
 
-			// 提取发件人
-			sender := ""
-			if len(msg.Envelope.From) > 0 {
-				sender = msg.Envelope.From[0].Address()
-			}
+		// 处理新邮件
+		if len(ids) > 0 {
+			// 获取邮件
+			seqset := new(imap.SeqSet)
+			seqset.AddNum(ids...)
 
-			// 提取邮件内容
-			var body string
-			for _, part := range msg.Body {
-				if part != nil {
-					buf := make([]byte, 1024)
-					n, err := part.Read(buf)
-					if err == nil {
-						body = string(buf[:n])
+			// 获取邮件内容
+			messages := make(chan *imap.Message, 10)
+			done := make(chan error, 1)
+			go func() {
+				done <- c.Fetch(seqset, []imap.FetchItem{imap.FetchEnvelope, imap.FetchBody}, messages)
+			}()
+
+			// 处理邮件
+			for msg := range messages {
+				// 检查是否已经处理过
+				msgID := msg.Envelope.MessageId
+				if msgID == "" {
+					// 如果没有MessageID，使用日期和主题生成一个
+					msgID = fmt.Sprintf("%d_%s", msg.Envelope.Date.Unix(), msg.Envelope.Subject)
+				}
+
+				if m.ProcessedIDs[msgID] {
+					continue
+				}
+
+				// 标记为已处理
+				m.ProcessedIDs[msgID] = true
+
+				// 提取发件人
+				sender := ""
+				if len(msg.Envelope.From) > 0 {
+					sender = msg.Envelope.From[0].Address()
+				}
+
+				// 提取邮件内容
+				var body string
+				for _, part := range msg.Body {
+					if part != nil {
+						buf := make([]byte, 1024)
+						n, err := part.Read(buf)
+						if err == nil {
+							body = string(buf[:n])
+						}
 					}
 				}
+
+				// 创建InboundMessage
+				inboundMsg := &InboundMessage{
+					Text:      body,
+					SenderID:  sender,
+					Channel:   "mail",
+					AccountID: m.AccountID,
+					PeerID:    sender,
+					IsGroup:   false,
+					Media:     []map[string]interface{}{},
+					Raw: map[string]interface{}{
+						"message_id": msgID,
+						"subject":    msg.Envelope.Subject,
+						"date":       msg.Envelope.Date,
+					},
+				}
+
+				// 更新最后检查时间
+				m.LastCheck = time.Now()
+
+				return inboundMsg
 			}
 
-			// 创建InboundMessage
-			inboundMsg := &InboundMessage{
-				Text:      body,
-				SenderID:  sender,
-				Channel:   "mail",
-				AccountID: m.AccountID,
-				PeerID:    sender,
-				IsGroup:   false,
-				Media:     []map[string]interface{}{},
-				Raw: map[string]interface{}{
-					"message_id": msgID,
-					"subject":    msg.Envelope.Subject,
-					"date":       msg.Envelope.Date,
-				},
+			// 等待获取完成
+			if err := <-done; err != nil {
+				fmt.Printf("Error fetching emails: %v\n", err)
 			}
-
-			// 更新最后检查时间
-			m.LastCheck = time.Now()
-
-			return inboundMsg
 		}
 
-		// 等待获取完成
-		if err := <-done; err != nil {
-			fmt.Printf("Error fetching emails: %v\n", err)
-		}
+		// 更新最后检查时间
+		m.LastCheck = time.Now()
+
+		return nil
+	case <-time.After(5 * time.Second):
+		fmt.Println("Error: IMAP server connection timeout")
+		return nil
 	}
-
-	// 更新最后检查时间
-	m.LastCheck = time.Now()
-
-	return nil
 }
 
 // Send 发送邮件
