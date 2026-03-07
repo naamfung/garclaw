@@ -16,6 +16,9 @@ const (
 // 全局配置变量
 var globalConfig Config
 
+// 全局通道管理器
+var globalChannelManager *ChannelManager
+
 // 消息结构
 type Message struct {
 	Role             string      `json:"role"`
@@ -102,6 +105,7 @@ func main() {
 
 	// 初始化通道管理器
 	channelManager := InitializeChannels()
+	globalChannelManager = channelManager
 	defer channelManager.CloseAll()
 
 	// 初始化会话管理器
