@@ -261,6 +261,32 @@ func getTools(apiType string) interface{} {
 					},
 				},
 			},
+			{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        "mail",
+					"description": "Send an email to a recipient. Use this when the user asks to send an email or when you need to communicate via email.",
+					"parameters": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"to": map[string]interface{}{
+								"type":        "string",
+								"description": "The recipient's email address.",
+							},
+							"subject": map[string]interface{}{
+								"type":        "string",
+								"description": "The email subject.",
+							},
+							"message": map[string]interface{}{
+								"type":        "string",
+								"description": "The email message content.",
+							},
+						},
+						"required":             []string{"to", "subject", "message"},
+						"additionalProperties": false,
+					},
+				},
+			},
 		}
 
 	default:
@@ -482,6 +508,29 @@ func getTools(apiType string) interface{} {
 						},
 					},
 					"required":             []string{"expression"},
+					"additionalProperties": false,
+				},
+			},
+			{
+				"name":        "mail",
+				"description": "Send an email to a recipient. Use this when the user asks to send an email or when you need to communicate via email.",
+				"input_schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"to": map[string]interface{}{
+							"type":        "string",
+							"description": "The recipient's email address.",
+						},
+						"subject": map[string]interface{}{
+							"type":        "string",
+							"description": "The email subject.",
+						},
+						"message": map[string]interface{}{
+							"type":        "string",
+							"description": "The email message content.",
+						},
+					},
+					"required":             []string{"to", "subject", "message"},
 					"additionalProperties": false,
 				},
 			},
