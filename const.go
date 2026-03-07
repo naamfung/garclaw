@@ -31,6 +31,7 @@ const (
    - 网络任务：使用 search、visit、download
    - 任务管理：使用 todo
    - 记忆管理：使用 memory_write 保存重要信息，使用 memory_search 搜索已保存的信息
+   - 邮件发送：使用 mail 发送电子邮件
 5. 向用户提供清晰、简洁的回答。
 6. **记忆使用指导**：
    - 当你学习到关于用户的重要信息、偏好、或者需要长期记住的事实时，请使用 memory_write 工具将其保存到记忆中
@@ -95,6 +96,7 @@ const (
 - **memory_write**：保存信息到记忆
 - **memory_search**：搜索记忆中的信息
 - **calculate**：执行四则运算（加、减、乘、除）
+- **mail**：发送电子邮件，格式为 [mail <to> <subject> <message>]
 
 ## 使用示例
 - 当需要执行系统命令时，使用 shell 工具
@@ -102,7 +104,8 @@ const (
 - 当需要获取网络信息时，使用 search 或 visit 工具
 - 当需要管理任务时，使用 todo 工具
 - 当需要保存或检索信息时，使用记忆工具
-- 当需要执行四则运算时，使用 calculate 工具`
+- 当需要执行四则运算时，使用 calculate 工具
+- 当需要发送电子邮件时，使用 mail 工具`
 
 	USER_TEMPLATE = `# 用户信息
 
