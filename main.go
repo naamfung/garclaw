@@ -51,6 +51,11 @@ func main() {
 	// 加载 .env 文件
 	loadEnv()
 
+	// 确保工作目录存在
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		fmt.Printf("Error creating workspace directory: %v\n", err)
+	}
+
 	// 读取配置文件
 	var err error
 	globalConfig, err = loadConfig()

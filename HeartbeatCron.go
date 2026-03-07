@@ -66,6 +66,8 @@ var workspaceDir = "workspace"
 func NewHeartbeatRunner(laneLock *sync.Mutex) *HeartbeatRunner {
 	heartbeatPath := filepath.Join(workspaceDir, "HEARTBEAT.md")
 
+
+
 	// 初始化fsnotify
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -384,6 +386,8 @@ func (h *HeartbeatRunner) Status() map[string]interface{} {
 func NewCronService() *CronService {
 	cronFile := filepath.Join(workspaceDir, "CRON.toon")
 	runLog := filepath.Join(workspaceDir, "cron", "cron-runs.jsonl")
+
+
 
 	// 创建cron目录
 	if err := os.MkdirAll(filepath.Dir(runLog), 0755); err != nil {
