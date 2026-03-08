@@ -66,8 +66,6 @@ var workspaceDir = "workspace"
 func NewHeartbeatRunner(laneLock *sync.Mutex) *HeartbeatRunner {
 	heartbeatPath := filepath.Join(workspaceDir, "HEARTBEAT.md")
 
-
-
 	// 初始化fsnotify
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -387,8 +385,6 @@ func NewCronService() *CronService {
 	cronFile := filepath.Join(workspaceDir, "CRON.toon")
 	runLog := filepath.Join(workspaceDir, "cron", "cron-runs.jsonl")
 
-
-
 	// 创建cron目录
 	if err := os.MkdirAll(filepath.Dir(runLog), 0755); err != nil {
 		fmt.Printf("Error creating cron directory: %v\n", err)
@@ -436,6 +432,9 @@ type CronConfig struct {
 		Name    string `toon:"name"`
 		Enabled bool   `toon:"enabled"`
 		Expr    string `toon:"expr"`
+		Kind    string `toon:"kind"`
+		Message string `toon:"message"`
+		Text    string `toon:"text"`
 	} `toon:"jobs"`
 }
 
@@ -471,10 +470,23 @@ func (cs *CronService) loadJobs() {
 			"expr": jobData.Expr,
 		}
 
-		// 为任务设置默认的payload
+		// 为任务设置payload
 		payload := make(map[string]interface{})
-		payload["kind"] = "system_event"
-		payload["text"] = fmt.Sprintf("Cron job %s executed", jobData.ID)
+
+		// 优先使用配置文件中的值
+		if jobData.Kind != "" {
+			payload["kind"] = jobData.Kind
+		} else {
+			payload["kind"] = "system_event"
+		}
+
+		if jobData.Message != "" {
+			payload["message"] = jobData.Message
+		} else if jobData.Text != "" {
+			payload["text"] = jobData.Text
+		} else {
+			payload["text"] = fmt.Sprintf("Cron job %s executed", jobData.ID)
+		}
 
 		job := CronJob{
 			ID:             jobData.ID,
