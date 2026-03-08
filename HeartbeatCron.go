@@ -60,7 +60,21 @@ type CronService struct {
 }
 
 // 工作区目录
-var workspaceDir = "workspace"
+var workspaceDir string
+
+func init() {
+	// 获取程序自身路径
+	execPath, err := os.Executable()
+	if err != nil {
+		// 如果获取失败，使用当前目录
+		workspaceDir = "workspace"
+		return
+	}
+	// 获取程序所在目录
+	execDir := filepath.Dir(execPath)
+	// 工作空间路径为程序所在目录下的workspace文件夹
+	workspaceDir = filepath.Join(execDir, "workspace")
+}
 
 // 初始化心跳运行器
 func NewHeartbeatRunner(laneLock *sync.Mutex) *HeartbeatRunner {

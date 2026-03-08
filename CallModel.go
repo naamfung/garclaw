@@ -161,13 +161,13 @@ func applyReplacements(text string) string {
 // 自动搜索相关记忆
 func autoRecallMemories(query string) string {
 	// 搜索MEMORY.md文件
-	memPath := "workspace/MEMORY.md"
+	memPath := filepath.Join(workspaceDir, "MEMORY.md")
 	text := ""
 	if mem, err := os.ReadFile(memPath); err == nil && len(mem) > 0 {
 		text = string(mem)
 	} else if os.IsNotExist(err) || (err == nil && len(mem) == 0) {
 		// 文件不存在或为空，创建模板文件
-		if err := os.MkdirAll("workspace", 0755); err != nil {
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
 			return ""
 		} else {
 			template := MEMORY_TEMPLATE
@@ -180,7 +180,7 @@ func autoRecallMemories(query string) string {
 	}
 
 	// 搜索每日JSONL文件
-	memoryDir := "workspace/memory/daily"
+	memoryDir := filepath.Join(workspaceDir, "memory", "daily")
 	// 确保memory目录存在
 	if err := os.MkdirAll(memoryDir, 0755); err != nil {
 		// 目录创建失败，只搜索MEMORY.md
@@ -269,7 +269,7 @@ func generateSystemPrompt(apiType string, userQuery string) string {
 
 	// 2. 灵魂层 - 使用 SoulSystem 加载
 	soulLayer := ""
-	soulSystem := NewSoulSystem("workspace")
+	soulSystem := NewSoulSystem(workspaceDir)
 	soulSystem.Load()
 	if soulSystem.HasSoul() {
 		soulLayer = "\n## Soul\n" + soulSystem.GetSoulContent()
@@ -277,12 +277,12 @@ func generateSystemPrompt(apiType string, userQuery string) string {
 
 	// 3. 工具使用指南层 - 从 TOOLS.md 加载
 	toolsLayer := ""
-	if toolsContent, err := os.ReadFile("workspace/TOOLS.md"); err == nil && len(toolsContent) > 0 {
+	if toolsContent, err := os.ReadFile(filepath.Join(workspaceDir, "TOOLS.md")); err == nil && len(toolsContent) > 0 {
 		toolsLayer = "\n## Tools Guide\n" + string(toolsContent)
 	}
 
 	// 4. 技能层 - 加载可用技能
-	skillsManager := NewSkillsManager("workspace")
+	skillsManager := NewSkillsManager(workspaceDir)
 	skillsManager.Discover()
 	skillsLayer := skillsManager.FormatPromptBlock()
 
@@ -290,7 +290,7 @@ func generateSystemPrompt(apiType string, userQuery string) string {
 	memoryContext := autoRecallMemories(userQuery)
 
 	// 6. Bootstrap 上下文层 - 加载其他 bootstrap 文件
-	bootstrapLoader := NewBootstrapLoader("workspace")
+	bootstrapLoader := NewBootstrapLoader(workspaceDir)
 	bootstrapFiles := bootstrapLoader.loadAll("full")
 	bootstrapLayer := ""
 	for name, content := range bootstrapFiles {

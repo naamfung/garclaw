@@ -16,7 +16,7 @@ var globalMemoryStore *MemoryStore
 
 // 初始化全局记忆存储
 func init() {
-	globalMemoryStore = NewMemoryStore("workspace")
+	globalMemoryStore = NewMemoryStore(workspaceDir)
 }
 
 // evaluateExpression 解析与计算数学表达式
@@ -374,50 +374,50 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		}
 
 	case "calculate":
-			expression, _ := argsMap["expression"].(string)
+		expression, _ := argsMap["expression"].(string)
 
-			if expression == "" {
-				content = "Error: Empty expression"
+		if expression == "" {
+			content = "Error: Empty expression"
+		} else {
+			result, err := evaluateExpression(expression)
+			if err != nil {
+				content = "Error: " + err.Error()
 			} else {
-				result, err := evaluateExpression(expression)
-				if err != nil {
-					content = "Error: " + err.Error()
-				} else {
-					content = fmt.Sprintf("%.6f", result)
-				}
-
-				fmt.Printf("Calculated: %s = %s\n", expression, content)
+				content = fmt.Sprintf("%.6f", result)
 			}
 
-		case "mail":
-			to, _ := argsMap["to"].(string)
-			subject, _ := argsMap["subject"].(string)
-			message, _ := argsMap["message"].(string)
+			fmt.Printf("Calculated: %s = %s\n", expression, content)
+		}
 
-			if to == "" || subject == "" || message == "" {
-				content = "Error: Missing required parameters for mail tool"
-			} else {
-				// 调用 MailChannel.Send() 发送邮件
-				if globalChannelManager != nil {
-					mailChannel := globalChannelManager.Get("mail")
-					if mailChannel != nil {
-						success := mailChannel.Send(to, message, map[string]interface{}{"subject": subject})
-						if success {
-							content = "Mail sent to " + to + " successfully"
-							fmt.Println(content)
-						} else {
-							content = "Error: Failed to send mail"
-						}
+	case "mail":
+		to, _ := argsMap["to"].(string)
+		subject, _ := argsMap["subject"].(string)
+		message, _ := argsMap["message"].(string)
+
+		if to == "" || subject == "" || message == "" {
+			content = "Error: Missing required parameters for mail tool"
+		} else {
+			// 调用 MailChannel.Send() 发送邮件
+			if globalChannelManager != nil {
+				mailChannel := globalChannelManager.Get("mail")
+				if mailChannel != nil {
+					success := mailChannel.Send(to, message, map[string]interface{}{"subject": subject})
+					if success {
+						content = "Mail sent to " + to + " successfully"
+						fmt.Println(content)
 					} else {
-						content = "Error: Mail channel not found"
+						content = "Error: Failed to send mail"
 					}
 				} else {
-					content = "Error: Channel manager not initialized"
+					content = "Error: Mail channel not found"
 				}
+			} else {
+				content = "Error: Channel manager not initialized"
 			}
+		}
 
-		default:
-			content = "Error: Unknown tool name"
+	default:
+		content = "Error: Unknown tool name"
 	}
 
 	return ToolResult{
