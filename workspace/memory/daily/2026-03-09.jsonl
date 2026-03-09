@@ -2,3 +2,8 @@
 {"category":"heartbeat","content":"HEARTBEAT_OK","ts":1773027598}
 {"category":"heartbeat","content":"HEARTBEAT_OK","ts":1773027637}
 {"category":"heartbeat","content":"HEARTBEAT_OK","ts":1773028654}
+{"category":"heartbeat","content":"Error calling model: API returned error status: 429, body: {\"error\":{\"code\":\"1302\",\"message\":\"您的账户已达到速率限制，请您控制请求频率\"}}","ts":1773039150}
+{"category":"heartbeat","content":"\n\nHEARTBEAT_OK","ts":1773039384}
+{"category":"heartbeat","content":"\n\nHEARTBEAT_OK","ts":1773039458}
+{"category":"heartbeat","content":"\n\nHEARTBEAT_OK","ts":1773039530}
+{"category":"heartbeat","content":"\n\nHEARTBEAT_OK","ts":1773039550}

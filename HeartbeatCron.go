@@ -472,13 +472,7 @@ func (cs *CronService) loadJobs() {
 		fmt.Println(string(content))
 	}
 
-	now := time.Now()
 	for i, jobData := range config.Jobs {
-		sched := map[string]interface{}{
-			"kind": "cron",
-			"expr": jobData.Expr,
-		}
-
 		// 为任务设置payload
 		payload := make(map[string]interface{})
 
@@ -497,21 +491,23 @@ func (cs *CronService) loadJobs() {
 			payload["text"] = fmt.Sprintf("Cron job %s executed", jobData.ID)
 		}
 
+		// 创建任务对象
 		job := CronJob{
 			ID:             jobData.ID,
 			Name:           jobData.Name,
 			Enabled:        jobData.Enabled,
 			ScheduleKind:   "cron",
-			ScheduleConfig: sched,
+			ScheduleConfig: map[string]interface{}{"expr": jobData.Expr},
 			Payload:        payload,
 		}
 
-		job.NextRunAt = cs.computeNext(&job, now)
 		cs.jobs = append(cs.jobs, job)
 
 		// 添加到cron调度
-		if job.Enabled && !job.NextRunAt.IsZero() && job.ScheduleKind == "cron" {
-			cs.scheduleJob(&job)
+		if job.Enabled && job.ScheduleKind == "cron" {
+			// 使用局部变量来避免循环变量引用问题
+			task := &cs.jobs[len(cs.jobs)-1]
+			cs.scheduleJob(task)
 		}
 
 		fmt.Printf("Loaded job %d: %s - %s\n", i, jobData.ID, jobData.Name)
@@ -558,8 +554,17 @@ func (cs *CronService) computeNext(job *CronJob, now time.Time) time.Time {
 		if expr, ok := cfg["expr"].(string); ok && expr != "" {
 			if schedule, err := cron.ParseStandard(expr); err == nil {
 				// 使用cron库计算下次运行时间
-				return schedule.Next(now)
+				next := schedule.Next(now)
+				// 打印调试信息
+				fmt.Printf("Cron expression %s, now %s, next run %s\n", expr, now.Format(time.RFC3339), next.Format(time.RFC3339))
+				return next
+			} else {
+				// 打印解析错误
+				fmt.Printf("Error parsing cron expression %s: %v\n", expr, err)
 			}
+		} else {
+			// 打印配置错误
+			fmt.Printf("Invalid cron expression config: %v\n", cfg)
 		}
 	}
 
@@ -569,6 +574,7 @@ func (cs *CronService) computeNext(job *CronJob, now time.Time) time.Time {
 // 调度任务
 func (cs *CronService) scheduleJob(job *CronJob) {
 	if expr, ok := job.ScheduleConfig["expr"].(string); ok && expr != "" {
+		// 直接使用传入的指针，确保状态更新能反映到原始任务对象上
 		cs.cron.AddFunc(expr, func() {
 			cs.runJob(job)
 		})
@@ -584,22 +590,34 @@ func (cs *CronService) runJob(job *CronJob) {
 	status = "ok"
 
 	defer func() {
-		job.LastRunAt = now
-		if status == "error" {
-			job.ConsecutiveErrors++
-			if job.ConsecutiveErrors >= 5 {
-				job.Enabled = false
-				msg := fmt.Sprintf("Job '%s' auto-disabled after %d consecutive errors: %s", job.Name, job.ConsecutiveErrors, errMsg)
-				fmt.Println(msg)
-				cs.queueLock.Lock()
-				cs.outputQueue = append(cs.outputQueue, msg)
-				cs.queueLock.Unlock()
+		// 查找cs.jobs中的原始任务对象
+		var originalJob *CronJob
+		for i := range cs.jobs {
+			if cs.jobs[i].ID == job.ID {
+				originalJob = &cs.jobs[i]
+				break
 			}
-		} else {
-			job.ConsecutiveErrors = 0
 		}
 
-		job.NextRunAt = cs.computeNext(job, now)
+		// 更新原始任务对象的状态
+		if originalJob != nil {
+			originalJob.LastRunAt = now
+			if status == "error" {
+				originalJob.ConsecutiveErrors++
+				if originalJob.ConsecutiveErrors >= 5 {
+					originalJob.Enabled = false
+					msg := fmt.Sprintf("Job '%s' auto-disabled after %d consecutive errors: %s", originalJob.Name, originalJob.ConsecutiveErrors, errMsg)
+					fmt.Println(msg)
+					cs.queueLock.Lock()
+					cs.outputQueue = append(cs.outputQueue, msg)
+					cs.queueLock.Unlock()
+				}
+			} else {
+				originalJob.ConsecutiveErrors = 0
+			}
+
+			originalJob.NextRunAt = cs.computeNext(originalJob, now)
+		}
 
 		// 记录运行日志
 		entry := map[string]interface{}{
@@ -714,7 +732,19 @@ func (cs *CronService) ListJobs() []map[string]interface{} {
 	now := time.Now()
 	result := make([]map[string]interface{}, 0)
 
-	for _, j := range cs.jobs {
+	for i, j := range cs.jobs {
+		// 解析cron表达式并计算下次运行时间
+		if j.ScheduleKind == "cron" {
+			if expr, ok := j.ScheduleConfig["expr"].(string); ok && expr != "" {
+				schedule, err := cron.ParseStandard(expr)
+				if err == nil {
+					nextRunAt := schedule.Next(now)
+					cs.jobs[i].NextRunAt = nextRunAt
+					j = cs.jobs[i]
+				}
+			}
+		}
+
 		var nextIn *time.Duration
 		if !j.NextRunAt.IsZero() {
 			diff := j.NextRunAt.Sub(now)

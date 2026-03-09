@@ -104,6 +104,24 @@ func main() {
 	cronService := NewCronService()
 	defer cronService.Stop()
 
+	// 打印初始定时任务状态
+	fmt.Println()
+	fmt.Println("=== 定时任务状态 ===")
+	jobs := cronService.ListJobs()
+	for _, j := range jobs {
+		enabled := "ON"
+		if !j["enabled"].(bool) {
+			enabled = "OFF"
+		}
+		nextIn := ""
+		if j["next_in"] != nil {
+			nextIn = fmt.Sprintf(" in %s", j["next_in"])
+		}
+		fmt.Printf("  [%s] %s - %s%s\n", enabled, j["id"], j["name"], nextIn)
+	}
+	fmt.Println("====================")
+	fmt.Println()
+
 	// 初始化通道管理器
 	channelManager := InitializeChannels()
 	globalChannelManager = channelManager
