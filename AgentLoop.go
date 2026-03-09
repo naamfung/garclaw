@@ -170,7 +170,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if command == "" {
 			content = "Error: Empty command"
 		} else {
-			fmt.Printf("$ %s\n", command)
 			result := runShell(command)
 			if result.Err != nil {
 				content = fmt.Sprintf("Error: %v", result.Err)
@@ -179,11 +178,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 				if result.ExitCode != 0 && result.Stderr != "" {
 					content += "\n" + result.Stderr
 				}
-			}
-			if len(content) > 512 && isDebug {
-				fmt.Println(TruncateString(content, 512))
-			} else {
-				fmt.Println(content)
 			}
 		}
 
@@ -194,14 +188,12 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if filename == "" || lineNum < 1 {
 			content = "Error: Invalid arguments for read_file_line"
 		} else {
-			fmt.Printf("Reading line %d from %s\n", lineNum, filename)
 			c, err := ReadFileLine(filename, lineNum)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = c
 			}
-			fmt.Println(TruncateString(content, 200))
 		}
 
 	case "write_file_line":
@@ -212,14 +204,12 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if filename == "" || lineNum < 1 {
 			content = "Error: Invalid arguments for write_file_line"
 		} else {
-			fmt.Printf("Writing to line %d in %s\n", lineNum, filename)
 			err := WriteFileLine(filename, lineNum, text)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = "Successfully wrote to line " + strconv.Itoa(lineNum)
 			}
-			fmt.Println(content)
 		}
 
 	case "read_all_lines":
@@ -227,7 +217,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if filename == "" {
 			content = "Error: Invalid arguments for read_all_lines"
 		} else {
-			fmt.Printf("Reading all lines from %s\n", filename)
 			lines, err := ReadAllLines(filename)
 			if err != nil {
 				content = "Error: " + err.Error()
@@ -239,7 +228,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 					content = string(linesJSON)
 				}
 			}
-			fmt.Println(TruncateString(content, 200))
 		}
 
 	case "write_all_lines":
@@ -254,14 +242,12 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 					lines[i] = lineStr
 				}
 			}
-			fmt.Printf("Writing all lines to %s\n", filename)
 			err := WriteAllLines(filename, lines)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
 			}
-			fmt.Println(content)
 		}
 
 	case "search":
@@ -269,7 +255,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if keyword == "" {
 			content = "Error: Empty keyword in search tool call"
 		} else {
-			fmt.Printf("Searching for: %s\n", keyword)
 			resultsList, err := Search(keyword)
 			if err != nil {
 				content = "Error: " + err.Error()
@@ -284,7 +269,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 			} else {
 				content = "No search results found"
 			}
-			fmt.Println("Search completed")
 		}
 
 	case "visit":
@@ -292,14 +276,12 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if url == "" {
 			content = "Error: Empty url in visit tool call"
 		} else {
-			fmt.Printf("Visiting: %s\n", url)
 			pageText, err := Visit(url)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = "Visit completed. Page content: " + pageText
 			}
-			fmt.Println("Visit completed")
 		}
 
 	case "download":
@@ -307,14 +289,12 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if url == "" {
 			content = "Error: Empty url in download tool call"
 		} else {
-			fmt.Printf("Downloading from: %s\n", url)
 			fileName, err := Download(url)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = "Download completed, saved to: " + fileName
 			}
-			fmt.Println(content)
 		}
 
 	case "todo":
@@ -338,14 +318,12 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 					items = append(items, item)
 				}
 			}
-			fmt.Println("Updating todo list...")
 			output, err := TODO.Update(items)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = output
 			}
-			fmt.Println(content)
 			usedTodo = true
 		}
 
@@ -360,7 +338,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 				category = cat
 			}
 			content = globalMemoryStore.WriteDailyMemory(contentStr, category)
-			fmt.Println(content)
 		}
 
 	case "memory_search":
@@ -370,7 +347,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		} else {
 			// 使用全局记忆存储
 			content = globalMemoryStore.SearchMemory(query)
-			fmt.Println("Memory search completed")
 		}
 
 	case "calculate":
@@ -385,8 +361,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 			} else {
 				content = fmt.Sprintf("%.6f", result)
 			}
-
-			fmt.Printf("Calculated: %s = %s\n", expression, content)
 		}
 
 	case "mail":
@@ -404,7 +378,6 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 					success := mailChannel.Send(to, message, map[string]interface{}{"subject": subject})
 					if success {
 						content = "Mail sent to " + to + " successfully"
-						fmt.Println(content)
 					} else {
 						content = "Error: Failed to send mail"
 					}
