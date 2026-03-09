@@ -213,8 +213,8 @@ func (h *HeartbeatRunner) execute() {
 		},
 	}
 
-	// 调用模型
-	response, err := CallModel(
+	// 调用 AgentLoop 处理模型交互和工具调用
+	_, responseStr := AgentLoop(
 		messages,
 		config.APIConfig.APIType,
 		config.APIConfig.BaseURL,
@@ -225,15 +225,6 @@ func (h *HeartbeatRunner) execute() {
 		false, // 心跳禁用流式输出，避免直接打印到终端
 		config.APIConfig.Thinking,
 	)
-	if err != nil {
-		return
-	}
-
-	// 处理响应
-	responseStr := ""
-	if content, ok := response.Content.(string); ok {
-		responseStr = content
-	}
 
 	meaningful := h.parseResponse(responseStr)
 
@@ -328,8 +319,8 @@ func (h *HeartbeatRunner) Trigger() string {
 		},
 	}
 
-	// 调用模型
-	response, err := CallModel(
+	// 调用 AgentLoop 处理模型交互和工具调用
+	_, responseStr := AgentLoop(
 		messages,
 		config.APIConfig.APIType,
 		config.APIConfig.BaseURL,
@@ -340,14 +331,8 @@ func (h *HeartbeatRunner) Trigger() string {
 		false, // 禁用流式输出，避免直接打印到终端
 		config.APIConfig.Thinking,
 	)
-	if err != nil {
-		return "Error calling model: " + err.Error()
-	}
-
-	// 处理响应
-	responseStr := ""
-	if content, ok := response.Content.(string); ok {
-		responseStr = content
+	if responseStr == "" {
+		return "Error calling model: no response"
 	}
 
 	meaningful := h.parseResponse(responseStr)
