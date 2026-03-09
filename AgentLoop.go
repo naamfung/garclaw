@@ -586,9 +586,26 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			// Anthropic与Ollama的工具调用格式
 			if contentArray, ok := resp.Content.([]interface{}); ok {
 				for _, item := range contentArray {
-					if toolUse, ok := item.(map[string]interface{}); ok && toolUse["type"] == "tool_use" {
-						toolName, nameOk := toolUse["name"].(string)
-						input, inputOk := toolUse["input"].(map[string]interface{})
+					if toolUse, ok := item.(map[string]interface{}); ok && (toolUse["type"] == "tool_use" || toolUse["type"] == "function") {
+						var toolName string
+						var input map[string]interface{}
+						var nameOk, inputOk bool
+
+						if toolUse["type"] == "tool_use" {
+							toolName, nameOk = toolUse["name"].(string)
+							input, inputOk = toolUse["input"].(map[string]interface{})
+						} else if toolUse["type"] == "function" {
+							function, ok := toolUse["function"].(map[string]interface{})
+							if ok {
+								toolName, nameOk = function["name"].(string)
+								argsStr, argsOk := function["arguments"].(string)
+								if argsOk {
+									if err := json.Unmarshal([]byte(argsStr), &input); err == nil {
+										inputOk = true
+									}
+								}
+							}
+						}
 
 						toolID, ok := toolUse["id"].(string)
 						if !ok {
@@ -657,5 +674,8 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				fmt.Printf("Message %d: Role=%s, Content=%v, ToolCallID=%s\n", i, msg.Role, msg.Content, msg.ToolCallID)
 			}
 		}
+
+		// 继续循环，再次调用模型处理工具执行结果
+		continue
 	}
 }
