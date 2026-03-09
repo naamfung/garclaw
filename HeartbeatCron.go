@@ -692,6 +692,29 @@ func (cs *CronService) runJob(job *CronJob) {
 		// 处理响应
 		if content, ok := response.Content.(string); ok {
 			output = content
+		} else if toolCalls, ok := response.Content.([]map[string]interface{}); ok {
+			// 处理工具调用
+			for _, toolCall := range toolCalls {
+				if toolCall["type"] == "function" {
+					function, ok := toolCall["function"].(map[string]interface{})
+					if ok {
+						toolName, nameOk := function["name"].(string)
+						arguments, argsOk := function["arguments"].(string)
+						if nameOk && argsOk {
+							var argsMap map[string]interface{}
+							if err := json.Unmarshal([]byte(arguments), &argsMap); err == nil {
+								// 执行工具调用
+								toolResult, _ := executeTool(toolCall["id"].(string), toolName, argsMap)
+								// 将工具执行结果添加到输出
+								output += "\nTool result: " + toolResult.Content
+							}
+						}
+					}
+				}
+			}
+			if output == "" {
+				output = "Cron job executed successfully with tool calls"
+			}
 		} else {
 			output = "Cron job executed successfully"
 		}
