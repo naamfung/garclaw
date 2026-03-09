@@ -1,12 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/chzyer/readline"
 )
 
 const (
@@ -115,7 +116,13 @@ func main() {
 	// 加载历史会话
 	history := sessionManager.LoadHistory()
 
-	scanner := bufio.NewScanner(os.Stdin)
+	// 初始化readline
+	rl, err := readline.New("GarClaw /> ")
+	if err != nil {
+		fmt.Printf("Error initializing readline: %v\n", err)
+		return
+	}
+	defer rl.Close()
 
 	// 打印帮助信息
 	printHelp()
@@ -203,15 +210,12 @@ func main() {
 		// 打印命令提示符
 		fmt.Println()
 		fmt.Println()
-		fmt.Print("GarClaw /> ")
 
 		// 处理用户输入
-		if !scanner.Scan() {
+		query, err := rl.Readline()
+		if err != nil {
 			break
 		}
-
-		var query string
-		query = scanner.Text()
 
 		// 去除空白字符
 		trimmedQuery := strings.TrimSpace(query)
