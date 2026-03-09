@@ -57,6 +57,7 @@ type CronService struct {
 	watcher     *fsnotify.Watcher // 文件系统监控器
 	lastEvent   time.Time         // 上次事件时间，用于防抖
 	eventMutex  sync.Mutex        // 事件锁，用于防抖
+	memoryStore *MemoryStore      // 记忆存储
 }
 
 // 工作区目录
@@ -405,6 +406,9 @@ func NewCronService() *CronService {
 		}
 	}
 
+	// 初始化记忆存储
+	memoryStore := NewMemoryStore(workspaceDir)
+
 	cs := &CronService{
 		cronFile:    cronFile,
 		jobs:        make([]CronJob, 0),
@@ -412,6 +416,7 @@ func NewCronService() *CronService {
 		runLog:      runLog,
 		cron:        c,
 		watcher:     watcher,
+		memoryStore: memoryStore,
 	}
 
 	cs.loadJobs()
@@ -641,6 +646,14 @@ func (cs *CronService) runJob(job *CronJob) {
 			cs.queueLock.Lock()
 			cs.outputQueue = append(cs.outputQueue, fmt.Sprintf("[%s] [%s] %s", job.Name, now.Format("15:04:05"), output))
 			cs.queueLock.Unlock()
+
+			// 将任务输出写入记忆
+			if cs.memoryStore != nil && status == "ok" {
+				memResult := cs.memoryStore.WriteDailyMemory(output, job.ID)
+				cs.queueLock.Lock()
+				cs.outputQueue = append(cs.outputQueue, memResult)
+				cs.queueLock.Unlock()
+			}
 		}
 	}()
 
