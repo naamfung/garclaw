@@ -280,6 +280,7 @@ func printHelp() {
 	fmt.Println("  /trigger           -- Force heartbeat now")
 	fmt.Println("  /cron              -- List cron jobs")
 	fmt.Println("  /cron-trigger <id> -- Trigger a cron job")
+	fmt.Println("  /cron-toggle <id> <on|off> -- Enable or disable a cron job")
 	fmt.Println("  /channels          -- List registered channels")
 	fmt.Println("  /mail <to> <subject> <message> -- Send an email")
 	fmt.Println("  /lanes             -- Show lane lock status")
@@ -331,17 +332,31 @@ func handleCommand(cmd string, heartbeat *HeartbeatRunner, cronService *CronServ
 			fmt.Printf("  [%s] %s - %s%s%s\n", enabled, j["id"], j["name"], errorStr, nextIn)
 		}
 	case "/cron-trigger":
-		if len(parts) < 2 {
-			fmt.Println("  Usage: /cron-trigger <job_id>")
-			return
-		}
-		jobID := parts[1]
-		result := cronService.TriggerJob(jobID)
-		fmt.Printf("  %s\n", result)
-		// 处理触发后的输出
-		for _, msg := range cronService.DrainOutput() {
-			fmt.Printf("[cron] %s\n", msg)
-		}
+			if len(parts) < 2 {
+				fmt.Println("  Usage: /cron-trigger <job_id>")
+				return
+			}
+			jobID := parts[1]
+			result := cronService.TriggerJob(jobID)
+			fmt.Printf("  %s\n", result)
+			// 处理触发后的输出
+			for _, msg := range cronService.DrainOutput() {
+				fmt.Printf("[cron] %s\n", msg)
+			}
+		case "/cron-toggle":
+			if len(parts) < 3 {
+				fmt.Println("  Usage: /cron-toggle <job_id> <on|off>")
+				return
+			}
+			jobID := parts[1]
+			enabledStr := strings.ToLower(parts[2])
+			enabled := enabledStr == "on"
+			if enabledStr != "on" && enabledStr != "off" {
+				fmt.Println("  Usage: /cron-toggle <job_id> <on|off>")
+				return
+			}
+			result := cronService.ToggleJob(jobID, enabled)
+			fmt.Printf("  %s\n", result)
 	case "/channels":
 		channels := channelManager.ListChannels()
 		if len(channels) == 0 {
