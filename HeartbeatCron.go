@@ -571,10 +571,9 @@ func (cs *CronService) computeNext(job *CronJob, now time.Time) time.Time {
 		return anchor.Add(time.Duration(steps) * time.Duration(everySeconds) * time.Second)
 	case "cron":
 		if expr, ok := cfg["expr"].(string); ok && expr != "" {
-			if _, err := cron.ParseStandard(expr); err == nil {
-				// 对于cron表达式，我们暂时返回一个默认值
-				// 实际实现中应该使用cron库来计算下次运行时间
-				return now.Add(24 * time.Hour)
+			if schedule, err := cron.ParseStandard(expr); err == nil {
+				// 使用cron库计算下次运行时间
+				return schedule.Next(now)
 			}
 		}
 	}
