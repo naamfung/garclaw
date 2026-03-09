@@ -401,13 +401,14 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 }
 
 // 核心agent循环
-func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) []Message {
+func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) ([]Message, string) {
 	roundsSinceTodo := 0
+	var finalOutput string
 	for {
 		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		if err != nil {
 			fmt.Printf("Error calling model: %v\n", err)
-			return messages
+			return messages, "Error calling model: " + err.Error()
 		}
 
 		// 打印响应信息，用于调试
@@ -431,6 +432,12 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				Content:          resp.Content,
 				ReasoningContent: resp.ReasoningContent,
 			})
+			// 记录最终输出
+			if content, ok := resp.Content.(string); ok {
+				finalOutput = content
+			} else {
+				finalOutput = "Cron job executed successfully"
+			}
 		}
 
 		// 如果模型未有调用工具，结束
@@ -439,7 +446,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			if resp.Content == nil || fmt.Sprint(resp.Content) == "" {
 				fmt.Println("模型终止响应..")
 			}
-			return messages
+			return messages, finalOutput
 		}
 
 		// 执行工具调用

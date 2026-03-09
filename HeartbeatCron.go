@@ -672,8 +672,8 @@ func (cs *CronService) runJob(job *CronJob) {
 			},
 		}
 
-		// 调用模型
-		response, err := CallModel(
+		// 调用 AgentLoop 处理模型交互和工具调用
+		_, output = AgentLoop(
 			messages,
 			config.APIConfig.APIType,
 			config.APIConfig.BaseURL,
@@ -684,92 +684,12 @@ func (cs *CronService) runJob(job *CronJob) {
 			false, // 禁用流式输出，避免直接打印到终端
 			config.APIConfig.Thinking,
 		)
-		if err != nil {
-			output, status, errMsg = "[error calling model]", "error", "Error calling model: "+err.Error()
-			return
-		}
 
-			// 处理响应
-		if content, ok := response.Content.(string); ok {
-			output = content
-		} else if toolCalls, ok := response.Content.([]map[string]interface{}); ok {
-			// 处理工具调用
-			for _, toolCall := range toolCalls {
-				if toolCall["type"] == "function" {
-					function, ok := toolCall["function"].(map[string]interface{})
-					if ok {
-						toolName, nameOk := function["name"].(string)
-						arguments, argsOk := function["arguments"].(string)
-						if nameOk && argsOk {
-							var argsMap map[string]interface{}
-							if err := json.Unmarshal([]byte(arguments), &argsMap); err == nil {
-								// 执行工具调用
-								toolResult, _ := executeTool(toolCall["id"].(string), toolName, argsMap)
-								
-								// 将工具执行结果添加到输出
-								output += "\nTool result: " + toolResult.Content
-								
-								// 构建工具结果消息
-								toolMsg := Message{
-									Role:       "tool",
-									ToolCallID: toolCall["id"].(string),
-									Content:    toolResult.Content,
-								}
-								
-								// 将工具结果添加到消息历史
-								messages = append(messages, toolMsg)
-								
-								// 继续与模型交互，处理工具执行结果
-								response, err = CallModel(
-									messages,
-									config.APIConfig.APIType,
-									config.APIConfig.BaseURL,
-									config.APIConfig.APIKey,
-									config.APIConfig.Model,
-									config.APIConfig.Temperature,
-									config.APIConfig.MaxTokens,
-									false, // 禁用流式输出
-									config.APIConfig.Thinking,
-								)
-								if err != nil {
-									output, status, errMsg = "[error calling model after tool execution]", "error", "Error calling model: "+err.Error()
-									return
-								}
-								
-								// 处理模型的后续响应
-								if content, ok := response.Content.(string); ok {
-									output += "\nModel response: " + content
-								} else if subToolCalls, ok := response.Content.([]map[string]interface{}); ok {
-									// 递归处理更多工具调用
-									for _, subToolCall := range subToolCalls {
-										if subToolCall["type"] == "function" {
-											subFunction, ok := subToolCall["function"].(map[string]interface{})
-											if ok {
-												subToolName, subNameOk := subFunction["name"].(string)
-												subArguments, subArgsOk := subFunction["arguments"].(string)
-												if subNameOk && subArgsOk {
-													var subArgsMap map[string]interface{}
-													if err := json.Unmarshal([]byte(subArguments), &subArgsMap); err == nil {
-														// 执行工具调用
-														subToolResult, _ := executeTool(subToolCall["id"].(string), subToolName, subArgsMap)
-														// 将工具执行结果添加到输出
-														output += "\nSub tool result: " + subToolResult.Content
-													}
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			if output == "" {
-				output = "Cron job executed successfully with tool calls"
-			}
-		} else {
-			output = "Cron job executed successfully"
+		// 检查是否有错误
+		if output != "" && (len(output) > 7 && output[:7] == "Error: ") {
+			status = "error"
+			errMsg = output
+			return
 		}
 	case "system_event":
 		text, ok := payload["text"].(string)

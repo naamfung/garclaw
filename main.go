@@ -165,7 +165,7 @@ func main() {
 				}
 
 				// 调用 AgentLoop 并获取更新后的消息
-				history = AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+				history, _ = AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 
 				// 保存助手回复到会话文件
 				if len(history) > 0 {
@@ -252,7 +252,7 @@ func main() {
 		}
 
 		// 调用 AgentLoop 并获取更新后的消息
-		history = AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+		history, _ = AgentLoop(history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 
 		// 保存助手回复到会话文件
 		if len(history) > 0 {
@@ -332,31 +332,31 @@ func handleCommand(cmd string, heartbeat *HeartbeatRunner, cronService *CronServ
 			fmt.Printf("  [%s] %s - %s%s%s\n", enabled, j["id"], j["name"], errorStr, nextIn)
 		}
 	case "/cron-trigger":
-			if len(parts) < 2 {
-				fmt.Println("  Usage: /cron-trigger <job_id>")
-				return
-			}
-			jobID := parts[1]
-			result := cronService.TriggerJob(jobID)
-			fmt.Printf("  %s\n", result)
-			// 处理触发后的输出
-			for _, msg := range cronService.DrainOutput() {
-				fmt.Printf("[cron] %s\n", msg)
-			}
-		case "/cron-toggle":
-			if len(parts) < 3 {
-				fmt.Println("  Usage: /cron-toggle <job_id> <on|off>")
-				return
-			}
-			jobID := parts[1]
-			enabledStr := strings.ToLower(parts[2])
-			enabled := enabledStr == "on"
-			if enabledStr != "on" && enabledStr != "off" {
-				fmt.Println("  Usage: /cron-toggle <job_id> <on|off>")
-				return
-			}
-			result := cronService.ToggleJob(jobID, enabled)
-			fmt.Printf("  %s\n", result)
+		if len(parts) < 2 {
+			fmt.Println("  Usage: /cron-trigger <job_id>")
+			return
+		}
+		jobID := parts[1]
+		result := cronService.TriggerJob(jobID)
+		fmt.Printf("  %s\n", result)
+		// 处理触发后的输出
+		for _, msg := range cronService.DrainOutput() {
+			fmt.Printf("[cron] %s\n", msg)
+		}
+	case "/cron-toggle":
+		if len(parts) < 3 {
+			fmt.Println("  Usage: /cron-toggle <job_id> <on|off>")
+			return
+		}
+		jobID := parts[1]
+		enabledStr := strings.ToLower(parts[2])
+		enabled := enabledStr == "on"
+		if enabledStr != "on" && enabledStr != "off" {
+			fmt.Println("  Usage: /cron-toggle <job_id> <on|off>")
+			return
+		}
+		result := cronService.ToggleJob(jobID, enabled)
+		fmt.Printf("  %s\n", result)
 	case "/channels":
 		channels := channelManager.ListChannels()
 		if len(channels) == 0 {
