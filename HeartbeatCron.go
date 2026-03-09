@@ -477,6 +477,15 @@ func (cs *CronService) loadJobs() {
 	}
 
 	fmt.Printf("Found %d jobs in CRON.toon\n", len(config.Jobs))
+	// 打印解析结果，用于调试
+	if len(config.Jobs) > 0 {
+		fmt.Printf("First job: ID=%s, Name=%s, Enabled=%v\n", config.Jobs[0].ID, config.Jobs[0].Name, config.Jobs[0].Enabled)
+	} else {
+		fmt.Println("No jobs parsed from CRON.toon")
+		// 打印文件内容，用于调试
+		fmt.Println("File content:")
+		fmt.Println(string(content))
+	}
 
 	now := time.Now()
 	for i, jobData := range config.Jobs {
