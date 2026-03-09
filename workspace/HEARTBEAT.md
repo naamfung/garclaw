@@ -1,9 +1,9 @@
-# Heartbeat Instructions
+# 心跳指令
 
-Check if there are any important tasks to perform or updates to provide.
+检查是否有重要任务需要执行或需要提供的更新。
 
-Be concise and focused. If there's nothing to report, return "HEARTBEAT_OK".
+保持简洁专注。如果未有需要报告的内容，请返回 "HEARTBEAT_OK"。
 
-Current context:
-- System time: {{TIME}}
-- Recent activities: {{ACTIVITIES}}
+当前上下文：
+- 系统时间：{{TIME}}
+- 最近活动：{{ACTIVITIES}}
