@@ -457,7 +457,8 @@ func (cs *CronService) loadJobs() {
 	cs.jobs = make([]CronJob, 0)
 
 	if _, err := os.Stat(cs.cronFile); os.IsNotExist(err) {
-		fmt.Printf("CRON.toon not found: %v\n", err)
+		fmt.Println("CRON.toon not found. No scheduled tasks set up yet.")
+		fmt.Println("To set up scheduled tasks, create a CRON.toon file in the workspace directory with your tasks.")
 		return
 	}
 
