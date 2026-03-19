@@ -15,13 +15,13 @@ const (
 	ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
 	OLLAMA_BASE_URL    = "http://localhost:11434/api"
 	OPENAI_BASE_URL    = "https://api.openai.com/v1"
-	DEFAULT_MODEL_ID   = "deepseek-chat"
+	DEFAULT_MODEL_ID   = "deepseek-chat" // 修改默认模型以匹配您实际使用的
 	CONFIG_FILE        = "config.toon"
 )
 
 // HTTP服务器配置
 type HTTPServerConfig struct {
-	Listen string `json:"listen"` // 例如 "0.0.0.0:10086"
+	Listen string `json:"listen"`
 }
 
 // 邮件配置
@@ -36,7 +36,7 @@ type EmailConfig struct {
 	SMTPUseTLS   bool   `json:"smtp_use_tls"`
 	SMTPUser     string `json:"smtp_user"`
 	SMTPPassword string `json:"smtp_password"`
-	PollInterval int    `json:"poll_interval"` // 秒
+	PollInterval int    `json:"poll_interval"`
 }
 
 // API配置
@@ -49,7 +49,7 @@ type APIConfig struct {
 	MaxTokens              int     `json:"max_tokens"`
 	Stream                 bool    `json:"stream"`
 	Thinking               bool    `json:"thinking"`
-	BlockDangerousCommands bool    `json:"block_dangerous_commands"` // 新增：是否拦截危险命令
+	BlockDangerousCommands bool    `json:"block_dangerous_commands"`
 }
 
 // 主配置结构
@@ -57,6 +57,51 @@ type Config struct {
 	APIConfig   APIConfig       `json:"api_config"`
 	HTTPServer  HTTPServerConfig `json:"http_server"`
 	EmailConfig *EmailConfig     `json:"email_config,omitempty"`
+}
+
+// 辅助函数：从 map 中获取字符串值，支持多个键名
+func getString(m map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if val, ok := m[key]; ok {
+			if s, ok := val.(string); ok {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func getFloat(m map[string]interface{}, keys ...string) float64 {
+	for _, key := range keys {
+		if val, ok := m[key]; ok {
+			if f, ok := val.(float64); ok {
+				return f
+			}
+		}
+	}
+	return 0
+}
+
+func getInt(m map[string]interface{}, keys ...string) int {
+	for _, key := range keys {
+		if val, ok := m[key]; ok {
+			if f, ok := val.(float64); ok {
+				return int(f)
+			}
+		}
+	}
+	return 0
+}
+
+func getBool(m map[string]interface{}, keys ...string) bool {
+	for _, key := range keys {
+		if val, ok := m[key]; ok {
+			if b, ok := val.(bool); ok {
+				return b
+			}
+		}
+	}
+	return false
 }
 
 // 加载配置文件
@@ -82,7 +127,7 @@ func loadConfig() (Config, error) {
 		defaultConfig.APIConfig.MaxTokens = 4096
 		defaultConfig.APIConfig.Stream = true
 		defaultConfig.APIConfig.Thinking = false
-		defaultConfig.APIConfig.BlockDangerousCommands = false // 默认为 false，即不拦截
+		defaultConfig.APIConfig.BlockDangerousCommands = false
 		defaultConfig.HTTPServer.Listen = "0.0.0.0:10086"
 
 		toonData, err := toon.Marshal(defaultConfig)
@@ -99,46 +144,44 @@ func loadConfig() (Config, error) {
 		return config, fmt.Errorf("error parsing TOON config: %v", err)
 	}
 
-	// 手动解析 api_config
+	// 打印原始解析结果用于调试
+	if IsDebug {
+		fmt.Printf("Raw parsed config: %+v\n", parsed)
+	}
+
+	// 尝试获取 api_config 部分，支持多种键名
+	var apiConfigMap map[string]interface{}
 	if apiConfig, ok := parsed.(map[string]interface{})["api_config"]; ok {
-		if apiMap, ok := apiConfig.(map[string]interface{}); ok {
-			if v, ok := apiMap["api_type"]; ok {
-				config.APIConfig.APIType = toString(v)
-			}
-			if v, ok := apiMap["base_url"]; ok {
-				config.APIConfig.BaseURL = toString(v)
-			}
-			if v, ok := apiMap["api_key"]; ok {
-				config.APIConfig.APIKey = toString(v)
-			}
-			if v, ok := apiMap["model"]; ok {
-				config.APIConfig.Model = toString(v)
-			}
-			if v, ok := apiMap["temperature"]; ok {
-				config.APIConfig.Temperature = toFloat(v)
-			}
-			if v, ok := apiMap["max_tokens"]; ok {
-				config.APIConfig.MaxTokens = toInt(v)
-			}
-			if v, ok := apiMap["stream"]; ok {
-				config.APIConfig.Stream = toBool(v)
-			}
-			if v, ok := apiMap["thinking"]; ok {
-				config.APIConfig.Thinking = toBool(v)
-			}
-			// 解析新增字段
-			if v, ok := apiMap["block_dangerous_commands"]; ok {
-				config.APIConfig.BlockDangerousCommands = toBool(v)
-			}
+		if m, ok := apiConfig.(map[string]interface{}); ok {
+			apiConfigMap = m
 		}
+	} else if apiConfig, ok := parsed.(map[string]interface{})["APIConfig"]; ok {
+		if m, ok := apiConfig.(map[string]interface{}); ok {
+			apiConfigMap = m
+		}
+	}
+
+	if apiConfigMap != nil {
+		// 使用辅助函数获取值，支持多种键名
+		config.APIConfig.APIType = getString(apiConfigMap, "api_type", "APIType", "apitype")
+		config.APIConfig.BaseURL = getString(apiConfigMap, "base_url", "BaseURL", "baseurl")
+		config.APIConfig.APIKey = getString(apiConfigMap, "api_key", "APIKey", "apikey")
+		config.APIConfig.Model = getString(apiConfigMap, "model", "Model")
+		config.APIConfig.Temperature = getFloat(apiConfigMap, "temperature", "Temperature")
+		config.APIConfig.MaxTokens = getInt(apiConfigMap, "max_tokens", "MaxTokens", "maxtokens")
+		config.APIConfig.Stream = getBool(apiConfigMap, "stream", "Stream")
+		config.APIConfig.Thinking = getBool(apiConfigMap, "thinking", "Thinking")
+		config.APIConfig.BlockDangerousCommands = getBool(apiConfigMap, "block_dangerous_commands", "BlockDangerousCommands", "blockdangerouscommands")
 	}
 
 	// 解析 http_server
 	if httpCfg, ok := parsed.(map[string]interface{})["http_server"]; ok {
 		if httpMap, ok := httpCfg.(map[string]interface{}); ok {
-			if v, ok := httpMap["listen"]; ok {
-				config.HTTPServer.Listen = toString(v)
-			}
+			config.HTTPServer.Listen = getString(httpMap, "listen", "Listen")
+		}
+	} else if httpCfg, ok := parsed.(map[string]interface{})["HTTPServer"]; ok {
+		if httpMap, ok := httpCfg.(map[string]interface{}); ok {
+			config.HTTPServer.Listen = getString(httpMap, "listen", "Listen")
 		}
 	}
 	if config.HTTPServer.Listen == "" {
@@ -149,44 +192,38 @@ func loadConfig() (Config, error) {
 	if emailCfg, ok := parsed.(map[string]interface{})["email_config"]; ok {
 		if emailMap, ok := emailCfg.(map[string]interface{}); ok {
 			ec := &EmailConfig{}
-			if v, ok := emailMap["imap_server"]; ok {
-				ec.IMAPServer = toString(v)
-			}
-			if v, ok := emailMap["imap_port"]; ok {
-				ec.IMAPPort = toInt(v)
-			}
-			if v, ok := emailMap["imap_use_tls"]; ok {
-				ec.IMAPUseTLS = toBool(v)
-			}
-			if v, ok := emailMap["imap_user"]; ok {
-				ec.IMAPUser = toString(v)
-			}
-			if v, ok := emailMap["imap_password"]; ok {
-				ec.IMAPPassword = toString(v)
-			}
-			if v, ok := emailMap["smtp_server"]; ok {
-				ec.SMTPServer = toString(v)
-			}
-			if v, ok := emailMap["smtp_port"]; ok {
-				ec.SMTPPort = toInt(v)
-			}
-			if v, ok := emailMap["smtp_use_tls"]; ok {
-				ec.SMTPUseTLS = toBool(v)
-			}
-			if v, ok := emailMap["smtp_user"]; ok {
-				ec.SMTPUser = toString(v)
-			}
-			if v, ok := emailMap["smtp_password"]; ok {
-				ec.SMTPPassword = toString(v)
-			}
-			if v, ok := emailMap["poll_interval"]; ok {
-				ec.PollInterval = toInt(v)
-			}
+			ec.IMAPServer = getString(emailMap, "imap_server", "IMAPServer")
+			ec.IMAPPort = getInt(emailMap, "imap_port", "IMAPPort")
+			ec.IMAPUseTLS = getBool(emailMap, "imap_use_tls", "IMAPUseTLS")
+			ec.IMAPUser = getString(emailMap, "imap_user", "IMAPUser")
+			ec.IMAPPassword = getString(emailMap, "imap_password", "IMAPPassword")
+			ec.SMTPServer = getString(emailMap, "smtp_server", "SMTPServer")
+			ec.SMTPPort = getInt(emailMap, "smtp_port", "SMTPPort")
+			ec.SMTPUseTLS = getBool(emailMap, "smtp_use_tls", "SMTPUseTLS")
+			ec.SMTPUser = getString(emailMap, "smtp_user", "SMTPUser")
+			ec.SMTPPassword = getString(emailMap, "smtp_password", "SMTPPassword")
+			ec.PollInterval = getInt(emailMap, "poll_interval", "PollInterval")
+			config.EmailConfig = ec
+		}
+	} else if emailCfg, ok := parsed.(map[string]interface{})["EmailConfig"]; ok {
+		if emailMap, ok := emailCfg.(map[string]interface{}); ok {
+			ec := &EmailConfig{}
+			ec.IMAPServer = getString(emailMap, "imap_server", "IMAPServer")
+			ec.IMAPPort = getInt(emailMap, "imap_port", "IMAPPort")
+			ec.IMAPUseTLS = getBool(emailMap, "imap_use_tls", "IMAPUseTLS")
+			ec.IMAPUser = getString(emailMap, "imap_user", "IMAPUser")
+			ec.IMAPPassword = getString(emailMap, "imap_password", "IMAPPassword")
+			ec.SMTPServer = getString(emailMap, "smtp_server", "SMTPServer")
+			ec.SMTPPort = getInt(emailMap, "smtp_port", "SMTPPort")
+			ec.SMTPUseTLS = getBool(emailMap, "smtp_use_tls", "SMTPUseTLS")
+			ec.SMTPUser = getString(emailMap, "smtp_user", "SMTPUser")
+			ec.SMTPPassword = getString(emailMap, "smtp_password", "SMTPPassword")
+			ec.PollInterval = getInt(emailMap, "poll_interval", "PollInterval")
 			config.EmailConfig = ec
 		}
 	}
 
-	// 环境变量覆盖
+	// 环境变量覆盖（仅当环境变量非空时覆盖）
 	if v := os.Getenv("API_TYPE"); v != "" {
 		config.APIConfig.APIType = v
 	}
@@ -219,57 +256,27 @@ func loadConfig() (Config, error) {
 			config.APIConfig.Thinking = b
 		}
 	}
-	// 环境变量覆盖危险命令拦截开关
 	if v := os.Getenv("BLOCK_DANGEROUS_COMMANDS"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			config.APIConfig.BlockDangerousCommands = b
 		}
 	}
 
-	// 默认值
+	// 设置默认值（如果配置文件中未提供）
+	if config.APIConfig.APIType == "" {
+		config.APIConfig.APIType = DEFAULT_API_TYPE
+	}
 	if config.APIConfig.Model == "" {
 		config.APIConfig.Model = DEFAULT_MODEL_ID
 	}
 	if config.APIConfig.MaxTokens == 0 {
 		config.APIConfig.MaxTokens = 4096
 	}
-	if config.APIConfig.APIType == "" {
-		config.APIConfig.APIType = DEFAULT_API_TYPE
-	}
-	// 危险命令拦截开关默认为 false，无需额外设置
+	// Temperature 可能为0，所以不设置默认值
 
 	if IsDebug {
 		fmt.Printf("Loaded config: %+v\n", config)
 	}
 
 	return config, nil
-}
-
-// 辅助转换函数
-func toString(v interface{}) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
-
-func toFloat(v interface{}) float64 {
-	if f, ok := v.(float64); ok {
-		return f
-	}
-	return 0
-}
-
-func toInt(v interface{}) int {
-	if f, ok := v.(float64); ok {
-		return int(f)
-	}
-	return 0
-}
-
-func toBool(v interface{}) bool {
-	if b, ok := v.(bool); ok {
-		return b
-	}
-	return false
 }
