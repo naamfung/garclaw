@@ -41,14 +41,15 @@ type EmailConfig struct {
 
 // API配置
 type APIConfig struct {
-	APIType     string  `json:"api_type"`
-	BaseURL     string  `json:"base_url"`
-	APIKey      string  `json:"api_key"`
-	Model       string  `json:"model"`
-	Temperature float64 `json:"temperature"`
-	MaxTokens   int     `json:"max_tokens"`
-	Stream      bool    `json:"stream"`
-	Thinking    bool    `json:"thinking"`
+	APIType                string  `json:"api_type"`
+	BaseURL                string  `json:"base_url"`
+	APIKey                 string  `json:"api_key"`
+	Model                  string  `json:"model"`
+	Temperature            float64 `json:"temperature"`
+	MaxTokens              int     `json:"max_tokens"`
+	Stream                 bool    `json:"stream"`
+	Thinking               bool    `json:"thinking"`
+	BlockDangerousCommands bool    `json:"block_dangerous_commands"` // 新增：是否拦截危险命令
 }
 
 // 主配置结构
@@ -81,6 +82,7 @@ func loadConfig() (Config, error) {
 		defaultConfig.APIConfig.MaxTokens = 4096
 		defaultConfig.APIConfig.Stream = true
 		defaultConfig.APIConfig.Thinking = false
+		defaultConfig.APIConfig.BlockDangerousCommands = false // 修改为默认 false，即不拦截
 		defaultConfig.HTTPServer.Listen = "0.0.0.0:10086"
 
 		toonData, err := toon.Marshal(defaultConfig)
@@ -123,6 +125,10 @@ func loadConfig() (Config, error) {
 			}
 			if v, ok := apiMap["thinking"]; ok {
 				config.APIConfig.Thinking = toBool(v)
+			}
+			// 解析新增字段
+			if v, ok := apiMap["block_dangerous_commands"]; ok {
+				config.APIConfig.BlockDangerousCommands = toBool(v)
 			}
 		}
 	}
@@ -213,6 +219,12 @@ func loadConfig() (Config, error) {
 			config.APIConfig.Thinking = b
 		}
 	}
+	// 环境变量覆盖危险命令拦截开关
+	if v := os.Getenv("BLOCK_DANGEROUS_COMMANDS"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			config.APIConfig.BlockDangerousCommands = b
+		}
+	}
 
 	// 默认值
 	if config.APIConfig.Model == "" {
@@ -224,6 +236,7 @@ func loadConfig() (Config, error) {
 	if config.APIConfig.APIType == "" {
 		config.APIConfig.APIType = DEFAULT_API_TYPE
 	}
+	// 危险命令拦截开关默认为 false，无需额外设置
 
 	if IsDebug {
 		fmt.Printf("Loaded config: %+v\n", config)

@@ -23,6 +23,9 @@ var (
 	thinking    bool
 )
 
+// 新增全局变量：是否拦截危险命令
+var BlockDangerousCommands bool
+
 // 调试开关，全局可见
 var IsDebug = false
 
@@ -41,8 +44,15 @@ func main() {
 	maxTokens = config.APIConfig.MaxTokens
 	stream = config.APIConfig.Stream
 	thinking = config.APIConfig.Thinking
+	// 赋值危险命令拦截开关
+	BlockDangerousCommands = config.APIConfig.BlockDangerousCommands
 
 	fmt.Printf("Using model: %s\n", modelID)
+	if BlockDangerousCommands {
+		fmt.Println("Dangerous command blocking is ENABLED.")
+	} else {
+		fmt.Println("Dangerous command blocking is DISABLED. The model can execute any command.")
+	}
 
 	// 启动 HTTP 服务器（如果配置了监听地址）
 	if config.HTTPServer.Listen != "" {
