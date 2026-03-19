@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -18,11 +19,11 @@ type CmdResult struct {
 	Err      error // 仅在真正无法执行命令时设置（如命令不存在、危险命令被拦截等）
 }
 
-// isDangerousCommand 检查命令是否包含危險模式
+// isDangerousCommand 检查命令是否包含危险模式
 func isDangerousCommand(command string) bool {
 	lowerCmd := strings.ToLower(command)
 
-	// 危險模式列表
+	// 危险模式列表
 	dangerousPatterns := []string{
 		"rm -rf /",
 		"rm -rf /*",
@@ -38,7 +39,6 @@ func isDangerousCommand(command string) bool {
 		"halt",
 		"init 0",
 		"poweroff",
-		//"sudo",
 	}
 
 	for _, pattern := range dangerousPatterns {
@@ -49,16 +49,22 @@ func isDangerousCommand(command string) bool {
 	return false
 }
 
-// 执行shell命令，返回结构化的结果
-func runShell(command string) CmdResult {
+// 执行shell命令，返回结构化的结果，支持通过 Context 取消
+func runShell(ctx context.Context, command string) CmdResult {
 	if IsDebug {
 		fmt.Printf("[runShell] executing: %q\n", command)
 	}
 
-	// 危險命令攔截
-	if isDangerousCommand(command) {
-		return CmdResult{
-			Err: errors.New("dangerous command blocked"),
+	// 如果启用了拦截，则检查危险命令
+	if BlockDangerousCommands {
+		if isDangerousCommand(command) {
+			return CmdResult{
+				Err: errors.New("dangerous command blocked"),
+			}
+		}
+	} else {
+		if IsDebug {
+			fmt.Println("Dangerous command blocking is disabled, allowing all commands.")
 		}
 	}
 
@@ -70,22 +76,17 @@ func runShell(command string) CmdResult {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		command = translateUnixToWindows(command)
-		cmd = exec.Command("cmd.exe", "/c", command)
+		// 使用 CommandContext 支持取消
+		cmd = exec.CommandContext(ctx, "cmd.exe", "/c", command)
 	} else {
-		cmd = exec.Command("sh", "-c", command)
+		cmd = exec.CommandContext(ctx, "sh", "-c", command)
 	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	timeout := time.AfterFunc(3*time.Minute, func() {
-		if cmd.Process != nil {
-			cmd.Process.Kill()
-		}
-	})
-	defer timeout.Stop()
-
+	// 执行命令，无超时，但可以通过 Context 取消
 	err := cmd.Run()
 	if err != nil {
 		exitCode := -1
@@ -151,7 +152,7 @@ func truncateOutput(output string) string {
 	return output
 }
 
-// translateUnixToWindows 将Unix命令转换为等效的Windows命令
+// translateUnixToWindows 将Unix命令转换为等效的Windows命令（保持不变）
 func translateUnixToWindows(command string) string {
 	command = strings.TrimSpace(command)
 	parts := strings.Fields(command)

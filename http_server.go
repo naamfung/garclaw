@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -65,12 +67,13 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
         .assistant { color: green; }
         .error { color: red; }
         .tool { color: orange; }
+        .system { color: gray; font-style: italic; }
     </style>
 </head>
 <body>
     <h1>GarClaw Chat</h1>
     <div id="messages"></div>
-    <input type="text" id="input" placeholder="Type your message and press Enter">
+    <input type="text" id="input" placeholder="Type your message and press Enter. Use /stop to cancel current task.">
     <script>
         const ws = new WebSocket("ws://" + location.host + "/ws");
         const messagesDiv = document.getElementById('messages');
@@ -88,7 +91,7 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
                 appendMessage("[reasoning] " + chunk.reasoning_content, "assistant");
             }
             if (chunk.done) {
-                // 可添加分隔线等
+                appendMessage("--- Response complete ---", "system");
             }
         };
 
@@ -127,6 +130,14 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	ch := NewWSChannel(conn)
 	var history []Message
 
+	// 为每个连接创建一个可取消的 context
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 标记是否正在处理任务
+	var mu sync.Mutex
+	taskActive := false
+
 	for {
 		var msg struct {
 			Content string `json:"content"`
@@ -136,18 +147,52 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		// 忽略空消息
-		if strings.TrimSpace(msg.Content) == "" {
+		trimmed := strings.TrimSpace(msg.Content)
+		if trimmed == "" {
 			continue
 		}
+
 		// 检查是否为退出命令
-		if strings.ToLower(msg.Content) == "exit" {
+		if strings.ToLower(trimmed) == "exit" {
 			break
 		}
 
-		history = append(history, Message{Role: "user", Content: msg.Content})
-		newHistory, err := AgentLoop(ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+		// 检查是否为取消命令
+		if strings.ToLower(trimmed) == "/stop" {
+			mu.Lock()
+			if taskActive {
+				cancel() // 取消当前任务
+				ch.WriteChunk(StreamChunk{Content: "Task cancelled.\n"})
+				// 重置 context，以便后续新任务
+				ctx, cancel = context.WithCancel(context.Background())
+				taskActive = false
+			} else {
+				ch.WriteChunk(StreamChunk{Content: "No active task to cancel.\n"})
+			}
+			mu.Unlock()
+			continue
+		}
+
+		// 普通用户输入
+		history = append(history, Message{Role: "user", Content: trimmed})
+
+		mu.Lock()
+		taskActive = true
+		mu.Unlock()
+
+		// 启动 AgentLoop，传入可取消的 context
+		newHistory, err := AgentLoop(ctx, ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+
+		mu.Lock()
+		taskActive = false
+		mu.Unlock()
+
 		if err != nil {
-			ch.WriteChunk(StreamChunk{Error: err})
+			if err == context.Canceled {
+				ch.WriteChunk(StreamChunk{Content: "Task was cancelled.\n"})
+			} else {
+				ch.WriteChunk(StreamChunk{Error: err})
+			}
 		} else {
 			history = newHistory
 		}

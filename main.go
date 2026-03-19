@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -117,7 +118,8 @@ func main() {
 
 		// 普通用户输入，加入历史并调用 AgentLoop
 		history = append(history, Message{Role: "user", Content: line})
-		newHistory, err := AgentLoop(cmdChan, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+		// 命令行使用 background context，不支持取消（用户可 Ctrl+C 终止程序）
+		newHistory, err := AgentLoop(context.Background(), cmdChan, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		if err != nil {
 			fmt.Printf("Agent error: %v\n", err)
 		} else {
@@ -127,7 +129,7 @@ func main() {
 	}
 }
 
-// 消息结构
+// 消息结构（保持不变）
 type Message struct {
 	Role             string      `json:"role"`
 	Content          interface{} `json:"content,omitempty"`

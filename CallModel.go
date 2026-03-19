@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,7 +14,7 @@ import (
 
 // 全局 HTTP 客户端
 var httpClient = &http.Client{
-	Timeout: 10 * time.Minute,
+	Timeout: 0, // 取消默认超时，由 Context 控制
 }
 
 // StreamReplacer 用于流式文本替换（最长匹配）
@@ -359,14 +360,14 @@ func prepareRequestData(messages []Message, apiType, baseURL, modelID string, te
 	return data, baseURL + endpoint, nil
 }
 
-// 发送请求
-func sendRequest(data map[string]interface{}, endpoint, apiKey, apiType string) (*http.Response, error) {
+// 发送请求（支持 Context）
+func sendRequest(ctx context.Context, data map[string]interface{}, endpoint, apiKey, apiType string) (*http.Response, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request data: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -625,8 +626,8 @@ func handleNonStreamResponse(resp *http.Response, apiType string) (Response, err
 	}
 }
 
-// CallModel 调用 LLM API，返回流式数据块通道
-func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string,
+// CallModel 调用 LLM API，返回流式数据块通道（支持 Context）
+func CallModel(ctx context.Context, messages []Message, apiType, baseURL, apiKey, modelID string,
 	temperature float64, maxTokens int, stream bool, thinking bool) (<-chan StreamChunk, error) {
 
 	if apiType == "" {
@@ -648,7 +649,7 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string,
 		fmt.Printf("Debug request data written to: %s\n", debugFile)
 	}
 
-	resp, err := sendRequest(data, endpoint, apiKey, apiType)
+	resp, err := sendRequest(ctx, data, endpoint, apiKey, apiType)
 	if err != nil {
 		return nil, err
 	}
@@ -667,7 +668,12 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string,
 				return
 			}
 			for chunk := range innerChan {
-				chunkChan <- chunk
+				select {
+				case <-ctx.Done():
+					chunkChan <- StreamChunk{Error: ctx.Err()}
+					return
+				case chunkChan <- chunk:
+				}
 				if chunk.Done {
 					break
 				}
@@ -691,7 +697,6 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string,
 				chunkChan <- StreamChunk{Error: err}
 				return
 			}
-			// 将响应内容拆分为多个块？这里简单将内容作为一个块发送
 			if str, ok := response.Content.(string); ok && str != "" {
 				chunkChan <- StreamChunk{Content: str}
 			}

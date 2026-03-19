@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,8 +11,8 @@ import (
 )
 
 // executeTool 执行单个工具调用，返回 ToolResult 和是否使用了 todo
-// 新增 ch 参数用于实时输出
-func executeTool(toolID, toolName string, argsMap map[string]interface{}, ch Channel) (ToolResult, bool) {
+// 新增 ctx 参数用于取消长时间运行的命令
+func executeTool(ctx context.Context, toolID, toolName string, argsMap map[string]interface{}, ch Channel) (ToolResult, bool) {
 	usedTodo := false
 	var content string
 
@@ -22,9 +23,15 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}, ch Cha
 			content = "Error: Invalid or empty command"
 		} else {
 			ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("$ %s\n", command)})
-			result := runShell(command)
+			// 传递 context 给 runShell
+			result := runShell(ctx, command)
 			if result.Err != nil {
-				content = fmt.Sprintf("Error: %v", result.Err)
+				// 如果错误是 context 取消导致的，返回特定信息
+				if ctx.Err() == context.Canceled {
+					content = "Command cancelled by user."
+				} else {
+					content = fmt.Sprintf("Error: %v", result.Err)
+				}
 			} else {
 				content = result.Stdout
 				if result.ExitCode != 0 && result.Stderr != "" {
@@ -37,9 +44,10 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}, ch Cha
 			} else {
 				ch.WriteChunk(StreamChunk{Content: content})
 			}
-			fmt.Println(content) // 保留控制台打印（可选）
+			fmt.Println(content) // 保留控制台打印
 		}
 
+	// 其他工具函数无需取消支持，保持不变
 	case "read_file_line":
 		filename, ok1 := argsMap["filename"].(string)
 		lineNumFloat, ok2 := argsMap["line_num"].(float64)
@@ -243,14 +251,21 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}, ch Cha
 	}, usedTodo
 }
 
-// AgentLoop 核心循环
-func AgentLoop(ch Channel, messages []Message, apiType, baseURL, apiKey, modelID string,
+// AgentLoop 核心循环，接受 Context 用于取消
+func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, baseURL, apiKey, modelID string,
 	temperature float64, maxTokens int, stream bool, thinking bool) ([]Message, error) {
 
 	roundsSinceTodo := 0
 
 	for {
-		chunkChan, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+		// 检查是否被取消
+		select {
+		case <-ctx.Done():
+			return messages, ctx.Err()
+		default:
+		}
+
+		chunkChan, err := CallModel(ctx, messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		if err != nil {
 			ch.WriteChunk(StreamChunk{Error: err})
 			return messages, err
@@ -262,6 +277,14 @@ func AgentLoop(ch Channel, messages []Message, apiType, baseURL, apiKey, modelID
 		var stopReason string
 
 		for chunk := range chunkChan {
+			// 每次迭代检查取消
+			select {
+			case <-ctx.Done():
+				ch.WriteChunk(StreamChunk{Error: ctx.Err()})
+				return messages, ctx.Err()
+			default:
+			}
+
 			if chunk.Error != nil {
 				ch.WriteChunk(chunk)
 				return messages, chunk.Error
@@ -321,7 +344,7 @@ func AgentLoop(ch Channel, messages []Message, apiType, baseURL, apiKey, modelID
 		}
 
 		if apiType == "openai" {
-			// 处理 OpenAI 格式的 tool calls
+			// 处理 OpenAI 格式的 tool calls（不变，仅将 ctx 传递给 executeTool）
 			var toolCallsSlice []interface{}
 			switch v := respContent.(type) {
 			case []interface{}:
@@ -433,7 +456,7 @@ func AgentLoop(ch Channel, messages []Message, apiType, baseURL, apiKey, modelID
 					continue
 				}
 
-				result, todoUsed := executeTool(call.ID, call.Name, argsMap, ch)
+				result, todoUsed := executeTool(ctx, call.ID, call.Name, argsMap, ch)
 				results = append(results, result)
 				if todoUsed {
 					usedTodo = true
@@ -474,7 +497,7 @@ func AgentLoop(ch Channel, messages []Message, apiType, baseURL, apiKey, modelID
 							continue
 						}
 
-						result, todoUsed := executeTool(toolID, toolName, input, ch)
+						result, todoUsed := executeTool(ctx, toolID, toolName, input, ch)
 						results = append(results, result)
 						if todoUsed {
 							usedTodo = true

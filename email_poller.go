@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -118,7 +119,7 @@ func (p *EmailPoller) handleEmail(msg *imap.Message) {
 		subject = msg.Envelope.Subject
 	}
 
-	// 遍历 msg.Body 获取第一个非空正文（无需关心 key 类型）
+	// 遍历 msg.Body 获取第一个非空正文
 	var body string
 	for _, literal := range msg.Body {
 		if literal != nil {
@@ -142,8 +143,8 @@ func (p *EmailPoller) handleEmail(msg *imap.Message) {
 		{Role: "user", Content: body},
 	}
 
-	// 启动 AgentLoop
-	_, err := AgentLoop(ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+	// 启动 AgentLoop（使用 context.Background() 因为邮件处理不支持取消）
+	_, err := AgentLoop(context.Background(), ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 	if err != nil {
 		log.Printf("AgentLoop error for email from %s: %v", from, err)
 	}
