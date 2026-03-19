@@ -32,6 +32,7 @@ vendor/
 *.swo
 *~
 
+*.bak
 *.txt
 *.json
 *.json5
