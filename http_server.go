@@ -53,9 +53,9 @@ func (s *HTTPServer) Stop() error {
 	return s.server.Close()
 }
 
-// indexHandler 提供静态聊天页面，包含优化后的 JavaScript
+// indexHandler 提供静态聊天页面，修复流式显示问题
 func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
-	html := `<!DOCTYPE html>
+    html := `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -64,12 +64,12 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
         body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; }
         #messages { height: 500px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
         #input { width: 100%; box-sizing: border-box; padding: 10px; }
-        .user { color: blue; }
-        .assistant { color: green; }
-        .error { color: red; }
-        .tool { color: orange; }
-        .system { color: gray; font-style: italic; }
-        .reasoning { color: #666; font-style: italic; background-color: #f5f5f5; padding: 2px 5px; border-radius: 3px; margin: 2px 0; }
+        .user { color: blue; margin: 8px 0; }
+        .assistant { color: green; margin: 8px 0; white-space: pre-wrap; }
+        .error { color: red; margin: 8px 0; }
+        .tool { color: orange; margin: 8px 0; }
+        .system { color: gray; font-style: italic; margin: 8px 0; }
+        .reasoning { color: #666; font-style: italic; background-color: #f5f5f5; padding: 5px 8px; border-radius: 3px; margin: 8px 0; white-space: pre-wrap; }
     </style>
 </head>
 <body>
@@ -81,60 +81,92 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
         const messagesDiv = document.getElementById('messages');
         const input = document.getElementById('input');
 
-        // 用于累积 reasoning 片段的变量
-        let pendingReasoning = '';
+        // 当前正在累积的元素
+        let currentAssistantEl = null;
+        let currentReasoningEl = null;
 
-        // 刷新累积的 reasoning 内容
-        function flushReasoning() {
-            if (pendingReasoning) {
-                const p = document.createElement('p');
-                p.className = 'reasoning';
-                p.textContent = '推理过程: ' + pendingReasoning;
-                messagesDiv.appendChild(p);
-                pendingReasoning = '';
+        // 完成当前响应，重置累积状态
+        function finishCurrentResponse() {
+            currentAssistantEl = null;
+            currentReasoningEl = null;
+        }
+
+        // 获取或创建 assistant 元素
+        function getOrCreateAssistantEl() {
+            if (!currentAssistantEl) {
+                currentAssistantEl = document.createElement('p');
+                currentAssistantEl.className = 'assistant';
+                messagesDiv.appendChild(currentAssistantEl);
             }
+            return currentAssistantEl;
+        }
+
+        // 获取或创建 reasoning 元素
+        function getOrCreateReasoningEl() {
+            if (!currentReasoningEl) {
+                currentReasoningEl = document.createElement('p');
+                currentReasoningEl.className = 'reasoning';
+                currentReasoningEl.textContent = '推理过程: ';
+                messagesDiv.appendChild(currentReasoningEl);
+            }
+            return currentReasoningEl;
+        }
+
+        // 添加新消息（用户消息或系统消息）
+        function appendMessage(text, className) {
+            const p = document.createElement('p');
+            p.className = className;
+            p.textContent = text;
+            messagesDiv.appendChild(p);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
         ws.onmessage = function(event) {
             const chunk = JSON.parse(event.data);
 
+            // 处理错误
             if (chunk.error) {
-                flushReasoning(); // 遇到错误先输出累积的 reasoning
+                finishCurrentResponse();
                 appendMessage("Error: " + chunk.error, "error");
                 return;
             }
 
-            // 处理 reasoning_content 累积
+            // 处理 reasoning_content（累积到同一个元素）
             if (chunk.reasoning_content) {
-                pendingReasoning += chunk.reasoning_content;
+                const el = getOrCreateReasoningEl();
+                el.textContent += chunk.reasoning_content;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
             }
 
-            // 如果有普通内容，先输出累积的 reasoning，再输出内容
+            // 处理普通内容（累积到同一个元素）
             if (chunk.content) {
-                flushReasoning();
-                appendMessage(chunk.content, "assistant");
+                const el = getOrCreateAssistantEl();
+                el.textContent += chunk.content;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
             }
 
-            // 如果有工具调用，先输出累积的 reasoning，再输出工具调用
+            // 处理工具调用
             if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-                flushReasoning();
-                appendMessage("[Tool calls: " + JSON.stringify(chunk.tool_calls) + "]", "tool");
+                const el = getOrCreateAssistantEl();
+                el.textContent += "\n[Tool calls: " + JSON.stringify(chunk.tool_calls) + "]\n";
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
             }
 
-            // 响应结束时，输出剩余的 reasoning 并显示完成标记
+            // 响应结束
             if (chunk.done) {
-                flushReasoning();
                 appendMessage("--- Response complete ---", "system");
+                finishCurrentResponse();
             }
         };
 
         ws.onerror = function(error) {
             console.error("WebSocket error:", error);
+            finishCurrentResponse();
             appendMessage("WebSocket connection error", "error");
         };
 
         ws.onclose = function() {
-            flushReasoning();
+            finishCurrentResponse();
             appendMessage("Connection closed", "system");
         };
 
@@ -144,21 +176,15 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
                 appendMessage(msg, "user");
                 ws.send(JSON.stringify({content: msg}));
                 input.value = '';
+                // 发送新消息时重置累积状态
+                finishCurrentResponse();
             }
         });
-
-        function appendMessage(text, className) {
-            const p = document.createElement('p');
-            p.className = className;
-            p.textContent = text;
-            messagesDiv.appendChild(p);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
     </script>
 </body>
 </html>`
-	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(html))
+    w.Header().Set("Content-Type", "text/html")
+    w.Write([]byte(html))
 }
 
 // wsHandler 处理 WebSocket 连接（与之前相同，无需修改）
