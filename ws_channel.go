@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -10,7 +11,7 @@ import (
 type WSChannel struct {
 	*BaseChannel
 	conn *websocket.Conn
-	mu   sync.Mutex // 覆盖 BaseChannel 的 mu 或单独使用
+	mu   sync.Mutex
 }
 
 // NewWSChannel 创建 WebSocket 频道
@@ -21,11 +22,17 @@ func NewWSChannel(conn *websocket.Conn) *WSChannel {
 	}
 }
 
-// WriteChunk 将数据块通过 WebSocket 发送 JSON
+// WriteChunk 将数据块通过 WebSocket 发送 JSON，返回错误以便上层处理
 func (wsc *WSChannel) WriteChunk(chunk StreamChunk) error {
 	wsc.mu.Lock()
 	defer wsc.mu.Unlock()
-	return wsc.conn.WriteJSON(chunk)
+	
+	err := wsc.conn.WriteJSON(chunk)
+	if err != nil {
+		// 记录错误，但上层可能已经关闭连接，需要通知 AgentLoop 停止
+		log.Printf("WebSocket write error: %v", err)
+	}
+	return err
 }
 
 // Close 关闭 WebSocket 连接
@@ -34,4 +41,3 @@ func (wsc *WSChannel) Close() error {
 	defer wsc.mu.Unlock()
 	return wsc.conn.Close()
 }
-

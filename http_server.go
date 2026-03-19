@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -134,7 +135,10 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		conn.Close()
+		log.Println("WebSocket connection closed")
+	}()
 
 	ch := NewWSChannel(conn)
 	var history []Message
@@ -191,22 +195,25 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		taskActive = true
 		mu.Unlock()
 
-		// 启动 AgentLoop，传入可取消的 context
-		newHistory, err := AgentLoop(ctx, ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+		// 启动 AgentLoop，使用 recover 防止 panic 导致整个程序崩溃
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("AgentLoop panic recovered: %v", r)
+					ch.WriteChunk(StreamChunk{Error: fmt.Errorf("internal server error: %v", r)})
+				}
+			}()
+			newHistory, err := AgentLoop(ctx, ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+			if err != nil {
+				log.Printf("AgentLoop error: %v", err)
+				ch.WriteChunk(StreamChunk{Error: err})
+			} else {
+				history = newHistory
+			}
+		}()
 
 		mu.Lock()
 		taskActive = false
 		mu.Unlock()
-
-		if err != nil {
-			log.Printf("AgentLoop error: %v", err)
-			if err == context.Canceled {
-				ch.WriteChunk(StreamChunk{Content: "Task was cancelled.\n"})
-			} else {
-				ch.WriteChunk(StreamChunk{Error: err})
-			}
-		} else {
-			history = newHistory
-		}
 	}
 }

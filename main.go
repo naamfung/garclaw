@@ -29,7 +29,7 @@ var (
 var BlockDangerousCommands bool
 
 // 调试开关，全局可见
-var IsDebug = false
+var IsDebug = true // 设置为 true 以便调试
 
 func main() {
 	// 加载配置
@@ -129,7 +129,7 @@ func main() {
 	}
 }
 
-// 消息结构（保持不变）
+// 消息结构
 type Message struct {
 	Role             string      `json:"role"`
 	Content          interface{} `json:"content,omitempty"`

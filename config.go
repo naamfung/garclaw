@@ -15,7 +15,7 @@ const (
 	ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
 	OLLAMA_BASE_URL    = "http://localhost:11434/api"
 	OPENAI_BASE_URL    = "https://api.openai.com/v1"
-	DEFAULT_MODEL_ID   = "deepseek-chat" // 修改默认模型以匹配您实际使用的
+	DEFAULT_MODEL_ID   = "deepseek-chat"
 	CONFIG_FILE        = "config.toon"
 )
 
@@ -272,7 +272,6 @@ func loadConfig() (Config, error) {
 	if config.APIConfig.MaxTokens == 0 {
 		config.APIConfig.MaxTokens = 4096
 	}
-	// Temperature 可能为0，所以不设置默认值
 
 	if IsDebug {
 		fmt.Printf("Loaded config: %+v\n", config)

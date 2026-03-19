@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -13,7 +14,7 @@ import (
 // StreamChunk 流式响应块
 type StreamChunk struct {
 	Content          string
-	ToolCalls        []map[string]interface{} // 用于存放工具调用（可能是多个，每个可能不完整）
+	ToolCalls        []map[string]interface{}
 	Done             bool
 	Error            error
 	FinishReason     string
@@ -28,9 +29,7 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 		defer close(chunkChan)
 		defer body.Close()
 
-		// 调试模式：收集所有响应行
 		var debugLines []string
-
 		scanner := bufio.NewScanner(body)
 		scanner.Buffer(make([]byte, 64*1024), 10*1024*1024) // 10MB max
 
@@ -40,7 +39,6 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 			// SSE 模式：处理 data: 前缀的行
 			for scanner.Scan() {
 				line := scanner.Text()
-
 				if IsDebug {
 					debugLines = append(debugLines, line)
 				}
@@ -58,27 +56,31 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 					// 解析 JSON
 					var response map[string]interface{}
 					if err := json.Unmarshal([]byte(data), &response); err != nil {
+						// 解析失败，可能是非标准格式，发送错误块
+						log.Printf("Failed to parse SSE JSON: %v, line: %s", err, line)
+						chunkChan <- StreamChunk{Error: fmt.Errorf("parse error: %v", err)}
 						continue
 					}
 
-					// 解析 OpenAI/Anthropic 格式
 					chunk := parseSSEChunk(response, apiType)
 					chunkChan <- chunk
 					if chunk.Done {
 						saveDebugLines(debugLines)
 						return
 					}
+				} else if line != "" {
+					// 非 data 开头的行，可能是错误信息或空行
+					log.Printf("Unexpected SSE line: %s", line)
 				}
 			}
+
 		case "ollama":
 			// Ollama 模式：每一行都是一个完整的 JSON 对象
 			for scanner.Scan() {
 				line := scanner.Text()
-
 				if IsDebug {
 					debugLines = append(debugLines, line)
 				}
-
 				if line == "" {
 					continue
 				}
@@ -91,6 +93,8 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 				}
 
 				if err := json.Unmarshal([]byte(line), &ollamaChunk); err != nil {
+					log.Printf("Failed to parse Ollama JSON: %v, line: %s", err, line)
+					chunkChan <- StreamChunk{Error: fmt.Errorf("parse error: %v", err)}
 					continue
 				}
 
@@ -104,12 +108,14 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 					return
 				}
 			}
+
 		default:
 			chunkChan <- StreamChunk{Error: fmt.Errorf("unsupported API type for streaming: %s", apiType)}
 			return
 		}
 
 		if err := scanner.Err(); err != nil {
+			log.Printf("Scanner error: %v", err)
 			chunkChan <- StreamChunk{Error: fmt.Errorf("scanner error: %w", err)}
 		}
 	}()
@@ -173,7 +179,7 @@ func parseSSEChunk(response map[string]interface{}, apiType string) StreamChunk 
 
 // saveDebugLines 保存调试行到文件
 func saveDebugLines(lines []string) {
-	if IsDebug {
+	if IsDebug && len(lines) > 0 {
 		debugFile := fmt.Sprintf("debug_stream_response_%d.json", time.Now().Unix())
 		debugContent := strings.Join(lines, "\n")
 		if err := os.WriteFile(debugFile, []byte(debugContent), 0644); err == nil {

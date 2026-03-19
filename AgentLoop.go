@@ -11,7 +11,6 @@ import (
 )
 
 // executeTool 执行单个工具调用，返回 ToolResult 和是否使用了 todo
-// 新增 ctx 参数用于取消长时间运行的命令
 func executeTool(ctx context.Context, toolID, toolName string, argsMap map[string]interface{}, ch Channel) (ToolResult, bool) {
 	usedTodo := false
 	var content string
@@ -23,10 +22,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
 			content = "Error: Invalid or empty command"
 		} else {
 			ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("$ %s\n", command)})
-			// 传递 context 给 runShell
 			result := runShell(ctx, command)
 			if result.Err != nil {
-				// 如果错误是 context 取消导致的，返回特定信息
 				if ctx.Err() == context.Canceled {
 					content = "Command cancelled by user."
 				} else {
@@ -38,16 +35,14 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
 					content += "\n" + result.Stderr
 				}
 			}
-			// 将命令输出发送给频道
 			if len(content) > 512 && IsDebug {
 				ch.WriteChunk(StreamChunk{Content: TruncateString(content, 512)})
 			} else {
 				ch.WriteChunk(StreamChunk{Content: content})
 			}
-			fmt.Println(content) // 保留控制台打印
+			fmt.Println(content)
 		}
 
-	// 其他工具函数无需取消支持，保持不变
 	case "read_file_line":
 		filename, ok1 := argsMap["filename"].(string)
 		lineNumFloat, ok2 := argsMap["line_num"].(float64)
@@ -251,14 +246,13 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
 	}, usedTodo
 }
 
-// AgentLoop 核心循环，接受 Context 用于取消
+// AgentLoop 核心循环
 func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, baseURL, apiKey, modelID string,
 	temperature float64, maxTokens int, stream bool, thinking bool) ([]Message, error) {
 
 	roundsSinceTodo := 0
 
 	for {
-		// 检查是否被取消
 		select {
 		case <-ctx.Done():
 			return messages, ctx.Err()
@@ -277,7 +271,6 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 		var stopReason string
 
 		for chunk := range chunkChan {
-			// 每次迭代检查取消
 			select {
 			case <-ctx.Done():
 				ch.WriteChunk(StreamChunk{Error: ctx.Err()})
@@ -290,10 +283,8 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 				return messages, chunk.Error
 			}
 
-			// 发送给频道
 			ch.WriteChunk(chunk)
 
-			// 收集完整内容
 			if chunk.Content != "" {
 				if str, ok := respContent.(string); ok {
 					respContent = str + chunk.Content
@@ -313,7 +304,6 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 			}
 		}
 
-		// 构建 assistant 消息
 		if stopReason == "tool_use" || stopReason == "function_call" || stopReason == "tool_calls" {
 			messages = append(messages, Message{
 				Role:      "assistant",
@@ -327,12 +317,10 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 			})
 		}
 
-		// 检查是否需要结束
 		if stopReason != "tool_use" && stopReason != "function_call" && stopReason != "tool_calls" {
 			break
 		}
 
-		// 执行工具调用
 		var results []ToolResult
 		usedTodo := false
 
@@ -344,7 +332,6 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 		}
 
 		if apiType == "openai" {
-			// 处理 OpenAI 格式的 tool calls（不变，仅将 ctx 传递给 executeTool）
 			var toolCallsSlice []interface{}
 			switch v := respContent.(type) {
 			case []interface{}:
@@ -426,7 +413,6 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 				})
 			}
 
-			// 替换最后一条 assistant 消息为包含有效 tool_calls 的消息
 			messages = messages[:len(messages)-1]
 			messages = append(messages, Message{
 				Role:      "assistant",
@@ -463,7 +449,6 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 				}
 			}
 		} else {
-			// 处理 Anthropic/Ollama 格式
 			if contentArray, ok := respContent.([]interface{}); ok {
 				for _, item := range contentArray {
 					if toolUse, ok := item.(map[string]interface{}); ok && toolUse["type"] == "tool_use" {
@@ -507,7 +492,6 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 			}
 		}
 
-		// 将工具结果添加到消息历史
 		for _, result := range results {
 			messages = append(messages, Message{
 				Role:       "tool",
@@ -516,7 +500,6 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 			})
 		}
 
-		// 处理 todo 提醒
 		if usedTodo {
 			roundsSinceTodo = 0
 		} else {

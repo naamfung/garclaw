@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -664,6 +665,7 @@ func CallModel(ctx context.Context, messages []Message, apiType, baseURL, apiKey
 			// 流式：直接使用 getStreamChunks 并将数据转发
 			innerChan, err := getStreamChunks(resp.Body, apiType)
 			if err != nil {
+				log.Printf("getStreamChunks error: %v", err)
 				chunkChan <- StreamChunk{Error: err}
 				return
 			}
@@ -680,8 +682,8 @@ func CallModel(ctx context.Context, messages []Message, apiType, baseURL, apiKey
 					break
 				}
 			}
-			// 如果没有收到任何块，发送一个错误
 			if chunkCount == 0 {
+				log.Printf("No stream chunks received from API")
 				chunkChan <- StreamChunk{Error: fmt.Errorf("no valid stream data received")}
 			}
 		} else {
