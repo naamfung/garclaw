@@ -62,7 +62,7 @@ func detectBrowser() {
 		"/usr/local/bin/",
 		"/snap/bin/",
 		"/var/lib/flatpak/exports/bin/",                              // 系统级 Flatpak
-		filepath.Join(homeDir, ".local/share/flatpak/exports/bin/"), // 用户级 Flatpak（新增）
+		filepath.Join(homeDir, ".local/share/flatpak/exports/bin/"), // 用户级 Flatpak
 		"/opt/google/chrome/",
 		"/opt/chromium/",
 		"/usr/lib/firefox/",
@@ -86,7 +86,7 @@ func detectBrowser() {
 	// 在常见路径中查找（包括 Flatpak 导出）
 	if !isWindows {
 		for _, dir := range commonPaths {
-			// 跳过空目录（例如用户主目录为空的情况）
+			// 跳过空目录
 			if dir == "" {
 				continue
 			}
@@ -99,7 +99,7 @@ func detectBrowser() {
 					log.Printf("找到浏览器: %s (类型: %s)", firefoxFlatpak, browserType)
 					return
 				}
-				// 同时也检查普通名称（可能有的系统有符号链接）
+				// 同时也检查普通名称
 				for _, name := range browserNames {
 					fullPath := filepath.Join(dir, name)
 					if info, err := os.Stat(fullPath); err == nil && info.Mode()&0111 != 0 {
@@ -131,7 +131,7 @@ func detectBrowser() {
 			}
 		}
 	} else {
-		// Windows 上的查找逻辑（原有代码已处理，添加 firefox 支持）
+		// Windows 上的查找逻辑
 		driveLetters := make([]string, 0, 26)
 		for i := 'A'; i <= 'Z'; i++ {
 			driveLetters = append(driveLetters, string(i))
@@ -143,15 +143,14 @@ func detectBrowser() {
 			"Users/" + os.Getenv("USERNAME") + "/AppData/Local/Chromium/Application/chrome.exe",
 			"Program Files/Microsoft/Edge/Application/msedge.exe",
 			"Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-			"Program Files/Mozilla Firefox/firefox.exe",      // 新增 Firefox
-			"Program Files (x86)/Mozilla Firefox/firefox.exe", // 新增 Firefox
+			"Program Files/Mozilla Firefox/firefox.exe",
+			"Program Files (x86)/Mozilla Firefox/firefox.exe",
 		}
 		for _, drive := range driveLetters {
 			for _, basePath := range basePaths {
 				fullPath := drive + ":/" + basePath
 				if _, err := os.Stat(fullPath); err == nil {
 					browserPath = fullPath
-					// 根据 basePath 判断是否为 Firefox
 					if strings.Contains(strings.ToLower(basePath), "firefox") {
 						browserType = "firefox"
 					} else {
@@ -164,15 +163,15 @@ func detectBrowser() {
 		}
 	}
 
-	// 如果仍未找到，尝试直接检查几个最可能的 Firefox 路径（包括用户级 Flatpak）
+	// 如果仍未找到，尝试直接检查几个最可能的 Firefox 路径
 	if !isWindows && browserPath == "" {
 		firefoxCandidates := []string{
 			"/usr/bin/firefox",
 			"/usr/local/bin/firefox",
 			"/snap/bin/firefox",
 			"/usr/lib/firefox/firefox",
-			"/var/lib/flatpak/exports/bin/org.mozilla.firefox",                      // 系统级 Flatpak
-			filepath.Join(homeDir, ".local/share/flatpak/exports/bin/org.mozilla.firefox"), // 用户级 Flatpak
+			"/var/lib/flatpak/exports/bin/org.mozilla.firefox",
+			filepath.Join(homeDir, ".local/share/flatpak/exports/bin/org.mozilla.firefox"),
 		}
 		for _, candidate := range firefoxCandidates {
 			if info, err := os.Stat(candidate); err == nil && info.Mode()&0111 != 0 {
@@ -443,3 +442,4 @@ func visitURL(page playwright.Page, url string) (string, error) {
 	}
 	return pageText, nil
 }
+

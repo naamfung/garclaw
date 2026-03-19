@@ -10,7 +10,8 @@ import (
 )
 
 // executeTool 执行单个工具调用，返回 ToolResult 和是否使用了 todo
-func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolResult, bool) {
+// 新增 ch 参数用于实时输出
+func executeTool(toolID, toolName string, argsMap map[string]interface{}, ch Channel) (ToolResult, bool) {
 	usedTodo := false
 	var content string
 
@@ -20,7 +21,7 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if !ok || command == "" {
 			content = "Error: Invalid or empty command"
 		} else {
-			fmt.Printf("$ %s\n", command)
+			ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("$ %s\n", command)})
 			result := runShell(command)
 			if result.Err != nil {
 				content = fmt.Sprintf("Error: %v", result.Err)
@@ -30,11 +31,13 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 					content += "\n" + result.Stderr
 				}
 			}
-			if len(content) > 512 && isDebug {
-				fmt.Println(TruncateString(content, 512))
+			// 将命令输出发送给频道
+			if len(content) > 512 && IsDebug {
+				ch.WriteChunk(StreamChunk{Content: TruncateString(content, 512)})
 			} else {
-				fmt.Println(content)
+				ch.WriteChunk(StreamChunk{Content: content})
 			}
+			fmt.Println(content) // 保留控制台打印（可选）
 		}
 
 	case "read_file_line":
@@ -44,13 +47,14 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 			content = "Error: Invalid arguments for read_file_line"
 		} else {
 			lineNum := int(lineNumFloat)
-			fmt.Printf("Reading line %d from %s\n", lineNum, filename)
+			ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("Reading line %d from %s\n", lineNum, filename)})
 			c, err := ReadFileLine(filename, lineNum)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = c
 			}
+			ch.WriteChunk(StreamChunk{Content: TruncateString(content, 200)})
 			fmt.Println(TruncateString(content, 200))
 		}
 
@@ -62,13 +66,14 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 			content = "Error: Invalid arguments for write_file_line"
 		} else {
 			lineNum := int(lineNumFloat)
-			fmt.Printf("Writing to line %d in %s\n", lineNum, filename)
+			ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("Writing to line %d in %s\n", lineNum, filename)})
 			err := WriteFileLine(filename, lineNum, text)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = "Successfully wrote to line " + strconv.Itoa(lineNum)
 			}
+			ch.WriteChunk(StreamChunk{Content: content})
 			fmt.Println(content)
 		}
 
@@ -77,7 +82,7 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if !ok || filename == "" {
 			content = "Error: Invalid arguments for read_all_lines"
 		} else {
-			fmt.Printf("Reading all lines from %s\n", filename)
+			ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("Reading all lines from %s\n", filename)})
 			lines, err := ReadAllLines(filename)
 			if err != nil {
 				content = "Error: " + err.Error()
@@ -89,6 +94,7 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 					content = string(linesJSON)
 				}
 			}
+			ch.WriteChunk(StreamChunk{Content: TruncateString(content, 200)})
 			fmt.Println(TruncateString(content, 200))
 		}
 
@@ -110,13 +116,14 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 				}
 			}
 			if valid {
-				fmt.Printf("Writing all lines to %s\n", filename)
+				ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("Writing all lines to %s\n", filename)})
 				err := WriteAllLines(filename, lines)
 				if err != nil {
 					content = "Error: " + err.Error()
 				} else {
 					content = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
 				}
+				ch.WriteChunk(StreamChunk{Content: content})
 				fmt.Println(content)
 			}
 		}
@@ -126,7 +133,7 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if !ok || keyword == "" {
 			content = "Error: Empty keyword in search tool call"
 		} else {
-			fmt.Printf("Searching for: %s\n", keyword)
+			ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("Searching for: %s\n", keyword)})
 			resultsList, err := Search(keyword)
 			if err != nil {
 				content = "Error: " + err.Error()
@@ -141,6 +148,7 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 			} else {
 				content = "No search results found"
 			}
+			ch.WriteChunk(StreamChunk{Content: "Search completed\n"})
 			fmt.Println("Search completed")
 		}
 
@@ -149,13 +157,14 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if !ok || url == "" {
 			content = "Error: Empty url in visit tool call"
 		} else {
-			fmt.Printf("Visiting: %s\n", url)
+			ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("Visiting: %s\n", url)})
 			pageText, err := Visit(url)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = "Visit completed. Page content: " + pageText
 			}
+			ch.WriteChunk(StreamChunk{Content: "Visit completed\n"})
 			fmt.Println("Visit completed")
 		}
 
@@ -164,13 +173,14 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 		if !ok || url == "" {
 			content = "Error: Empty url in download tool call"
 		} else {
-			fmt.Printf("Downloading from: %s\n", url)
+			ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("Downloading from: %s\n", url)})
 			fileName, err := Download(url)
 			if err != nil {
 				content = "Error: " + err.Error()
 			} else {
 				content = "Download completed, saved to: " + fileName
 			}
+			ch.WriteChunk(StreamChunk{Content: content})
 			fmt.Println(content)
 		}
 
@@ -216,6 +226,7 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 				} else {
 					content = output
 				}
+				ch.WriteChunk(StreamChunk{Content: content})
 				fmt.Println(content)
 				usedTodo = true
 			}
@@ -232,57 +243,87 @@ func executeTool(toolID, toolName string, argsMap map[string]interface{}) (ToolR
 	}, usedTodo
 }
 
-// 核心agent循环
-func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) {
+// AgentLoop 核心循环
+func AgentLoop(ch Channel, messages []Message, apiType, baseURL, apiKey, modelID string,
+	temperature float64, maxTokens int, stream bool, thinking bool) ([]Message, error) {
+
 	roundsSinceTodo := 0
+
 	for {
-		resp, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+		chunkChan, err := CallModel(messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		if err != nil {
-			fmt.Printf("Error calling model: %v\n", err)
-			return
+			ch.WriteChunk(StreamChunk{Error: err})
+			return messages, err
 		}
 
-		if isDebug {
-			fmt.Println("==================================================================")
-			fmt.Printf("Response stop reason: %s\n", resp.StopReason)
-			fmt.Printf("Response content type: %T\n", resp.Content)
-			fmt.Printf("Response content: %v\n", resp.Content)
-			fmt.Println("==================================================================")
+		var respContent interface{}
+		var reasoningContent string
+		var toolCalls []map[string]interface{}
+		var stopReason string
+
+		for chunk := range chunkChan {
+			if chunk.Error != nil {
+				ch.WriteChunk(chunk)
+				return messages, chunk.Error
+			}
+
+			// 发送给频道
+			ch.WriteChunk(chunk)
+
+			// 收集完整内容
+			if chunk.Content != "" {
+				if str, ok := respContent.(string); ok {
+					respContent = str + chunk.Content
+				} else {
+					respContent = chunk.Content
+				}
+			}
+			if chunk.ReasoningContent != "" {
+				reasoningContent += chunk.ReasoningContent
+			}
+			if len(chunk.ToolCalls) > 0 {
+				toolCalls = append(toolCalls, chunk.ToolCalls...)
+			}
+			if chunk.Done {
+				stopReason = chunk.FinishReason
+				break
+			}
 		}
 
-		if resp.StopReason == "tool_use" || resp.StopReason == "function_call" || resp.StopReason == "tool_calls" {
+		// 构建 assistant 消息
+		if stopReason == "tool_use" || stopReason == "function_call" || stopReason == "tool_calls" {
 			messages = append(messages, Message{
 				Role:      "assistant",
-				ToolCalls: resp.Content,
+				ToolCalls: toolCalls,
 			})
 		} else {
 			messages = append(messages, Message{
 				Role:             "assistant",
-				Content:          resp.Content,
-				ReasoningContent: resp.ReasoningContent,
+				Content:          respContent,
+				ReasoningContent: reasoningContent,
 			})
 		}
 
-		if resp.StopReason != "tool_use" && resp.StopReason != "function_call" && resp.StopReason != "tool_calls" {
-			if resp.Content == nil || fmt.Sprint(resp.Content) == "" {
-				fmt.Println("模型已获取相关信息，但未能生成详细总结。")
-			}
-			return
+		// 检查是否需要结束
+		if stopReason != "tool_use" && stopReason != "function_call" && stopReason != "tool_calls" {
+			break
 		}
 
+		// 执行工具调用
 		var results []ToolResult
 		usedTodo := false
 
-		if isDebug {
+		if IsDebug {
 			fmt.Println("===================== Executing tool calls =====================")
 			fmt.Printf("API type: %s\n", apiType)
-			fmt.Printf("Response content type: %T\n", resp.Content)
-			fmt.Printf("Response content: %v\n", resp.Content)
+			fmt.Printf("Response content type: %T\n", respContent)
+			fmt.Printf("Response content: %v\n", respContent)
 		}
 
 		if apiType == "openai" {
+			// 处理 OpenAI 格式的 tool calls
 			var toolCallsSlice []interface{}
-			switch v := resp.Content.(type) {
+			switch v := respContent.(type) {
 			case []interface{}:
 				toolCallsSlice = v
 			case []map[string]interface{}:
@@ -291,8 +332,8 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					toolCallsSlice[i] = m
 				}
 			default:
-				if isDebug {
-					fmt.Printf("Warning: resp.Content is not a slice of tool calls: %T\n", resp.Content)
+				if IsDebug {
+					fmt.Printf("Warning: resp.Content is not a slice of tool calls: %T\n", respContent)
 				}
 				continue
 			}
@@ -308,7 +349,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			for _, item := range toolCallsSlice {
 				toolUse, ok := item.(map[string]interface{})
 				if !ok {
-					if isDebug {
+					if IsDebug {
 						fmt.Printf("Warning: invalid tool call item: %v\n", item)
 					}
 					continue
@@ -319,14 +360,14 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					if idVal, exists := toolUse["id"]; exists {
 						toolID = fmt.Sprint(idVal)
 					} else {
-						if isDebug {
+						if IsDebug {
 							fmt.Printf("Warning: tool call missing id: %v\n", toolUse)
 						}
 						continue
 					}
 				}
 				if toolID == "" {
-					if isDebug {
+					if IsDebug {
 						fmt.Printf("Warning: tool call has empty id: %v\n", toolUse)
 					}
 					continue
@@ -362,6 +403,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 				})
 			}
 
+			// 替换最后一条 assistant 消息为包含有效 tool_calls 的消息
 			messages = messages[:len(messages)-1]
 			messages = append(messages, Message{
 				Role:      "assistant",
@@ -380,7 +422,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 				var argsMap map[string]interface{}
 				if err := json.Unmarshal([]byte(call.ArgsJSON), &argsMap); err != nil {
-					if isDebug {
+					if IsDebug {
 						fmt.Printf("Failed to parse arguments: %v\n", err)
 					}
 					results = append(results, ToolResult{
@@ -391,14 +433,15 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 					continue
 				}
 
-				result, todoUsed := executeTool(call.ID, call.Name, argsMap)
+				result, todoUsed := executeTool(call.ID, call.Name, argsMap, ch)
 				results = append(results, result)
 				if todoUsed {
 					usedTodo = true
 				}
 			}
 		} else {
-			if contentArray, ok := resp.Content.([]interface{}); ok {
+			// 处理 Anthropic/Ollama 格式
+			if contentArray, ok := respContent.([]interface{}); ok {
 				for _, item := range contentArray {
 					if toolUse, ok := item.(map[string]interface{}); ok && toolUse["type"] == "tool_use" {
 						toolName, nameOk := toolUse["name"].(string)
@@ -409,14 +452,14 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 							if idVal, exists := toolUse["id"]; exists {
 								toolID = fmt.Sprint(idVal)
 							} else {
-								if isDebug {
+								if IsDebug {
 									fmt.Printf("Warning: tool call missing id: %v\n", toolUse)
 								}
 								continue
 							}
 						}
 						if toolID == "" {
-							if isDebug {
+							if IsDebug {
 								fmt.Printf("Warning: tool call has empty id: %v\n", toolUse)
 							}
 							continue
@@ -431,7 +474,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 							continue
 						}
 
-						result, todoUsed := executeTool(toolID, toolName, input)
+						result, todoUsed := executeTool(toolID, toolName, input, ch)
 						results = append(results, result)
 						if todoUsed {
 							usedTodo = true
@@ -441,6 +484,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			}
 		}
 
+		// 将工具结果添加到消息历史
 		for _, result := range results {
 			messages = append(messages, Message{
 				Role:       "tool",
@@ -449,6 +493,7 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			})
 		}
 
+		// 处理 todo 提醒
 		if usedTodo {
 			roundsSinceTodo = 0
 		} else {
@@ -462,12 +507,13 @@ func AgentLoop(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 			}
 		}
 
-		if isDebug {
+		if IsDebug {
 			fmt.Printf("Number of messages before second call: %d\n", len(messages))
 			for i, msg := range messages {
 				fmt.Printf("Message %d: Role=%s, Content=%v, ToolCallID=%s\n", i, msg.Role, msg.Content, msg.ToolCallID)
 			}
 		}
 	}
-}
 
+	return messages, nil
+}

@@ -35,3 +35,4 @@ func init() {
 		SYSTEM_PROMPT = SYSTEM_PROMPT_TEMPLATE_EN
 	}
 }
+

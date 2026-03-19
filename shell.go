@@ -51,7 +51,7 @@ func isDangerousCommand(command string) bool {
 
 // 执行shell命令，返回结构化的结果
 func runShell(command string) CmdResult {
-	if isDebug {
+	if IsDebug {
 		fmt.Printf("[runShell] executing: %q\n", command)
 	}
 
@@ -143,9 +143,9 @@ func handleWindowsTouch(command string) CmdResult {
 	}
 }
 
-// truncateOutput 截断过长的输出（仅当isDebug为true时截断，否则保留完整）
+// truncateOutput 截断过长的输出（仅当IsDebug为true时截断，否则保留完整）
 func truncateOutput(output string) string {
-	if len(output) > 50000 && isDebug {
+	if len(output) > 50000 && IsDebug {
 		return TruncateString(output, 50000)
 	}
 	return output
@@ -200,4 +200,3 @@ func translateUnixToWindows(command string) string {
 		return command
 	}
 }
-

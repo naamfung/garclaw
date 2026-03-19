@@ -42,7 +42,7 @@ func init() {
 	}
 
 	// 打印排序结果（调试用）
-	if isDebug {
+	if IsDebug {
 		fmt.Println("字符串替换映射排序完成，前5项：")
 		for i := 0; i < min(5, len(sortedStringsReplacements.Replacements)); i++ {
 			fmt.Printf("%d: %s -> %s (长度: %d)\n", i+1, sortedStringsReplacements.Replacements[i].Key, sortedStringsReplacements.Replacements[i].Value, len(sortedStringsReplacements.Replacements[i].Key))
@@ -60,4 +60,12 @@ func (s *SortedStringReplacements) ForEach(f func(key, value string)) {
 	for _, item := range s.Replacements {
 		f(item.Key, item.Value)
 	}
+}
+
+// min 辅助函数
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

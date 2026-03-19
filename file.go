@@ -64,7 +64,7 @@ func WriteFileLine(filename string, lineNum int, content string) error {
 }
 
 // ReadAllLines 读取文件所有行，返回字符串切片
-// 若文件不存在，返回空切片和 nil 错误（為兼容 WriteFileLine 行為）
+// 若文件不存在，返回空切片和 nil 错误
 func ReadAllLines(filename string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {

@@ -100,3 +100,4 @@ func (tm *TodoManager) Render() string {
 	lines = append(lines, fmt.Sprintf("\n(%d/%d completed)", done, len(tm.items)))
 	return strings.Join(lines, "\n")
 }
+

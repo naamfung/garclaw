@@ -41,7 +41,7 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 			for scanner.Scan() {
 				line := scanner.Text()
 
-				if isDebug {
+				if IsDebug {
 					debugLines = append(debugLines, line)
 				}
 
@@ -75,7 +75,7 @@ func getStreamChunks(body io.ReadCloser, apiType string) (<-chan StreamChunk, er
 			for scanner.Scan() {
 				line := scanner.Text()
 
-				if isDebug {
+				if IsDebug {
 					debugLines = append(debugLines, line)
 				}
 
@@ -173,7 +173,7 @@ func parseSSEChunk(response map[string]interface{}, apiType string) StreamChunk 
 
 // saveDebugLines 保存调试行到文件
 func saveDebugLines(lines []string) {
-	if isDebug {
+	if IsDebug {
 		debugFile := fmt.Sprintf("debug_stream_response_%d.json", time.Now().Unix())
 		debugContent := strings.Join(lines, "\n")
 		if err := os.WriteFile(debugFile, []byte(debugContent), 0644); err == nil {
@@ -181,4 +181,3 @@ func saveDebugLines(lines []string) {
 		}
 	}
 }
-

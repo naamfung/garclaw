@@ -13,7 +13,7 @@ import (
 
 // 全局 HTTP 客户端
 var httpClient = &http.Client{
-	Timeout: 10 * time.Minute, // 如DesspSeek的默认超时时间就是10分钟
+	Timeout: 10 * time.Minute,
 }
 
 // StreamReplacer 用于流式文本替换（最长匹配）
@@ -373,21 +373,21 @@ func sendRequest(data map[string]interface{}, endpoint, apiKey, apiType string) 
 
 	req.Header.Set("Content-Type", "application/json")
 	if apiKey != "" {
-		if apiType == "openai" || apiType == "ollama" { // Ollama 可能不需要 key，但保留
+		if apiType == "openai" || apiType == "ollama" {
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 		} else if apiType == "anthropic" {
 			req.Header.Set("x-api-key", apiKey)
 		}
 	}
 
-	if isDebug {
+	if IsDebug {
 		fmt.Printf("Sending request to: %s\n", endpoint)
 		fmt.Printf("Request data: %v\n", data)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		if isDebug {
+		if IsDebug {
 			fmt.Printf("Error sending request: %v\n", err)
 		}
 		return nil, fmt.Errorf("failed to send request: %w", err)
@@ -396,7 +396,7 @@ func sendRequest(data map[string]interface{}, endpoint, apiKey, apiType string) 
 	if resp.StatusCode != http.StatusOK {
 		errorBody, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if isDebug {
+		if IsDebug {
 			fmt.Printf("Error response status: %d\n", resp.StatusCode)
 			fmt.Printf("Error response body: %s\n", string(errorBody))
 		}
@@ -404,133 +404,6 @@ func sendRequest(data map[string]interface{}, endpoint, apiKey, apiType string) 
 	}
 
 	return resp, nil
-}
-
-// 处理流式响应
-func handleStreamResponse(chunkChan <-chan StreamChunk) (Response, error) {
-	var fullContent strings.Builder
-	var fullReasoningContent strings.Builder
-	var finishReason string = "stop"
-
-	type pendingToolCall struct {
-		ID       string
-		Type     string
-		Function struct {
-			Name      string
-			Arguments strings.Builder
-		}
-	}
-	pendingTools := make(map[int]*pendingToolCall)
-
-	contentReplacer := NewStreamReplacer(func(r rune) {
-		fmt.Print(string(r))
-		os.Stdout.Sync()
-		fullContent.WriteRune(r)
-	})
-
-	reasoningReplacer := NewStreamReplacer(func(r rune) {
-		fmt.Print(string(r))
-		os.Stdout.Sync()
-		fullReasoningContent.WriteRune(r)
-	})
-
-	for chunk := range chunkChan {
-		if chunk.Error != nil {
-			return Response{}, chunk.Error
-		}
-
-		if chunk.Content != "" {
-			contentReplacer.Write(chunk.Content)
-		}
-
-		if chunk.ReasoningContent != "" {
-			reasoningReplacer.Write(chunk.ReasoningContent)
-		}
-
-		if len(chunk.ToolCalls) > 0 {
-			for _, tc := range chunk.ToolCalls {
-				idxVal, hasIdx := tc["index"]
-				if !hasIdx {
-					continue
-				}
-				idx, ok := idxVal.(float64)
-				if !ok {
-					continue
-				}
-				intIdx := int(idx)
-
-				pt, exists := pendingTools[intIdx]
-				if !exists {
-					pt = &pendingToolCall{}
-					pendingTools[intIdx] = pt
-				}
-
-				if id, ok := tc["id"].(string); ok && id != "" {
-					pt.ID = id
-				}
-				if typ, ok := tc["type"].(string); ok && typ != "" {
-					pt.Type = typ
-				}
-				if function, ok := tc["function"].(map[string]interface{}); ok {
-					if name, ok := function["name"].(string); ok && name != "" {
-						pt.Function.Name = name
-					}
-					if args, ok := function["arguments"].(string); ok && args != "" {
-						pt.Function.Arguments.WriteString(args)
-					}
-				}
-			}
-		}
-
-		if chunk.Done {
-			if chunk.FinishReason != "" {
-				finishReason = chunk.FinishReason
-			}
-			contentReplacer.Flush()
-			reasoningReplacer.Flush()
-			fmt.Println()
-			os.Stdout.Sync()
-			break
-		}
-	}
-
-	if len(pendingTools) > 0 {
-		var toolCalls []map[string]interface{}
-		// 找出最大索引
-		maxIdx := 0
-		for idx := range pendingTools {
-			if idx > maxIdx {
-				maxIdx = idx
-			}
-		}
-		// 按索引顺序遍历
-		for i := 0; i <= maxIdx; i++ {
-			pt := pendingTools[i]
-			if pt == nil {
-				continue
-			}
-			tc := map[string]interface{}{
-				"id":   pt.ID,
-				"type": pt.Type,
-				"function": map[string]interface{}{
-					"name":      pt.Function.Name,
-					"arguments": pt.Function.Arguments.String(),
-				},
-			}
-			toolCalls = append(toolCalls, tc)
-		}
-		return Response{
-			Content:          toolCalls,
-			StopReason:       finishReason,
-			ReasoningContent: fullReasoningContent.String(),
-		}, nil
-	}
-
-	return Response{
-		Content:          fullContent.String(),
-		StopReason:       finishReason,
-		ReasoningContent: fullReasoningContent.String(),
-	}, nil
 }
 
 // 处理OpenAI响应
@@ -568,13 +441,9 @@ func handleOpenAIResponse(resp *http.Response) (Response, error) {
 		choice := openaiResp.Choices[0]
 		result.StopReason = choice.FinishReason
 
-		if isDebug {
+		if IsDebug {
 			messageJson, _ := json.Marshal(choice.Message)
 			fmt.Printf("Message structure: %s\n", string(messageJson))
-		}
-
-		if content, ok := choice.Message.Content.(string); ok && content != "" {
-			fmt.Println(content)
 		}
 
 		if len(choice.Message.ToolCalls) > 0 {
@@ -642,10 +511,6 @@ func handleOllamaResponse(resp *http.Response) (Response, error) {
 		return Response{}, fmt.Errorf("failed to decode Ollama response: %w", err)
 	}
 
-	if content, ok := ollamaResp.Message.Content.(string); ok && content != "" {
-		fmt.Println(content)
-	}
-
 	result.Content = ollamaResp.Message.Content
 	if contentStr, ok := result.Content.(string); ok {
 		result.Content = applyReplacements(contentStr)
@@ -688,7 +553,6 @@ func handleAnthropicResponse(resp *http.Response) (Response, error) {
 
 	for _, item := range anthropicResp.Content {
 		if item.Type == "text" && item.Text != "" {
-			fmt.Println(item.Text)
 			if content == nil {
 				content = item.Text
 			} else if str, ok := content.(string); ok {
@@ -734,13 +598,13 @@ func handleAnthropicResponse(resp *http.Response) (Response, error) {
 func handleNonStreamResponse(resp *http.Response, apiType string) (Response, error) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		if isDebug {
+		if IsDebug {
 			fmt.Printf("Error reading response body: %v\n", err)
 		}
 		return Response{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if isDebug {
+	if IsDebug {
 		fmt.Printf("Response body: %s\n", string(responseBody))
 		debugFile := fmt.Sprintf("debug_response_%d.json", time.Now().Unix())
 		if err := os.WriteFile(debugFile, responseBody, 0644); err == nil {
@@ -761,21 +625,10 @@ func handleNonStreamResponse(resp *http.Response, apiType string) (Response, err
 	}
 }
 
-// 处理响应
-func handleResponse(resp *http.Response, apiType string, stream bool) (Response, error) {
-	if stream {
-		chunkChan, err := getStreamChunks(resp.Body, apiType) // 傳入 apiType
-		if err != nil {
-			return Response{}, fmt.Errorf("failed to get stream chunks: %w", err)
-		}
-		return handleStreamResponse(chunkChan)
-	} else {
-		return handleNonStreamResponse(resp, apiType)
-	}
-}
+// CallModel 调用 LLM API，返回流式数据块通道
+func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string,
+	temperature float64, maxTokens int, stream bool, thinking bool) (<-chan StreamChunk, error) {
 
-// 调用LLM API
-func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int, stream bool, thinking bool) (Response, error) {
 	if apiType == "" {
 		apiType = DEFAULT_API_TYPE
 	}
@@ -785,29 +638,72 @@ func CallModel(messages []Message, apiType, baseURL, apiKey, modelID string, tem
 
 	data, endpoint, err := prepareRequestData(messages, apiType, baseURL, modelID, temperature, maxTokens, stream, thinking)
 	if err != nil {
-		return Response{}, err
+		return nil, err
 	}
 
-	if isDebug {
-		debugData, err := json.MarshalIndent(data, "", "  ")
-		if err == nil {
-			debugFile := fmt.Sprintf("debug_request_%d.json", time.Now().Unix())
-			if err := os.WriteFile(debugFile, debugData, 0644); err == nil {
-				fmt.Printf("Debug request data written to: %s\n", debugFile)
-			}
-		}
+	if IsDebug {
+		debugData, _ := json.MarshalIndent(data, "", "  ")
+		debugFile := fmt.Sprintf("debug_request_%d.json", time.Now().Unix())
+		os.WriteFile(debugFile, debugData, 0644)
+		fmt.Printf("Debug request data written to: %s\n", debugFile)
 	}
 
 	resp, err := sendRequest(data, endpoint, apiKey, apiType)
 	if err != nil {
-		return Response{}, err
-	}
-	defer resp.Body.Close()
-
-	if isDebug {
-		fmt.Printf("Response status code: %d\n", resp.StatusCode)
+		return nil, err
 	}
 
-	return handleResponse(resp, apiType, stream)
+	chunkChan := make(chan StreamChunk, 100)
+
+	go func() {
+		defer close(chunkChan)
+		defer resp.Body.Close()
+
+		if stream {
+			// 流式：直接使用 getStreamChunks 并将数据转发
+			innerChan, err := getStreamChunks(resp.Body, apiType)
+			if err != nil {
+				chunkChan <- StreamChunk{Error: err}
+				return
+			}
+			for chunk := range innerChan {
+				chunkChan <- chunk
+				if chunk.Done {
+					break
+				}
+			}
+		} else {
+			// 非流式：读取完整响应，解析后构造一个包含所有内容的块，并标记 Done
+			bodyBytes, err := io.ReadAll(resp.Body)
+			if err != nil {
+				chunkChan <- StreamChunk{Error: err}
+				return
+			}
+			if IsDebug {
+				debugFile := fmt.Sprintf("debug_response_%d.json", time.Now().Unix())
+				os.WriteFile(debugFile, bodyBytes, 0644)
+				fmt.Printf("Debug response data written to: %s\n", debugFile)
+			}
+			r := bytes.NewReader(bodyBytes)
+			resp.Body = io.NopCloser(r)
+			response, err := handleNonStreamResponse(resp, apiType)
+			if err != nil {
+				chunkChan <- StreamChunk{Error: err}
+				return
+			}
+			// 将响应内容拆分为多个块？这里简单将内容作为一个块发送
+			if str, ok := response.Content.(string); ok && str != "" {
+				chunkChan <- StreamChunk{Content: str}
+			}
+			if reasoning, ok := response.ReasoningContent.(string); ok && reasoning != "" {
+				chunkChan <- StreamChunk{ReasoningContent: reasoning}
+			}
+			if toolCalls, ok := response.Content.([]map[string]interface{}); ok {
+				chunkChan <- StreamChunk{ToolCalls: toolCalls}
+			}
+			chunkChan <- StreamChunk{Done: true, FinishReason: response.StopReason}
+		}
+	}()
+
+	return chunkChan, nil
 }
-
