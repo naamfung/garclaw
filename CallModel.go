@@ -667,7 +667,9 @@ func CallModel(ctx context.Context, messages []Message, apiType, baseURL, apiKey
 				chunkChan <- StreamChunk{Error: err}
 				return
 			}
+			chunkCount := 0
 			for chunk := range innerChan {
+				chunkCount++
 				select {
 				case <-ctx.Done():
 					chunkChan <- StreamChunk{Error: ctx.Err()}
@@ -677,6 +679,10 @@ func CallModel(ctx context.Context, messages []Message, apiType, baseURL, apiKey
 				if chunk.Done {
 					break
 				}
+			}
+			// 如果没有收到任何块，发送一个错误
+			if chunkCount == 0 {
+				chunkChan <- StreamChunk{Error: fmt.Errorf("no valid stream data received")}
 			}
 		} else {
 			// 非流式：读取完整响应，解析后构造一个包含所有内容的块，并标记 Done

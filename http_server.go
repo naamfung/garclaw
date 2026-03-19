@@ -95,6 +95,15 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
             }
         };
 
+        ws.onerror = function(error) {
+            console.error("WebSocket error:", error);
+            appendMessage("WebSocket connection error", "error");
+        };
+
+        ws.onclose = function() {
+            appendMessage("Connection closed", "system");
+        };
+
         input.addEventListener('keypress', function(e) {
             if (e.key === 'Enter' && input.value.trim() !== '') {
                 const msg = input.value.trim();
@@ -144,6 +153,7 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		err := conn.ReadJSON(&msg)
 		if err != nil {
+			log.Printf("WebSocket read error: %v", err)
 			break
 		}
 		// 忽略空消息
@@ -154,6 +164,7 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		// 检查是否为退出命令
 		if strings.ToLower(trimmed) == "exit" {
+			log.Println("Client requested exit")
 			break
 		}
 
@@ -188,6 +199,7 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		mu.Unlock()
 
 		if err != nil {
+			log.Printf("AgentLoop error: %v", err)
 			if err == context.Canceled {
 				ch.WriteChunk(StreamChunk{Content: "Task was cancelled.\n"})
 			} else {
