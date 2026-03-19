@@ -53,7 +53,7 @@ func (s *HTTPServer) Stop() error {
 	return s.server.Close()
 }
 
-// indexHandler 提供静态聊天页面
+// indexHandler 提供静态聊天页面，包含优化后的 JavaScript
 func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
 	html := `<!DOCTYPE html>
 <html>
@@ -69,6 +69,7 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
         .error { color: red; }
         .tool { color: orange; }
         .system { color: gray; font-style: italic; }
+        .reasoning { color: #666; font-style: italic; background-color: #f5f5f5; padding: 2px 5px; border-radius: 3px; margin: 2px 0; }
     </style>
 </head>
 <body>
@@ -80,18 +81,49 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
         const messagesDiv = document.getElementById('messages');
         const input = document.getElementById('input');
 
+        // 用于累积 reasoning 片段的变量
+        let pendingReasoning = '';
+
+        // 刷新累积的 reasoning 内容
+        function flushReasoning() {
+            if (pendingReasoning) {
+                const p = document.createElement('p');
+                p.className = 'reasoning';
+                p.textContent = '推理过程: ' + pendingReasoning;
+                messagesDiv.appendChild(p);
+                pendingReasoning = '';
+            }
+        }
+
         ws.onmessage = function(event) {
             const chunk = JSON.parse(event.data);
+
             if (chunk.error) {
+                flushReasoning(); // 遇到错误先输出累积的 reasoning
                 appendMessage("Error: " + chunk.error, "error");
+                return;
             }
+
+            // 处理 reasoning_content 累积
+            if (chunk.reasoning_content) {
+                pendingReasoning += chunk.reasoning_content;
+            }
+
+            // 如果有普通内容，先输出累积的 reasoning，再输出内容
             if (chunk.content) {
+                flushReasoning();
                 appendMessage(chunk.content, "assistant");
             }
-            if (chunk.reasoning_content) {
-                appendMessage("[reasoning] " + chunk.reasoning_content, "assistant");
+
+            // 如果有工具调用，先输出累积的 reasoning，再输出工具调用
+            if (chunk.tool_calls && chunk.tool_calls.length > 0) {
+                flushReasoning();
+                appendMessage("[Tool calls: " + JSON.stringify(chunk.tool_calls) + "]", "tool");
             }
+
+            // 响应结束时，输出剩余的 reasoning 并显示完成标记
             if (chunk.done) {
+                flushReasoning();
                 appendMessage("--- Response complete ---", "system");
             }
         };
@@ -102,6 +134,7 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
         };
 
         ws.onclose = function() {
+            flushReasoning();
             appendMessage("Connection closed", "system");
         };
 
@@ -128,7 +161,7 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(html))
 }
 
-// wsHandler 处理 WebSocket 连接
+// wsHandler 处理 WebSocket 连接（与之前相同，无需修改）
 func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -143,19 +176,11 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	ch := NewWSChannel(conn)
 	var history []Message
 
-	// 为每个连接创建一个可取消的 context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 标记是否正在处理任务
 	var mu sync.Mutex
 	taskActive := false
-
-	// 启动一个 goroutine 检测连接关闭
-	go func() {
-		<-ctx.Done()
-		// 如果 context 被取消，不再处理新消息
-	}()
 
 	for {
 		var msg struct {
@@ -164,31 +189,25 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			log.Printf("WebSocket read error: %v", err)
-			// 通知 AgentLoop 停止
 			cancel()
 			break
 		}
-		// 忽略空消息
 		trimmed := strings.TrimSpace(msg.Content)
 		if trimmed == "" {
 			continue
 		}
 
-		// 检查是否为退出命令
 		if strings.ToLower(trimmed) == "exit" {
 			log.Println("Client requested exit")
 			cancel()
 			break
 		}
 
-		// 检查是否为取消命令
 		if strings.ToLower(trimmed) == "/stop" {
 			mu.Lock()
 			if taskActive {
-				cancel() // 取消当前任务
-				// 尝试发送取消消息，忽略错误
+				cancel()
 				_ = ch.WriteChunk(StreamChunk{Content: "Task cancelled.\n"})
-				// 重置 context，以便后续新任务
 				ctx, cancel = context.WithCancel(context.Background())
 				taskActive = false
 			} else {
@@ -198,14 +217,12 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// 普通用户输入
 		history = append(history, Message{Role: "user", Content: trimmed})
 
 		mu.Lock()
 		taskActive = true
 		mu.Unlock()
 
-		// 启动 AgentLoop，使用 recover 防止 panic
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
