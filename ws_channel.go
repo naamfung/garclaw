@@ -22,14 +22,13 @@ func NewWSChannel(conn *websocket.Conn) *WSChannel {
 	}
 }
 
-// WriteChunk 将数据块通过 WebSocket 发送 JSON，返回错误以便上层处理
+// WriteChunk 将数据块通过 WebSocket 发送 JSON，返回错误以便上层停止发送
 func (wsc *WSChannel) WriteChunk(chunk StreamChunk) error {
 	wsc.mu.Lock()
 	defer wsc.mu.Unlock()
 	
 	err := wsc.conn.WriteJSON(chunk)
 	if err != nil {
-		// 记录错误，但上层可能已经关闭连接，需要通知 AgentLoop 停止
 		log.Printf("WebSocket write error: %v", err)
 	}
 	return err

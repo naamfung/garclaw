@@ -246,7 +246,7 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
 	}, usedTodo
 }
 
-// AgentLoop 核心循环
+// AgentLoop 核心循环，检查写入错误并退出
 func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, baseURL, apiKey, modelID string,
 	temperature float64, maxTokens int, stream bool, thinking bool) ([]Message, error) {
 
@@ -261,7 +261,9 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 
 		chunkChan, err := CallModel(ctx, messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		if err != nil {
-			ch.WriteChunk(StreamChunk{Error: err})
+			if writeErr := ch.WriteChunk(StreamChunk{Error: err}); writeErr != nil {
+				log.Printf("Failed to write error chunk: %v", writeErr)
+			}
 			return messages, err
 		}
 
@@ -279,12 +281,20 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 			}
 
 			if chunk.Error != nil {
-				ch.WriteChunk(chunk)
+				if writeErr := ch.WriteChunk(chunk); writeErr != nil {
+					log.Printf("Failed to write error chunk: %v", writeErr)
+					return messages, chunk.Error
+				}
 				return messages, chunk.Error
 			}
 
-			ch.WriteChunk(chunk)
+			// 发送给频道，如果失败则退出
+			if writeErr := ch.WriteChunk(chunk); writeErr != nil {
+				log.Printf("WebSocket write failed: %v, stopping AgentLoop", writeErr)
+				return messages, writeErr
+			}
 
+			// 收集完整内容
 			if chunk.Content != "" {
 				if str, ok := respContent.(string); ok {
 					respContent = str + chunk.Content
@@ -304,6 +314,7 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 			}
 		}
 
+		// 构建 assistant 消息
 		if stopReason == "tool_use" || stopReason == "function_call" || stopReason == "tool_calls" {
 			messages = append(messages, Message{
 				Role:      "assistant",
@@ -317,10 +328,12 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 			})
 		}
 
+		// 检查是否需要结束
 		if stopReason != "tool_use" && stopReason != "function_call" && stopReason != "tool_calls" {
 			break
 		}
 
+		// 执行工具调用
 		var results []ToolResult
 		usedTodo := false
 
@@ -413,6 +426,7 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 				})
 			}
 
+			// 替换最后一条 assistant 消息为包含有效 tool_calls 的消息
 			messages = messages[:len(messages)-1]
 			messages = append(messages, Message{
 				Role:      "assistant",

@@ -151,6 +151,12 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	var mu sync.Mutex
 	taskActive := false
 
+	// 启动一个 goroutine 检测连接关闭
+	go func() {
+		<-ctx.Done()
+		// 如果 context 被取消，不再处理新消息
+	}()
+
 	for {
 		var msg struct {
 			Content string `json:"content"`
@@ -158,6 +164,8 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			log.Printf("WebSocket read error: %v", err)
+			// 通知 AgentLoop 停止
+			cancel()
 			break
 		}
 		// 忽略空消息
@@ -169,6 +177,7 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		// 检查是否为退出命令
 		if strings.ToLower(trimmed) == "exit" {
 			log.Println("Client requested exit")
+			cancel()
 			break
 		}
 
@@ -177,12 +186,13 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 			mu.Lock()
 			if taskActive {
 				cancel() // 取消当前任务
-				ch.WriteChunk(StreamChunk{Content: "Task cancelled.\n"})
+				// 尝试发送取消消息，忽略错误
+				_ = ch.WriteChunk(StreamChunk{Content: "Task cancelled.\n"})
 				// 重置 context，以便后续新任务
 				ctx, cancel = context.WithCancel(context.Background())
 				taskActive = false
 			} else {
-				ch.WriteChunk(StreamChunk{Content: "No active task to cancel.\n"})
+				_ = ch.WriteChunk(StreamChunk{Content: "No active task to cancel.\n"})
 			}
 			mu.Unlock()
 			continue
@@ -195,25 +205,27 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		taskActive = true
 		mu.Unlock()
 
-		// 启动 AgentLoop，使用 recover 防止 panic 导致整个程序崩溃
-		func() {
+		// 启动 AgentLoop，使用 recover 防止 panic
+		go func() {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("AgentLoop panic recovered: %v", r)
-					ch.WriteChunk(StreamChunk{Error: fmt.Errorf("internal server error: %v", r)})
+					_ = ch.WriteChunk(StreamChunk{Error: fmt.Errorf("internal server error: %v", r)})
 				}
+				mu.Lock()
+				taskActive = false
+				mu.Unlock()
 			}()
+
 			newHistory, err := AgentLoop(ctx, ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 			if err != nil {
 				log.Printf("AgentLoop error: %v", err)
-				ch.WriteChunk(StreamChunk{Error: err})
+				if err != context.Canceled {
+					_ = ch.WriteChunk(StreamChunk{Error: err})
+				}
 			} else {
 				history = newHistory
 			}
 		}()
-
-		mu.Lock()
-		taskActive = false
-		mu.Unlock()
 	}
 }
