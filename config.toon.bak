@@ -1,0 +1,9 @@
+APIConfig:
+  APIType: openai
+  BaseURL: "https://api.siliconflow.cn/v1"
+  APIKey: "sk-sntajxkmtavftuhgujeyzrkvlrejyoeznqtehhiiohnxvfiu"
+  Model: Pro/MiniMaxAI/MiniMax-M2.5
+  Temperature: 0.6
+  MaxTokens: 128000
+  Stream: true
+  Thinking: true

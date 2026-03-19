@@ -82,7 +82,7 @@ func loadConfig() (Config, error) {
 		defaultConfig.APIConfig.MaxTokens = 4096
 		defaultConfig.APIConfig.Stream = true
 		defaultConfig.APIConfig.Thinking = false
-		defaultConfig.APIConfig.BlockDangerousCommands = false // 修改为默认 false，即不拦截
+		defaultConfig.APIConfig.BlockDangerousCommands = false // 默认为 false，即不拦截
 		defaultConfig.HTTPServer.Listen = "0.0.0.0:10086"
 
 		toonData, err := toon.Marshal(defaultConfig)

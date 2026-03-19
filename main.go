@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -23,7 +24,7 @@ var (
 	thinking    bool
 )
 
-// 新增全局变量：是否拦截危险命令
+// 全局变量：是否拦截危险命令
 var BlockDangerousCommands bool
 
 // 调试开关，全局可见
@@ -34,7 +35,10 @@ func main() {
 	config, err := loadConfig()
 	if err != nil {
 		fmt.Printf("Warning: %v\n", err)
+		fmt.Println("Please edit the generated config file and restart the program.")
+		os.Exit(0) // 生成默认配置后直接退出
 	}
+
 	// 从配置中赋值全局变量
 	apiType = config.APIConfig.APIType
 	baseURL = config.APIConfig.BaseURL
@@ -44,13 +48,10 @@ func main() {
 	maxTokens = config.APIConfig.MaxTokens
 	stream = config.APIConfig.Stream
 	thinking = config.APIConfig.Thinking
-	// 赋值危险命令拦截开关
 	BlockDangerousCommands = config.APIConfig.BlockDangerousCommands
 
 	fmt.Printf("Using model: %s\n", modelID)
-	if BlockDangerousCommands {
-		fmt.Println("Dangerous command blocking is ENABLED.")
-	} else {
+	if !BlockDangerousCommands {
 		fmt.Println("Dangerous command blocking is DISABLED. The model can execute any command.")
 	}
 
@@ -95,16 +96,26 @@ func main() {
 	for {
 		line, err := rl.Readline()
 		if err != nil {
+			if err == io.EOF {
+				break // Ctrl+D 正常退出
+			}
+			fmt.Printf("Readline error: %v\n", err)
 			break
 		}
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		if strings.ToLower(line) == "exit" || strings.ToLower(line) == "q" {
-			break
+		// 检查是否为命令（以 / 开头）
+		if strings.HasPrefix(line, "/") {
+			lowerCmd := strings.ToLower(line)
+			if lowerCmd == "/exit" {
+				break
+			}
+			// 其他以 / 开头的命令暂不处理，作为普通消息
 		}
 
+		// 普通用户输入，加入历史并调用 AgentLoop
 		history = append(history, Message{Role: "user", Content: line})
 		newHistory, err := AgentLoop(cmdChan, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		if err != nil {
