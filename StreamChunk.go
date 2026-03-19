@@ -11,14 +11,14 @@ import (
 	"time"
 )
 
-// StreamChunk 流式响应块
+// StreamChunk 流式响应块，添加 JSON tag 以便前端使用小写字段名
 type StreamChunk struct {
-	Content          string
-	ToolCalls        []map[string]interface{}
-	Done             bool
-	Error            error
-	FinishReason     string
-	ReasoningContent string
+	Content          string                   `json:"content"`
+	ToolCalls        []map[string]interface{} `json:"tool_calls,omitempty"`
+	Done             bool                      `json:"done"`
+	Error            error                     `json:"error,omitempty"`
+	FinishReason     string                    `json:"finish_reason,omitempty"`
+	ReasoningContent string                    `json:"reasoning_content,omitempty"`
 }
 
 // getStreamChunks 从响应体中获取流式响应块，根据 apiType 选择解析方式
