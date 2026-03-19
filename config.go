@@ -15,7 +15,7 @@ const (
 	ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
 	OLLAMA_BASE_URL    = "http://localhost:11434/api"
 	OPENAI_BASE_URL    = "https://api.openai.com/v1"
-	DEFAULT_MODEL_ID   = "claude-3-opus-20240229"
+	DEFAULT_MODEL_ID   = "deepseek-chat"
 	CONFIG_FILE        = "config.toon"
 )
 
