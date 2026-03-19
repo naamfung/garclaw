@@ -1,0 +1,14 @@
+module garclaw
+
+go 1.25.0
+
+require (
+	github.com/playwright-community/playwright-go v0.5700.1
+	github.com/toon-format/toon-go v0.0.0-20251202084852-7ca0e27c4e8c
+)
+
+require (
+	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
+	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
+	github.com/go-stack/stack v1.8.1 // indirect
+)
