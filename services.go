@@ -16,6 +16,7 @@ var (
 	isAlpine    = false
 	isWindows   = false
 	browserPath = ""
+	browserType = "" // 记录找到的浏览器类型: "chromium" 或 "firefox"
 )
 
 func init() {
@@ -40,16 +41,16 @@ func init() {
 		log.Printf("安装 Playwright 驱动失败: %v", err)
 	}
 
-	// 检测系统是否已有可用的 Chromium 浏览器
+	// 检测系统是否已有可用的浏览器
 	detectBrowser()
 }
 
-// detectBrowser 尝试查找系统安装的 Chromium/Chrome
+// detectBrowser 尝试查找系统安装的浏览器（Chrome/Chromium 或 Firefox）
 func detectBrowser() {
-	// 常见浏览器可执行文件名称
+	// 常见浏览器可执行文件名称（添加 firefox）
 	browserNames := []string{
 		"chromium", "chromium-browser", "google-chrome", "chrome", "brave-browser",
-		"microsoft-edge", "edge",
+		"microsoft-edge", "edge", "firefox",
 	}
 	// 常见安装路径（非 Windows）
 	commonPaths := []string{
@@ -57,13 +58,20 @@ func detectBrowser() {
 		"/usr/local/bin/",
 		"/opt/google/chrome/",
 		"/opt/chromium/",
+		"/usr/lib/firefox/", // 常见 Firefox 安装路径
 	}
 
 	// 先在 PATH 中查找
 	for _, name := range browserNames {
 		if path, err := exec.LookPath(name); err == nil {
 			browserPath = path
-			log.Printf("找到浏览器: %s", path)
+			// 设置浏览器类型
+			if strings.Contains(strings.ToLower(name), "firefox") {
+				browserType = "firefox"
+			} else {
+				browserType = "chromium"
+			}
+			log.Printf("找到浏览器: %s (类型: %s)", path, browserType)
 			return
 		}
 	}
@@ -75,13 +83,18 @@ func detectBrowser() {
 				fullPath := dir + name
 				if _, err := os.Stat(fullPath); err == nil {
 					browserPath = fullPath
-					log.Printf("找到浏览器: %s", fullPath)
+					if strings.Contains(strings.ToLower(name), "firefox") {
+						browserType = "firefox"
+					} else {
+						browserType = "chromium"
+					}
+					log.Printf("找到浏览器: %s (类型: %s)", fullPath, browserType)
 					return
 				}
 			}
 		}
 	} else {
-		// Windows 上的查找邏輯（略，原有代碼已處理）
+		// Windows 上的查找逻辑
 		driveLetters := make([]string, 0, 26)
 		for i := 'A'; i <= 'Z'; i++ {
 			driveLetters = append(driveLetters, string(i))
@@ -101,7 +114,13 @@ func detectBrowser() {
 				fullPath := drive + ":/" + basePath
 				if _, err := os.Stat(fullPath); err == nil {
 					browserPath = fullPath
-					log.Printf("找到浏览器: %s", fullPath)
+					// 根据 basePath 判断是否为 Firefox
+					if strings.Contains(strings.ToLower(basePath), "firefox") {
+						browserType = "firefox"
+					} else {
+						browserType = "chromium"
+					}
+					log.Printf("找到浏览器: %s (类型: %s)", fullPath, browserType)
 					return
 				}
 			}
@@ -109,7 +128,7 @@ func detectBrowser() {
 	}
 
 	if browserPath == "" {
-		log.Println("警告：未找到 Chromium 或 Chrome 浏览器，网页功能将不可用")
+		log.Println("警告：未找到 Chromium、Chrome 或 Firefox 浏览器，网页功能将不可用")
 	}
 }
 
@@ -130,32 +149,47 @@ func launchBrowser() (*playwright.Playwright, playwright.Browser, playwright.Pag
 		Args:     []string{"--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"},
 	}
 
-	// 先嘗試用 channel 啟動 Chrome
-	if !isAlpine && !isWindows {
-		launchOptions.Channel = playwright.String("chrome")
-		browser, err = pw.Chromium.Launch(launchOptions)
-		if err == nil {
-			goto CREATE_PAGE
+	// 根据检测到的浏览器类型选择驱动
+	if browserType == "firefox" {
+		// 使用 Firefox
+		if browserPath != "" {
+			launchOptions.ExecutablePath = playwright.String(browserPath)
 		}
-	}
-
-	// 如果 channel 失敗且我們有瀏覽器路徑，則使用指定路徑
-	if browserPath != "" {
-		launchOptions.ExecutablePath = playwright.String(browserPath)
-		browser, err = pw.Chromium.Launch(launchOptions)
-		if err == nil {
-			goto CREATE_PAGE
+		browser, err = pw.Firefox.Launch(launchOptions)
+		if err != nil {
+			log.Printf("启动 Firefox 失败: %v", err)
+			pw.Stop()
+			return nil, nil, nil, err
 		}
-	}
+	} else {
+		// 默认使用 Chromium（包括 Chrome、Edge 等）
+		// 先尝试用 channel 启动 Chrome
+		if !isAlpine && !isWindows {
+			launchOptions.Channel = playwright.String("chrome")
+			browser, err = pw.Chromium.Launch(launchOptions)
+			if err == nil {
+				goto CREATE_PAGE
+			}
+		}
 
-	// 最後嘗試默認方式
-	launchOptions.Channel = nil
-	launchOptions.ExecutablePath = nil
-	browser, err = pw.Chromium.Launch(launchOptions)
-	if err != nil {
-		log.Printf("啟動瀏覽器失敗: %v", err)
-		pw.Stop()
-		return nil, nil, nil, err
+		// 如果 channel 失败且我们有浏览器路径，则使用指定路径
+		if browserPath != "" {
+			launchOptions.ExecutablePath = playwright.String(browserPath)
+			browser, err = pw.Chromium.Launch(launchOptions)
+			if err == nil {
+				goto CREATE_PAGE
+			}
+		}
+
+		// 最后尝试默认方式
+		launchOptions.Channel = nil
+		launchOptions.ExecutablePath = nil
+		browser, err = pw.Chromium.Launch(launchOptions)
+		if err != nil {
+			log.Printf("启动 Chromium 失败: %v", err)
+			pw.Stop()
+			return nil, nil, nil, err
+		}
 	}
 
 CREATE_PAGE:
@@ -352,4 +386,3 @@ func visitURL(page playwright.Page, url string) (string, error) {
 	}
 	return pageText, nil
 }
-
