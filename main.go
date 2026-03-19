@@ -29,7 +29,7 @@ var (
 var BlockDangerousCommands bool
 
 // 调试开关，全局可见
-var IsDebug = true
+var IsDebug = false
 
 func main() {
 	// 加载配置
