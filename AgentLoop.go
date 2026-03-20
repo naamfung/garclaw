@@ -261,7 +261,7 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 
 		chunkChan, err := CallModel(ctx, messages, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
 		if err != nil {
-			if writeErr := ch.WriteChunk(StreamChunk{Error: err}); writeErr != nil {
+			if writeErr := ch.WriteChunk(StreamChunk{Error: err.Error()}); writeErr != nil {
 				log.Printf("Failed to write error chunk: %v", writeErr)
 			}
 			return messages, err
@@ -275,17 +275,17 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 		for chunk := range chunkChan {
 			select {
 			case <-ctx.Done():
-				ch.WriteChunk(StreamChunk{Error: ctx.Err()})
+				ch.WriteChunk(StreamChunk{Error: ctx.Err().Error()})
 				return messages, ctx.Err()
 			default:
 			}
 
-			if chunk.Error != nil {
+			if chunk.Error != "" {
 				if writeErr := ch.WriteChunk(chunk); writeErr != nil {
 					log.Printf("Failed to write error chunk: %v", writeErr)
-					return messages, chunk.Error
+					return messages, fmt.Errorf(chunk.Error)
 				}
-				return messages, chunk.Error
+				return messages, fmt.Errorf(chunk.Error)
 			}
 
 			// 发送给频道，如果失败则退出

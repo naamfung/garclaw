@@ -25,8 +25,8 @@ func (c *CmdChannel) WriteChunk(chunk StreamChunk) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if chunk.Error != nil {
-		fmt.Fprintf(c.writer, "Error: %v\n", chunk.Error)
+	if chunk.Error != "" {
+		fmt.Fprintf(c.writer, "Error: %s\n", chunk.Error)
 		return nil
 	}
 	if chunk.Content != "" {
@@ -40,4 +40,3 @@ func (c *CmdChannel) WriteChunk(chunk StreamChunk) error {
 	}
 	return nil
 }
-

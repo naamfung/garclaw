@@ -34,8 +34,8 @@ func (ec *EmailChannel) WriteChunk(chunk StreamChunk) error {
 	ec.mu.Lock()
 	defer ec.mu.Unlock()
 
-	if chunk.Error != nil {
-		ec.body.WriteString(fmt.Sprintf("Error: %v\n", chunk.Error))
+	if chunk.Error != "" {
+		ec.body.WriteString(fmt.Sprintf("Error: %s\n", chunk.Error))
 		return nil
 	}
 	if chunk.Content != "" {
@@ -97,4 +97,3 @@ func (ec *EmailChannel) sendEmail() error {
 		return smtp.SendMail(addr, auth, ec.smtpConfig.SMTPUser, []string{ec.to}, []byte(msg))
 	}
 }
-

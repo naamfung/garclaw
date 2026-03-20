@@ -1,56 +1,56 @@
 package main
 
 import (
-        "context"
-        "fmt"
-        "log"
-        "net/http"
-        "strings"
-        "sync"
-        "time"
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
 
-        "github.com/gorilla/websocket"
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{
-        CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
 // HTTPServer 管理 HTTP 和 WebSocket 服务
 type HTTPServer struct {
-        addr   string
-        server *http.Server
+	addr   string
+	server *http.Server
 }
 
 // NewHTTPServer 创建 HTTP 服务器实例
 func NewHTTPServer(addr string) *HTTPServer {
-        return &HTTPServer{
-                addr: addr,
-        }
+	return &HTTPServer{
+		addr: addr,
+	}
 }
 
 // Start 启动 HTTP 服务器
 func (s *HTTPServer) Start() {
-        mux := http.NewServeMux()
-        mux.HandleFunc("/", s.indexHandler)
-        mux.HandleFunc("/ws", s.wsHandler)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.indexHandler)
+	mux.HandleFunc("/ws", s.wsHandler)
 
-        s.server = &http.Server{
-                Addr:         s.addr,
-                Handler:      mux,
-                ReadTimeout:  10 * time.Second,
-                WriteTimeout: 10 * time.Second,
-        }
+	s.server = &http.Server{
+		Addr:         s.addr,
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
 
-        log.Printf("HTTP server listening on %s", s.addr)
-        if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-                log.Fatalf("HTTP server error: %v", err)
-        }
+	log.Printf("HTTP server listening on %s", s.addr)
+	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("HTTP server error: %v", err)
+	}
 }
 
 // Stop 关闭服务器
 func (s *HTTPServer) Stop() error {
-        return s.server.Close()
+	return s.server.Close()
 }
 
 // indexHandler 提供静态聊天页面，现代化暗色主题界面
@@ -61,7 +61,7 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>GarClaw Chat</title>
-    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjU2IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iMjU2IiBpZD0ic2NyZWVuc2hvdC1lZjk0ZmJiMC1kYmFiLTgwZWQtODAwNi04OTQyOTkwMGVkYmYiIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgZmlsbD0ibm9uZSIgdmVyc2lvbj0iMS4xIj48ZyBpZD0ic2hhcGUtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0Mjk5MDBlZGJmIiByeD0iMCIgcnk9IjAiPjxnIGlkPSJzaGFwZS1lZjk0ZmJiMC1kYmFiLTgwZWQtODAwNi04OTQyMTU3NTVjM2EiPjxnIGNsYXNzPSJmaWxscyIgaWQ9ImZpbGxzLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIxNTc1NWMzYSI+PHJlY3Qgcng9IjAiIHJ5PSIwIiB4PSIwIiB5PSIwIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAwMDAwMCwgMC4wMDAwMDAsIDAuMDAwMDAwLCAxLjAwMDAwMCwgMC4wMDAwMDAsIDAuMDAwMDAwKSIgd2lkdGg9IjI1NiIgaGVpZ2h0PSIyNTYiIHN0eWxlPSJmaWxsOiByZ2IoMjcsIDMxLCAzMik7IGZpbGwtb3BhY2l0eTogMTsiLz48L2c+PC9nPjxnIGlkPSJzaGFwZS1lZjk0ZmJiMC1kYmFiLTgwZWQtODAwNi04OTQyMjM2M2VmM2YiIHJ4PSIwIiByeT0iMCI+PGcgaWQ9InNoYXBlLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIyMzYzZWY0MCI+PGcgY2xhc3M9ImZpbGxzIiBpZD0iZmlsbHMtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQwIj48cGF0aCBkPSJNMTcxLjY2NTAwODU0NDkyMTg4LDk5LjUzMDI1MDU0OTMxNjRMMTU5Ljc5OTUzMDAyOTI5Njg4LDEyMC42MjQ2ODcxOTQ4MjQyMkMxNDQuMTU0NTEwNDk4MDQ2ODgsMTA4LjU4MzI5MDEwMDA5NzY2LDEyMC45NTA0MTY1NjQ5NDE0LDEwNi44MjU0MTY1NjQ5NDE0LDEwNS4zMDUzOTcwMzM2OTE0LDExOS43NDU3NTA0MjcyNDYxQzgwLjA3OTgxMTA5NjE5MTQsMTQwLjU3NjUyMjgyNzE0ODQ0LDgxLjgzNzYyMzU5NjE5MTQsMTg4Ljc0MjI2Mzc5Mzk0NTMsMTIxLjEyNjE5NzgxNDk0MTQsMTg5LjAwNTg3NDYzMzc4OTA2QzEzMi4xMTMwMDY1OTE3OTY4OCwxODkuMDA1ODc0NjMzNzg5MDYsMTQxLjQyOTY1Njk4MjQyMTg4LDE4My44MjAxMTQxMzU3NDIyLDE1MS40NDk2NzY1MTM2NzE4OCwxODAuMzkyMzQ5MjQzMTY0MDZMMTU2LjcyMzM1ODE1NDI5Njg4LDIwMS4zOTg4NDk0ODczMDQ3QzE0Ny44NDU5MTY3NDgwNDY4OCwyMDUuNTI5ODkxOTY3NzczNDQsMTM4Ljc5MjkzODIzMjQyMTg4LDIwOS43NDg3MzM1MjA1MDc4LDEyOS4wMzY4MzQ3MTY3OTY4OCwyMTEuMDY3MTIzNDEzMDg1OTRDNDAuMDg4MzUyMjAzMzY5MTQsMjIzLjE5NjQ1NjkwOTE3OTcsNDUuMTg2MDA4NDUzMzY5MTQsOTQuNzg0MDA0MjExNDI1NzgsMTI1LjYwODg2MzgzMDU2NjQsODguMTA0MDcyNTcwODAwNzhDMTQyLjQ4NDM0NDQ4MjQyMTg4LDg2LjY5NzgyMjU3MDgwMDc4LDE1Ny4zMzgzNDgzODg2NzE4OCw5MS4wOTI0NzU4OTExMTMyOCwxNzEuNzUzMTQzMzEwNTQ2ODgsOTkuNTMwMjUwNTQ5MzE2NFoiIGNsYXNzPSJzdDAiIHN0eWxlPSJmaWxsOiByZ2IoMjU1LCAxMzAsIDU0KTsgZmlsbC1vcGFjaXR5OiAxOyIvPjwvZz48L2c+PGcgaWQ9InNoYXBlLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIyMzYzZWY0MSI+PGcgY2xhc3M9ImZpbGxzIiBpZD0iZmlsbHMtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQxIj48cGF0aCBkPSJNMTEwLjIyNzI3MjAzMzY5MTQsNzkuMzE0NzA0ODk1MDE5NTNDOTYuNjkxODcxNjQzMDY2NCw4My4zNTc4NTY3NTA0ODgyOCw4NC4xMjMyNjgxMjc0NDE0LDkwLjgyODgzNDUzMzY5MTQsNzQuNjMwNTkyMzQ2MTkxNCwxMDEuMjg4MTI0MDg0NDcyNjZDNzIuODcyNzc5ODQ2MTkxNCw4MC4wMTc4Mjk4OTUwMTk1Myw3Ny42MTg4NzM1OTYxOTE0LDM3LjAzNzkzNzE2NDMwNjY0LDEwMS4yNjIxODQxNDMwNjY0LDI4LjYwMDEwMzM3ODI5NTlDMTA0Ljc3ODA1MzI4MzY5MTQsMjcuMzY5NjQ5ODg3MDg0OTYsMTE2LjgxOTU1NzE4OTk0MTQsMjQuMjkzMzcxMjAwNTYxNTIzLDExNi40Njc5OTQ2ODk5NDE0LDMwLjUzMzc4ODY4MTAzMDI3M0MxMTYuMTE2MTg4MDQ5MzE2NCwzNi43NzQyNjUyODkzMDY2NCwxMDcuNzY2MzM0NTMzNjkxNCw0Ny40OTcyMjY3MTUwODc4OSwxMDUuNzQ1MDk0Mjk5MzE2NCw1My4yOTgyMzY4NDY5MjM4M0MxMDIuMjI5MjI1MTU4NjkxNCw2My40OTM4Njk3ODE0OTQxNCwxMDUuNDgxMTc4MjgzNjkxNCw3MC41MjUzNTI0NzgwMjczNCwxMTAuMzE1NDA2Nzk5MzE2NCw3OS40MDI2NTY1NTUxNzU3OFoiIGNsYXNzPSJzdDAiIHN0eWxlPSJmaWxsOiByZ2IoMjU1LCAxMzAsIDU0KTsgZmlsbC1vcGFjaXR5OiAxOyIvPjwvZz48L2c+PGcgaWQ9InNoYXBlLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIyMzYzZWY0MiI+PGcgY2xhc3M9ImZpbGxzIiBpZD0iZmlsbHMtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQyIj48cGF0aCBkPSJNMTQzLjYyNjkyMjYwNzQyMTg4LDEyNy42NTYyMTE4NTMwMjczNEwxNDMuNjI2OTIyNjA3NDIxODgsMTQzLjQ3NzA2NjA0MDAzOTA2TDE1Ny42ODk5MTA4ODg2NzE4OCwxNDMuNDc3MDY2MDQwMDM5MDZMMTU3LjY4OTkxMDg4ODY3MTg4LDE1NS43ODIxODA3ODYxMzI4TDE0My42MjY5MjI2MDc0MjE4OCwxNTUuNzgyMTgwNzg2MTMyOEwxNDMuNjI2OTIyNjA3NDIxODgsMTcwLjcyNDA3NTMxNzM4MjhMMTMwLjQ0Mjg0MDU3NjE3MTg4LDE3MC43MjQwNzUzMTczODI4TDEzMC40NDI4NDA1NzYxNzE4OCwxNTUuNzgyMTgwNzg2MTMyOEwxMTUuNTAwOTUzNjc0MzE2NCwxNTUuNzgyMTgwNzg2MTMyOEwxMTUuNTAwOTUzNjc0MzE2NCwxNDMuNDc3MDY2MDQwMDM5MDZMMTI5LjEyNDQ4MTIwMTE3MTg4LDE0My40NzcwNjYwNDAwMzkwNkwxMzAuNDQyODQwNTc2MTcxODgsMTQyLjE1ODY3NjE0NzQ2MDk0TDEzMC40NDI4NDA1NzYxNzE4OCwxMjcuNjU2MjExODUzMDI3MzRMMTQzLjYyNjkyMjYwNzQyMTg4LDEyNy42NTYyMTE4NTMwMjczNFoiIGNsYXNzPSJzdDAiIHN0eWxlPSJmaWxsOiByZ2IoMjU1LCAxMzAsIDU0KTsgZmlsbC1vcGFjaXR5OiAxOyIvPjwvZz48L2c+PGcgaWQ9InNoYXBlLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIyMzYzZWY0MyI+PGcgY2xhc3M9ImZpbGxzIiBpZD0iZmlsbHMtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQzIj48cGF0aCBkPSJNMTkxLjk2ODIzMTIwMTE3MTg4LDEyNy42NTYyMTE4NTMwMjczNEwxOTEuOTY4MjMxMjAxMTcxODgsMTQyLjE1ODY3NjE0NzQ2MDk0TDE5My4yODY4MzQ3MTY3OTY4OCwxNDMuNDc3MDY2MDQwMDM5MDZMMjA2LjkxMDM2OTg3MzA0Njg4LDE0My40NzcwNjYwNDAwMzkwNkwyMDYuOTEwMzY5ODczMDQ2ODgsMTU1Ljc4MjE4MDc4NjEzMjhMMTkxLjk2ODIzMTIwMTE3MTg4LDE1NS43ODIxODA3ODYxMzI4TDE5MS45NjgyMzEyMDExNzE4OCwxNzAuNzI0MDc1MzE3MzgyOEwxNzguNzg0MzkzMzEwNTQ2ODgsMTcwLjcyNDA3NTMxNzM4MjhMMTc4Ljc4NDM5MzMxMDU0Njg4LDE1NS43ODIxODA3ODYxMzI4TDE2NC43MjE0MDUwMjkyOTY4OCwxNTUuNzgyMTgwNzg2MTMyOEwxNjQuNzIxNDA1MDI5Mjk2ODgsMTQzLjQ3NzA2NjA0MDAzOTA2TDE3OC43ODQzOTMzMTA1NDY4OCwxNDMuNDc3MDY2MDQwMDM5MDZMMTc4Ljc4NDM5MzMxMDU0Njg4LDEyNy42NTYyMTE4NTMwMjczNEwxOTEuOTY4MjMxMjAxMTcxODgsMTI3LjY1NjIxMTg1MzAyNzM0WiIgY2xhc3M9InN0MCIgc3R5bGU9ImZpbGw6IHJnYigyNTUsIDEzMCwgNTQpOyBmaWxsLW9wYWNpdHk6IDE7Ii8+PC9nPjwvZz48ZyBpZD0ic2hhcGUtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQ0Ij48ZyBjbGFzcz0iZmlsbHMiIGlkPSJmaWxscy1lZjk0ZmJiMC1kYmFiLTgwZWQtODAwNi04OTQyMjM2M2VmNDQiPjxwYXRoIGQ9Ik0xNTMuMjA3NDg5MDEzNjcxODgsMzguMDkyNjU1MTgxODg0NzY2QzE1NC45NjU1NDU2NTQyOTY4OCw0MC43Mjk0NjU0ODQ2MTkxNCwxNDUuMDMzNDE2NzQ4MDQ2ODgsNTIuMDY3NzA3MDYxNzY3NTgsMTQzLjQ1MTE0MTM1NzQyMTg4LDU0Ljk2ODE3Mzk4MDcxMjg5QzEzOC44ODA4Mjg4NTc0MjE4OCw2My41ODE3OTA5MjQwNzIyNjYsMTQxLjk1NzAwMDczMjQyMTg4LDY4LjUwMzgyMjMyNjY2MDE2LDE0NS4zODQ3MzUxMDc0MjE4OCw3Ni42Nzc5MjUxMDk4NjMyOEMxMzUuNDUyODUwMzQxNzk2ODgsNzUuMTgzNzIzNDQ5NzA3MDMsMTI2LjIyNDA5ODIwNTU2NjQsNzYuNDE0MjUzMjM0ODYzMjgsMTE2LjM3OTg1OTkyNDMxNjQsNzcuNTU2ODMxMzU5ODYzMjhDMTE4LjU3NzM2OTY4OTk0MTQsNTguNjU5NzMyODE4NjAzNTE2LDEyOS4yMTI2MTU5NjY3OTY4OCwzMS4xNDkwNTM1NzM2MDg0LDE1My4yMDc0ODkwMTM2NzE4OCwzOC4wOTI2NTUxODE4ODQ3NjZaIiBjbGFzcz0ic3QwIiBzdHlsZT0iZmlsbDogcmdiKDI1NSwgMTMwLCA1NCk7IGZpbGwtb3BhY2l0eTogMTsiLz48L2c+PC9nPjwvZz48L2c+PC9zdmc+" />
+    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjU2IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iMjU2IiBpZD0ic2NyZWVuc2hvdC1lZjk0ZmJiMC1kYmFiLTgwZWQtODAwNi04OTQyOTkwMGVkYmYiIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgZmlsbD0ibm9uZSIgdmVyc2lvbj0iMS4xIj48ZyBpZD0ic2hhcGUtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0Mjk5MDBlZGJmIiByeD0iMCIgcnk9IjAiPjxnIGlkPSJzaGFwZS1lZjk0ZmJiMC1kYmFiLTgwZWQtODAwNi04OTQyMTU3NTVjM2EiPjxnIGNsYXNzPSJmaWxscyIgaWQ9ImZpbGxzLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIxNTc1NWMzYSI+PHJlY3Qgcng9IjAiIHJ5PSIwIiB4PSIwIiB5PSIwIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAwMDAwMCwgMC4wMDAwMDAsIDAuMDAwMDAwLCAxLjAwMDAwMCwgMC4wMDAwMDAsIDAuMDAwMDAwKSIgd2lkdGg9IjI1NiIgaGVpZ2h0PSIyNTYiIHN0eWxlPSJmaWxsOiByZ2IoMjcsIDMxLCAzMik7IGZpbGwtb3BhY2l0eTogMTsiLz48L2c+PC9nPjxnIGlkPSJzaGFwZS1lZjk0ZmJiMC1kYmFiLTgwZWQtODAwNi04OTQyMjM2M2VmM2YiIHJ4PSIwIiByeT0iMCI+PGcgaWQ9InNoYXBlLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIyMzYzZWY0MCI+PGcgY2xhc3M9ImZpbGxzIiBpZD0iZmlsbHMtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQwIj48cGF0aCBkPSJNMTcxLjY2NTAwODU0NDkyMTg4LDk5LjUzMDI1MDU0OTMxNjRMMTU5Ljc5OTUzMDAyOTI5Njg4LDEyMC42MjQ2ODcxOTQ4MjQyMkMxNDQuMTU0NTEwNDk4MDQ2ODgsMTA4LjU4MzI5MDEwMDA5NzY2LDEyMC45NTA0MTY1NjQ5NDE0LDEwNi44MjU0MTY1NjQ5NDE0LDEwNS4zMDUzOTcwMzM2OTE0LDExOS43NDU3NTA0MjcyNDYxQzgwLjA3OTgxMTA5NjE5MTQsMTQwLjU3NjUyMjgyNzE0ODQ0LDgxLjgzNzYyMzU5NjE5MTQsMTg4Ljc0MjI2Mzc5Mzk0NTMsMTIxLjEyNjE5NzgxNDk0MTQsMTg5LjAwNTg3NDYzMzc4OTA2QzEzMi4xMTMwMDY1OTE3OTY4OCwxODkuMDA1ODc0NjMzNzg5MDYsMTQxLjQyOTY1Njk4MjQyMTg4LDE4My44MjAxMTQxMzU3NDIyLDE1MS40NDk2NzY1MTM2NzE4OCwxODAuMzkyMzQ5MjQzMTY0MDZMMTU2LjcyMzM1ODE1NDI5Njg4LDIwMS4zOTg4NDk0ODczMDQ3QzE0Ny44NDU5MTY3NDgwNDY4OCwyMDUuNTI5ODkxOTY3NzczNDQsMTM4Ljc5MjkzODIzMjQyMTg4LDIwOS43NDg3MzM1MjA1MDc4LDEyOS4wMzY4MzQ3MTY3OTY4OCwyMTEuMDY3MTIzNDEzMDg1OTRDNDAuMDg4MzUyMjAzMzY5MTQsMjIzLjE5NjQ1NjkwOTE3OTcsNDUuMTg2MDA4NDUzMzY5MTQsOTQuNzg0MDA0MjExNDI1NzgsMTI1LjYwODg2MzgzMDU2NjQsODguMTA0MDcyNTcwODAwNzhDMTQyLjQ4NDM0NDQ4MjQyMTg4LDg2LjY5NzgyMjU3MDgwMDc4LDE1Ny4zMzgzNDgzODg2NzE4OCw5MS4wOTI0NzU4OTExMTMyOCwxNzEuNzUzMTQzMzEwNTQ2ODgsOTkuNTMwMjUwNTQ5MzE2NFoiIGNsYXNzPSJzdDAiIHN0eWxlPSJmaWxsOiByZ2IoMjU1LCAxMzAsIDU0KTsgZmlsbC1vcGFjaXR5OiAxOyIvPjwvZz48L2c+PGcgaWQ9InNoYXBlLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIyMzYzZWY0MSI+PGcgY2xhc3M9ImZpbGxzIiBpZD0iZmlsbHMtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQxIj48cGF0aCBkPSJNMTEwLjIyNzI3MjAzMzY5MTQsNzkuMzE0NzA0ODk1MDE5NTNDOTYuNjkxODcxNjQzMDY2NCw4My4zNTc4NTY3NTA0ODgyOCw4NC4xMjMyNjgxMjc0NDE0LDkwLjgyODgzNDUzMzY5MTQsNzQuNjMwNTkyMzQ2MTkxNCwxMDEuMjg4MTI0MDg0NDcyNjZDNzIuODcyNzc5ODQ2MTkxNCw4MC4wMTc4Mjk4OTUwMTk1Myw3Ny42MTg4NzM1OTYxOTE0LDM3LjAzNzkzNzE2NDMwNjY0LDEwMS4yNjIxODQxNDMwNjY0LDI4LjYwMDEwMzM3ODI5NTlDMTA0Ljc3ODA1MzI4MzY5MTQsMjcuMzY5NjQ5ODg3MDg0OTYsMTE2LjgxOTU1NzE4OTk0MTQsMjQuMjkzMzcxMjAwNTYxNTIzLDExNi40Njc5OTQ2ODk5NDE0LDMwLjUzMzc4ODY4MTAzMDI3M0MxMTYuMTE2MTg4MDQ5MzE2NCwzNi43NzQyNjUyODkzMDY2NCwxMDcuNzY2MzM0NTMzNjkxNCw0Ny40OTcyMjY3MTUwODc4OSwxMDUuNzQ1MDk0Mjk5MzE2NCw1My4yOTgyMzY4NDY5MjM4M0MxMDIuMjI5MjI1MTU4NjkxNCw2My40OTM4Njk3ODE0OTQxNCwxMDUuNDgxMTc4MjgzNjkxNCw3MC41MjUzNTI0NzgwMjczNCwxMTAuMzE1NDA2Nzk5MzE2NCw3OS40MDI2NTY1NTUxNzU3OFoiIGNsYXNzPSJzdDAiIHN0eWxlPSJmaWxsOiByZ2IoMjU1LCAxMzAsIDU0KTsgZmlsbC1vcGFjaXR5OiAxOyIvPjwvZz48L2c+PGcgaWQ9InNoYXBlLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIyMzYzZWY0MiI+PGcgY2xhc3M9ImZpbGxzIiBpZD0iZmlsbHMtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQyIj48cGF0aCBkPSJNMTQzLjYyNjkyMjYwNzQyMTg4LDEyNy42NTYyMTE4NTMwMjczNEwxNDMuNjI2OTIyNjA3NDIxODgsMTQzLjQ3NzA2NjA0MDAzOTA2TDE1Ny42ODk5MTA4ODg2NzE4OCwxNDMuNDc3MDY2MDQwMDM5MDZMMTU3LjY4OTkxMDg4ODY3MTg4LDE1NS43ODIxODA3ODYxMzI4TDE0My42MjY5MjI2MDc0MjE4OCwxNTUuNzgyMTgwNzg2MTMyOEwxNDMuNjI2OTIyNjA3NDIxODgsMTcwLjcyNDA3NTMxNzM4MjhMMTMwLjQ0Mjg0MDU3NjE3MTg4LDE3MC43MjQwNzUzMTczODI4TDEzMC40NDI4NDA1NzYxNzE4OCwxNTUuNzgyMTgwNzg2MTMyOEwxMTUuNTAwOTUzNjc0MzE2NCwxNTUuNzgyMTgwNzg2MTMyOEwxMTUuNTAwOTUzNjc0MzE2NCwxNDMuNDc3MDY2MDQwMDM5MDZMMTI5LjEyNDQ4MTIwMTE3MTg4LDE0My40NzcwNjYwNDAwMzkwNkwxMzAuNDQyODQwNTc2MTcxODgsMTQyLjE1ODY3NjE0NzQ2MDk0TDEzMC40NDI4NDA1NzYxNzE4OCwxMjcuNjU2MjExODUzMDI3MzRMMTQzLjYyNjkyMjYwNzQyMTg4LDEyNy42NTYyMTE4NTMwMjczNFoiIGNsYXNzPSJzdDAiIHN0eWxlPSJmaWxsOiByZ2IoMjU1LCAxMzAsIDU0KTsgZmlsbC1vcGFjaXR5OiAxOyIvPjwvZz48L2c+PGcgaWQ9InNoYXBlLWVmOTRmYmIwLWRiYWItODBlZC04MDA2LTg5NDIyMzYzZWY0MyI+PGcgY2xhc3M9ImZpbGxzIiBpZD0iZmlsbHMtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQzIj48cGF0aCBkPSJNMTkxLjk2ODIzMTIwMTE3MTg4LDEyNy42NTYyMTE4NTMwMjczNEwxOTEuOTY4MjMxMjAxMTcxODgsMTQyLjE1ODY3NjE0NzQ2MDk0TDE5My4yODY4MzQ3MTY3OTY4OCwxNDMuNDc3MDY2MDQwMDM5MDZMMjA2LjkxMDM2OThTczA0Njg4LDE0My40NzcwNjYwNDAwMzkwNkwyMDYuOTEwMzY5ODczMDQ2ODgsMTU1Ljc4MjE4MDc4NjEzMjhMMTkxLjk2ODIzMTIwMTE3MTg4LDE1NS43ODIxODA3ODYxMzI4TDE5MS45NjgyMzEyMDExNzE4OCwxNzAuNzI0MDc1MzE3MzgyOEwxNzguNzg0MzkzMzEwNTQ2ODgsMTcwLjcyNDA3NTMxNzM4MjhMMTc4Ljc4NDM5MzMxMDU0Njg4LDE1NS43ODIxODA3ODYxMzI4TDE2NC43MjE0MDUwMjkyOTY4OCwxNTUuNzgyMTgwNzg2MTMyOEwxNjQuNzIxNDA1MDI5Mjk2ODgsMTQzLjQ3NzA2NjA0MDAzOTA2TDE3OC43ODQzOTMzMTA1NDY4OCwxNDMuNDc3MDY2MDQwMDM5MDZMMTc4Ljc4NDM5MzMxMDU0Njg4LDEyNy42NTYyMTE4NTMwMjczNEwxOTEuOTY4MjMxMjAxMTcxODgsMTI3LjY1NjIxMTg1MzAyNzM0WiIgY2xhc3M9InN0MCIgc3R5bGU9ImZpbGw6IHJnYigyNTUsIDEzMCwgNTQpOyBmaWxsLW9wYWNpdHk6IDE7Ii8+PC9nPjwvZz48ZyBpZD0ic2hhcGUtZWY5NGZiYjAtZGJhYi04MGVkLTgwMDYtODk0MjIzNjNlZjQ0Ij48ZyBjbGFzcz0iZmlsbHMiIGlkPSJmaWxscy1lZjk0ZmJiMC1kYmFiLTgwZWQtODAwNi04OTQyMjM2M2VmNDQiPjxwYXRoIGQ9Ik0xNTMuMjA3NDg5MDEzNjcxODgsMzguMDkyNjU1MTgxODg0NzY2QzE1NC45NjU1NDU2NTQyOTY4OCw0MC43Mjk0NjU0ODQ2MTkxNCwxNDUuMDMzNDE2NzQ4MDQ2ODgsNTIuMDY3NzA3MDYxNzY3NTgsMTQzLjQ1MTE0MTM1NzQyMTg4LDU0Ljk2ODE3Mzk4MDcxMjg5QzEzOC44ODA4Mjg4NTc0MjE4OCw2My41ODE3OTA5MjQwNzIyNjYsMTQxLjk1NzAwMDczMjQyMTg4LDY4LjUwMzgyMjMyNjY2MDE2LDE0NS4zODQ3MzUxMDc0MjE4OCw3Ni42Nzc5MjUxMDk4NjMyOEMxMzUuNDUyODUwMzQxNzk2ODgsNzUuMTgzNzIzNDQ5NzA3MDMsMTI2LjIyNDA5ODIwNTU2NjQsNzYuNDE0MjUzMjM0ODYzMjgsMTE2LjM3OTg1OTkyNDMxNjQsNzcuNTU2ODMxMzU5ODYzMjhDMTE4LjU3NzM2OTY4OTk0MTQsNTguNjU5NzMyODE4NjAzNTE2LDEyOS4yMTI2MTU5NjY3OTY4OCwzMS4xNDkwNTM1NzM2MDg0LDE1My4yMDc0ODkwMTM2NzE4OCwzOC4wOTI2NTUxODE4ODQ3NjZaIiBjbGFzcz0ic3QwIiBzdHlsZT0iZmlsbDogcmdiKDI1NSwgMTMwLCA1NCk7IGZpbGwtb3BhY2l0eTogMTsiLz48L2c+PC9nPjwvZz48L2c+PC9zdmc+" />
     <style>
         :root {
             --bg-primary: #1b1f20;
@@ -528,86 +528,86 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
 
 // wsHandler 处理 WebSocket 连接（与之前相同，无需修改）
 func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
-        conn, err := upgrader.Upgrade(w, r, nil)
-        if err != nil {
-                log.Printf("WebSocket upgrade error: %v", err)
-                return
-        }
-        defer func() {
-                conn.Close()
-                log.Println("WebSocket connection closed")
-        }()
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade error: %v", err)
+		return
+	}
+	defer func() {
+		conn.Close()
+		log.Println("WebSocket connection closed")
+	}()
 
-        ch := NewWSChannel(conn)
-        var history []Message
+	ch := NewWSChannel(conn)
+	var history []Message
 
-        ctx, cancel := context.WithCancel(context.Background())
-        defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-        var mu sync.Mutex
-        taskActive := false
+	var mu sync.Mutex
+	taskActive := false
 
-        for {
-                var msg struct {
-                        Content string `json:"content"`
-                }
-                err := conn.ReadJSON(&msg)
-                if err != nil {
-                        log.Printf("WebSocket read error: %v", err)
-                        cancel()
-                        break
-                }
-                trimmed := strings.TrimSpace(msg.Content)
-                if trimmed == "" {
-                        continue
-                }
+	for {
+		var msg struct {
+			Content string `json:"content"`
+		}
+		err := conn.ReadJSON(&msg)
+		if err != nil {
+			log.Printf("WebSocket read error: %v", err)
+			cancel()
+			break
+		}
+		trimmed := strings.TrimSpace(msg.Content)
+		if trimmed == "" {
+			continue
+		}
 
-                if strings.ToLower(trimmed) == "exit" {
-                        log.Println("Client requested exit")
-                        cancel()
-                        break
-                }
+		if strings.ToLower(trimmed) == "exit" {
+			log.Println("Client requested exit")
+			cancel()
+			break
+		}
 
-                if strings.ToLower(trimmed) == "/stop" {
-                        mu.Lock()
-                        if taskActive {
-                                cancel()
-                                _ = ch.WriteChunk(StreamChunk{Content: "Task cancelled.\n"})
-                                ctx, cancel = context.WithCancel(context.Background())
-                                taskActive = false
-                        } else {
-                                _ = ch.WriteChunk(StreamChunk{Content: "No active task to cancel.\n"})
-                        }
-                        mu.Unlock()
-                        continue
-                }
+		if strings.ToLower(trimmed) == "/stop" {
+			mu.Lock()
+			if taskActive {
+				cancel()
+				_ = ch.WriteChunk(StreamChunk{Content: "Task cancelled.\n"})
+				ctx, cancel = context.WithCancel(context.Background())
+				taskActive = false
+			} else {
+				_ = ch.WriteChunk(StreamChunk{Content: "No active task to cancel.\n"})
+			}
+			mu.Unlock()
+			continue
+		}
 
-                history = append(history, Message{Role: "user", Content: trimmed})
+		history = append(history, Message{Role: "user", Content: trimmed})
 
-                mu.Lock()
-                taskActive = true
-                mu.Unlock()
+		mu.Lock()
+		taskActive = true
+		mu.Unlock()
 
-                go func() {
-                        defer func() {
-                                if r := recover(); r != nil {
-                                        log.Printf("AgentLoop panic recovered: %v", r)
-                                        _ = ch.WriteChunk(StreamChunk{Error: fmt.Errorf("internal server error: %v", r)})
-                                }
-                                mu.Lock()
-                                taskActive = false
-                                mu.Unlock()
-                        }()
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("AgentLoop panic recovered: %v", r)
+					_ = ch.WriteChunk(StreamChunk{Error: fmt.Sprintf("internal server error: %v", r)})
+				}
+				mu.Lock()
+				taskActive = false
+				mu.Unlock()
+			}()
 
-                        newHistory, err := AgentLoop(ctx, ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
-                        if err != nil {
-                                log.Printf("AgentLoop error: %v", err)
-                                if err != context.Canceled {
-                                        _ = ch.WriteChunk(StreamChunk{Error: err})
-                                }
-                        } else {
-                                history = newHistory
-                        }
-                }()
-        }
+			newHistory, err := AgentLoop(ctx, ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
+			if err != nil {
+				log.Printf("AgentLoop error: %v", err)
+				if err != context.Canceled {
+					_ = ch.WriteChunk(StreamChunk{Error: err.Error()})
+				}
+			} else {
+				history = newHistory
+			}
+		}()
+	}
 }
