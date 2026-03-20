@@ -16,20 +16,20 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// HTTPServer 管理 HTTP 和 WebSocket 服务
+// HTTPServer 管理 HTTP 和 WebSocket 服務
 type HTTPServer struct {
 	addr   string
 	server *http.Server
 }
 
-// NewHTTPServer 创建 HTTP 服务器实例
+// NewHTTPServer 創建 HTTP 伺服器實例
 func NewHTTPServer(addr string) *HTTPServer {
 	return &HTTPServer{
 		addr: addr,
 	}
 }
 
-// Start 启动 HTTP 服务器
+// Start 啟動 HTTP 伺服器
 func (s *HTTPServer) Start() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.indexHandler)
@@ -48,12 +48,12 @@ func (s *HTTPServer) Start() {
 	}
 }
 
-// Stop 关闭服务器
+// Stop 關閉伺服器
 func (s *HTTPServer) Stop() error {
 	return s.server.Close()
 }
 
-// indexHandler 提供静态聊天页面，现代化暗色主题界面
+// indexHandler 提供靜態聊天頁面，現代化暗色主題界面
 func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
     html := `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -403,6 +403,7 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
         
         let currentAssistantEl = null;
         let currentReasoningEl = null;
+        let currentReasoningBuffer = ''; // 緩衝推理內容
         
         function setConnected(connected) {
             if (connected) {
@@ -417,6 +418,7 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
         function finishCurrentResponse() {
             currentAssistantEl = null;
             currentReasoningEl = null;
+            currentReasoningBuffer = ''; // 清空緩衝
         }
         
         function getOrCreateAssistantEl() {
@@ -428,14 +430,15 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
             return currentAssistantEl;
         }
         
-        function getOrCreateReasoningEl() {
-            if (!currentReasoningEl) {
-                currentReasoningEl = document.createElement('div');
-                currentReasoningEl.className = 'message reasoning';
-                currentReasoningEl.innerHTML = '<span class="reasoning-label">推理過程</span>';
-                messagesDiv.appendChild(currentReasoningEl);
+        // 將緩衝的推理內容插入到助理元素之前
+        function flushReasoningBuffer() {
+            if (currentReasoningBuffer && currentAssistantEl) {
+                const reasoningEl = document.createElement('div');
+                reasoningEl.className = 'message reasoning';
+                reasoningEl.innerHTML = '<span class="reasoning-label">推理過程</span>' + currentReasoningBuffer;
+                messagesDiv.insertBefore(reasoningEl, currentAssistantEl);
+                currentReasoningBuffer = '';
             }
-            return currentReasoningEl;
         }
         
         function appendMessage(text, className) {
@@ -466,29 +469,48 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
             }
             
             if (chunk.reasoning_content) {
-                const el = getOrCreateReasoningEl();
-                const span = el.querySelector('.reasoning-label');
-                if (span) {
-                    span.insertAdjacentText('afterend', chunk.reasoning_content);
+                // 如果有助理元素，且尚未顯示推理（即助理已開始），則先緩衝推理，等待下次正文時插入到助理之前
+                if (currentAssistantEl) {
+                    // 如果助理已經存在，則將推理內容暫存，並在下次收到正文時插入到助理之前
+                    currentReasoningBuffer += chunk.reasoning_content;
                 } else {
-                    el.textContent += chunk.reasoning_content;
+                    // 沒有助理元素，直接顯示推理（通常推理應在正文前）
+                    if (!currentReasoningEl) {
+                        currentReasoningEl = document.createElement('div');
+                        currentReasoningEl.className = 'message reasoning';
+                        currentReasoningEl.innerHTML = '<span class="reasoning-label">推理過程</span>';
+                        messagesDiv.appendChild(currentReasoningEl);
+                    }
+                    currentReasoningEl.innerHTML += chunk.reasoning_content;
                 }
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
             }
             
             if (chunk.content) {
+                // 在顯示正文前，先將緩衝的推理插入到助理之前
+                flushReasoningBuffer();
                 const el = getOrCreateAssistantEl();
                 el.textContent += chunk.content;
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
             }
             
             if (chunk.tool_calls && chunk.tool_calls.length > 0) {
+                // 工具調用也視為助理內容的一部分
+                flushReasoningBuffer();
                 const el = getOrCreateAssistantEl();
                 el.textContent += "\n[工具調用: " + JSON.stringify(chunk.tool_calls) + "]\n";
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
             }
             
             if (chunk.done) {
+                // 如果還有殘留推理（例如只有推理沒有正文），則顯示它
+                if (currentReasoningBuffer) {
+                    const reasoningEl = document.createElement('div');
+                    reasoningEl.className = 'message reasoning';
+                    reasoningEl.innerHTML = '<span class="reasoning-label">推理過程</span>' + currentReasoningBuffer;
+                    messagesDiv.appendChild(reasoningEl);
+                    currentReasoningBuffer = '';
+                }
                 appendMessage("回應完成", 'system');
                 finishCurrentResponse();
             }
@@ -526,7 +548,7 @@ func (s *HTTPServer) indexHandler(w http.ResponseWriter, r *http.Request) {
     w.Write([]byte(html))
 }
 
-// wsHandler 处理 WebSocket 连接（与之前相同，无需修改）
+// wsHandler 處理 WebSocket 連接（與之前相同，無需修改）
 func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
