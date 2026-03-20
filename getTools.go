@@ -106,7 +106,7 @@ func getTools(apiType string) interface{} {
 								"items": map[string]interface{}{
 									"type": "string",
 								},
-								"description": "The list of lines to write to the file.",
+								"description": "The list of lines to write to the file. Each element in the array corresponds to one line in the file. Do NOT pass a single string; it must be an array of strings. Example: [\"line1\", \"line2\", \"line3\"]",
 							},
 						},
 						"required":             []string{"filename", "lines"},
@@ -295,7 +295,7 @@ func getTools(apiType string) interface{} {
 							"items": map[string]interface{}{
 								"type": "string",
 							},
-							"description": "The list of lines to write to the file.",
+							"description": "The list of lines to write to the file. Each element in the array corresponds to one line in the file. Do NOT pass a single string; it must be an array of strings. Example: [\"line1\", \"line2\", \"line3\"]",
 						},
 					},
 					"required":             []string{"filename", "lines"},
@@ -384,4 +384,3 @@ func getTools(apiType string) interface{} {
 		}
 	}
 }
-

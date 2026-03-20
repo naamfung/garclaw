@@ -6,6 +6,7 @@ import (
         "fmt"
         "log"
         "strconv"
+        "strings"
 
         "github.com/toon-format/toon-go"
 )
@@ -103,11 +104,35 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
 
         case "write_all_lines":
                 filename, ok1 := argsMap["filename"].(string)
-                linesInterface, ok2 := argsMap["lines"].([]interface{})
-                if !ok1 || !ok2 || filename == "" {
+                if !ok1 || filename == "" {
                         content = "Error: Invalid arguments for write_all_lines"
+                        break
+                }
+
+                // 处理 lines 参数，支持兼容性：如果模型误传了字符串，尝试分割
+                var lines []string
+                linesInterface, ok := argsMap["lines"].([]interface{})
+                if !ok {
+                        // 不是 []interface{}，尝试其他类型
+                        if lineStr, ok := argsMap["lines"].(string); ok {
+                                // 模型误传了字符串，按换行符分割
+                                if IsDebug {
+                                        log.Printf("Warning: write_all_lines received a string for 'lines', splitting by newline.")
+                                }
+                                // 分割字符串，保留空行
+                                rawLines := strings.Split(lineStr, "\n")
+                                lines = make([]string, 0, len(rawLines))
+                                for _, l := range rawLines {
+                                        // 可以保留原样，也可以去除末尾的回车
+                                        lines = append(lines, strings.TrimRight(l, "\r"))
+                                }
+                        } else {
+                                content = "Error: Invalid lines parameter for write_all_lines: expected array of strings"
+                                break
+                        }
                 } else {
-                        lines := make([]string, len(linesInterface))
+                        // 已经是 []interface{}，转换为 []string
+                        lines = make([]string, len(linesInterface))
                         valid := true
                         for i, line := range linesInterface {
                                 if lineStr, ok := line.(string); ok {
@@ -118,18 +143,20 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                                         break
                                 }
                         }
-                        if valid {
-                                ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("Writing all lines to %s\n", filename)})
-                                err := WriteAllLines(filename, lines)
-                                if err != nil {
-                                        content = "Error: " + err.Error()
-                                } else {
-                                        content = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
-                                }
-                                ch.WriteChunk(StreamChunk{Content: content})
-                                fmt.Println(content)
+                        if !valid {
+                                break
                         }
                 }
+
+                ch.WriteChunk(StreamChunk{Content: fmt.Sprintf("Writing all lines to %s\n", filename)})
+                err := WriteAllLines(filename, lines)
+                if err != nil {
+                        content = "Error: " + err.Error()
+                } else {
+                        content = "Successfully wrote " + strconv.Itoa(len(lines)) + " lines to " + filename
+                }
+                ch.WriteChunk(StreamChunk{Content: content})
+                fmt.Println(content)
 
         case "search":
                 keyword, ok := argsMap["keyword"].(string)
