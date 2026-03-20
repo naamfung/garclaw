@@ -355,7 +355,13 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
                                                                 }
                                                         }
                                                 } else {
-                                                        existing[k] = v
+                                                        // 对于非 function 字段，只在新值非空且非空字符串时才更新，避免用空值覆盖已有值
+                                                        if v != nil {
+                                                                if str, ok := v.(string); ok && str == "" {
+                                                                        continue // 跳过空字符串
+                                                                }
+                                                                existing[k] = v
+                                                        }
                                                 }
                                         }
                                 }
@@ -366,7 +372,7 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
                         }
                 }
 
-                // 将合并后的 tool_calls 转换为数组（按 index 排序）
+                // 将合并后的 tool_calls 转换为数组（按 index 排序），并移除 index 字段（仅用于流式合并）
                 if len(toolCallsMap) > 0 {
                         maxIdx := 0
                         for idx := range toolCallsMap {
@@ -377,6 +383,8 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
                         toolCalls = make([]map[string]interface{}, 0, maxIdx+1)
                         for i := 0; i <= maxIdx; i++ {
                                 if tc, exists := toolCallsMap[i]; exists {
+                                        // 移除 index 字段，因为它只用于流式传输，不应出现在最终消息中
+                                        delete(tc, "index")
                                         toolCalls = append(toolCalls, tc)
                                 }
                         }
