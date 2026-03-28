@@ -731,3 +731,312 @@ func killProcessGroup(pid int) error {
 func terminateProcessGroup(pid int) error {
         return syscall.Kill(-pid, syscall.SIGTERM)
 }
+
+// ==================== 循环检测器 ====================
+
+// LoopDetector 循环检测器
+// 用于检测模型是否在重复执行相同的工具调用，防止死循环
+type LoopDetector struct {
+        history       []LoopToolCallRecord
+        maxHistory    int           // 最大历史记录数
+        threshold     int           // 重复阈值（相同操作出现次数）
+        patternWindow int           // 模式检测窗口大小
+        mu            sync.RWMutex
+}
+
+// LoopToolCallRecord 循环检测用的工具调用记录
+type LoopToolCallRecord struct {
+        ToolName string                 `json:"tool_name"`
+        Args     map[string]interface{} `json:"args,omitempty"`
+        Fingerprint string               `json:"fingerprint"` // 用于快速比较的指纹
+        Timestamp time.Time             `json:"timestamp"`
+        Result    string                `json:"result,omitempty"` // 结果摘要
+        IsError   bool                  `json:"is_error"`
+}
+
+// LoopDetectionResult 循环检测结果
+type LoopDetectionResult struct {
+        IsLoop          bool     `json:"is_loop"`
+        LoopCount       int      `json:"loop_count"`       // 循环次数
+        LoopPattern     []string `json:"loop_pattern"`     // 循环的工具序列
+        WarningMessage  string   `json:"warning_message"`  // 警告信息
+        Suggestion      string   `json:"suggestion"`       // 建议信息
+        ShouldInterrupt bool     `json:"should_interrupt"` // 是否应该中断
+}
+
+// NewLoopDetector 创建循环检测器
+func NewLoopDetector(maxHistory, threshold int) *LoopDetector {
+        if maxHistory < 10 {
+                maxHistory = 50
+        }
+        if threshold < 2 {
+                threshold = 3
+        }
+        return &LoopDetector{
+                history:       make([]LoopToolCallRecord, 0, maxHistory),
+                maxHistory:    maxHistory,
+                threshold:     threshold,
+                patternWindow: 5, // 检测最近5个操作的模式
+        }
+}
+
+// generateFingerprint 生成工具调用的指纹（用于快速比较）
+func generateFingerprint(toolName string, args map[string]interface{}) string {
+        // 对于shell命令，使用命令内容作为指纹
+        if toolName == "shell" || toolName == "smart_shell" {
+                if cmd, ok := args["command"].(string); ok {
+                        return toolName + ":" + cmd
+                }
+        }
+        
+        // 对于文件操作，使用文件名作为指纹的一部分
+        if toolName == "read_file_line" || toolName == "read_all_lines" {
+                if filename, ok := args["filename"].(string); ok {
+                        return toolName + ":" + filename
+                }
+        }
+        
+        // 对于浏览器操作，使用URL作为指纹的一部分
+        if strings.HasPrefix(toolName, "browser_") {
+                if url, ok := args["url"].(string); ok {
+                        return toolName + ":" + url
+                }
+        }
+        
+        // 默认：使用工具名称
+        return toolName
+}
+
+// RecordAndCheck 记录工具调用并检测循环
+func (ld *LoopDetector) RecordAndCheck(toolName string, args map[string]interface{}, result string, isError bool) LoopDetectionResult {
+        ld.mu.Lock()
+        defer ld.mu.Unlock()
+        
+        // 创建记录
+        record := LoopToolCallRecord{
+                ToolName:    toolName,
+                Args:        args,
+                Fingerprint: generateFingerprint(toolName, args),
+                Timestamp:   time.Now(),
+                Result:      truncateString(result, 100),
+                IsError:     isError,
+        }
+        
+        // 添加到历史
+        ld.history = append(ld.history, record)
+        if len(ld.history) > ld.maxHistory {
+                ld.history = ld.history[1:]
+        }
+        
+        // 检测循环
+        return ld.detectLoop()
+}
+
+// detectLoop 检测循环模式
+func (ld *LoopDetector) detectLoop() LoopDetectionResult {
+        result := LoopDetectionResult{
+                IsLoop:      false,
+                LoopCount:   0,
+                LoopPattern: []string{},
+        }
+        
+        if len(ld.history) < ld.threshold {
+                return result
+        }
+        
+        // 方法1：检测相同的指纹重复出现
+        fingerprintCounts := make(map[string]int)
+        recentHistory := ld.history
+        if len(recentHistory) > ld.patternWindow*3 {
+                recentHistory = recentHistory[len(recentHistory)-ld.patternWindow*3:]
+        }
+        
+        for _, record := range recentHistory {
+                fingerprintCounts[record.Fingerprint]++
+        }
+        
+        // 检查是否有超过阈值的指纹
+        for fingerprint, count := range fingerprintCounts {
+                if count >= ld.threshold {
+                        result.IsLoop = true
+                        result.LoopCount = count
+                        result.LoopPattern = []string{fingerprint}
+                        result.WarningMessage = fmt.Sprintf(
+                                "⚠️ **循环检测警告**\n\n检测到相同操作「%s」已重复执行 %d 次。\n\n这可能表明陷入了死循环，建议：\n"+
+                                        "1. 分析操作失败的根本原因\n"+
+                                        "2. 尝试不同的解决方案\n"+
+                                        "3. 检查相关配置或日志文件\n"+
+                                        "4. 考虑请求人工协助",
+                                fingerprint, count)
+                        result.Suggestion = "请分析之前的操作结果，找出问题根源，而不是重复相同的操作。"
+                        result.ShouldInterrupt = count >= ld.threshold+2
+                        return result
+                }
+        }
+        
+        // 方法2：检测操作序列模式（如 A->B->C->A->B->C）
+        if len(ld.history) >= ld.patternWindow*2 {
+                pattern := ld.detectPatternSequence()
+                if pattern.IsLoop {
+                        return pattern
+                }
+        }
+        
+        // 方法3：检测连续失败循环
+        consecutiveFailures := 0
+        for i := len(ld.history) - 1; i >= 0; i-- {
+                if ld.history[i].IsError {
+                        consecutiveFailures++
+                } else {
+                        break
+                }
+        }
+        
+        if consecutiveFailures >= ld.threshold {
+                result.IsLoop = true
+                result.LoopCount = consecutiveFailures
+                result.WarningMessage = fmt.Sprintf(
+                        "⚠️ **连续失败警告**\n\n检测到连续 %d 次操作失败。\n\n建议：\n"+
+                                "1. 仔细分析错误信息\n"+
+                                "2. 检查是否有权限、路径或配置问题\n"+
+                                "3. 尝试简化的操作步骤\n"+
+                                "4. 考虑换一种方法解决问题",
+                        consecutiveFailures)
+                result.Suggestion = "连续失败表明当前方法可能不可行，建议尝试其他方案。"
+                result.ShouldInterrupt = consecutiveFailures >= ld.threshold+2
+        }
+        
+        return result
+}
+
+// detectPatternSequence 检测操作序列模式
+func (ld *LoopDetector) detectPatternSequence() LoopDetectionResult {
+        result := LoopDetectionResult{
+                IsLoop: false,
+        }
+        
+        historyLen := len(ld.history)
+        
+        // 尝试检测不同长度的模式
+        for patternLen := 2; patternLen <= ld.patternWindow; patternLen++ {
+                if historyLen < patternLen*2 {
+                        continue
+                }
+                
+                // 获取最近的两段序列
+                recent := ld.history[historyLen-patternLen:]
+                previous := ld.history[historyLen-patternLen*2 : historyLen-patternLen]
+                
+                // 比较两个序列是否相同
+                match := true
+                for i := 0; i < patternLen; i++ {
+                        if recent[i].Fingerprint != previous[i].Fingerprint {
+                                match = false
+                                break
+                        }
+                }
+                
+                if match {
+                        // 扩展检测：检查是否有更多重复
+                        repeatCount := 2
+                        for start := historyLen - patternLen*3; start >= 0; start -= patternLen {
+                                if start+patternLen > historyLen {
+                                        break
+                                }
+                                segment := ld.history[start : start+patternLen]
+                                segmentMatch := true
+                                for i := 0; i < patternLen; i++ {
+                                        if segment[i].Fingerprint != recent[i].Fingerprint {
+                                                segmentMatch = false
+                                                break
+                                        }
+                                }
+                                if segmentMatch {
+                                        repeatCount++
+                                } else {
+                                        break
+                                }
+                        }
+                        
+                        pattern := make([]string, patternLen)
+                        for i := 0; i < patternLen; i++ {
+                                pattern[i] = recent[i].Fingerprint
+                        }
+                        
+                        result.IsLoop = true
+                        result.LoopCount = repeatCount
+                        result.LoopPattern = pattern
+                        result.WarningMessage = fmt.Sprintf(
+                                "⚠️ **序列循环警告**\n\n检测到操作序列已重复 %d 次：\n%v\n\n建议：\n"+
+                                        "1. 这个操作序列似乎没有解决问题\n"+
+                                        "2. 请分析每次操作的结果\n"+
+                                        "3. 尝试打破这个循环，采用不同的策略",
+                                repeatCount, pattern)
+                        result.Suggestion = "操作序列形成循环，请尝试不同的解决方法。"
+                        result.ShouldInterrupt = repeatCount >= 3
+                        return result
+                }
+        }
+        
+        return result
+}
+
+// GetHistory 获取历史记录（用于调试）
+func (ld *LoopDetector) GetHistory() []LoopToolCallRecord {
+        ld.mu.RLock()
+        defer ld.mu.RUnlock()
+        
+        result := make([]LoopToolCallRecord, len(ld.history))
+        copy(result, ld.history)
+        return result
+}
+
+// Clear 清除历史记录
+func (ld *LoopDetector) Clear() {
+        ld.mu.Lock()
+        defer ld.mu.Unlock()
+        
+        ld.history = make([]LoopToolCallRecord, 0, ld.maxHistory)
+}
+
+// GetStats 获取统计信息
+func (ld *LoopDetector) GetStats() map[string]interface{} {
+        ld.mu.RLock()
+        defer ld.mu.RUnlock()
+        
+        toolCounts := make(map[string]int)
+        for _, record := range ld.history {
+                toolCounts[record.ToolName]++
+        }
+        
+        return map[string]interface{}{
+                "total_calls":   len(ld.history),
+                "max_history":   ld.maxHistory,
+                "threshold":     ld.threshold,
+                "tool_counts":   toolCounts,
+        }
+}
+
+// 全局循环检测器实例
+var globalLoopDetector *LoopDetector
+
+// InitGlobalLoopDetector 初始化全局循环检测器
+func InitGlobalLoopDetector() {
+        if globalLoopDetector == nil {
+                globalLoopDetector = NewLoopDetector(100, 3)
+                log.Println("[LoopDetector] Initialized with max_history=100, threshold=3")
+        }
+}
+
+// CheckLoop 检测循环的便捷函数
+func CheckLoop(toolName string, args map[string]interface{}, result string, isError bool) *LoopDetectionResult {
+        if globalLoopDetector == nil {
+                return nil
+        }
+        
+        detectionResult := globalLoopDetector.RecordAndCheck(toolName, args, result, isError)
+        if detectionResult.IsLoop {
+                return &detectionResult
+        }
+        return nil
+}

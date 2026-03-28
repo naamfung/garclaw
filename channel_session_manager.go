@@ -342,6 +342,11 @@ func ProcessChannelMessage(ctx context.Context, channelType, channelID, content 
         newHistory, err := AgentLoop(ctx, ch, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
         if err != nil {
                 log.Printf("[SessionManager] AgentLoop error for %s: %v", session.ID, err)
+                // 即使发生错误，也要保存已生成的消息历史（防止消息丢失）
+                if len(newHistory) > len(history) {
+                        globalChannelSessionManager.UpdateHistory(session.ID, newHistory)
+                        log.Printf("[SessionManager] Saved partial history after error for %s (old: %d, new: %d)", session.ID, len(history), len(newHistory))
+                }
                 return
         }
 

@@ -1021,6 +1021,11 @@ func processUserInput(session *WebSession, input string) {
         )
 
         if err != nil {
+                // 即使发生错误，也要保存已生成的消息历史（防止消息丢失）
+                if len(newHistory) > len(history) {
+                        session.SetHistory(newHistory)
+                        log.Printf("[Session %s] Saved partial history after error (old: %d, new: %d)", session.ID, len(history), len(newHistory))
+                }
                 if err == context.Canceled {
                         session.EnqueueOutput(StreamChunk{Content: "\n[任务已取消]\n", Done: true})
                 } else {
@@ -1080,6 +1085,11 @@ func TriggerDelayedTaskWake(session *WebSession, wakeMessage string) {
 
         if err != nil {
                 log.Printf("[TaskManager] AgentLoop error for session %s: %v", session.ID, err)
+                // 即使发生错误，也要保存已生成的消息历史（防止消息丢失）
+                if len(newHistory) > len(history) {
+                        session.SetHistory(newHistory)
+                        log.Printf("[TaskManager] Saved partial history after error for session %s (old: %d, new: %d)", session.ID, len(history), len(newHistory))
+                }
                 if err == context.Canceled {
                         session.EnqueueOutput(StreamChunk{Content: "\n[任务已取消]\n", Done: true})
                 } else {

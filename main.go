@@ -259,6 +259,10 @@ func main() {
         // 初始化任务进度追踪器
         globalTaskTracker = NewTaskTracker()
 
+        // 初始化循环检测器
+        InitGlobalLoopDetector()
+        log.Println("Loop detector initialized.")
+
         // 初始化后台任务管理器
         globalTaskManager = NewTaskManager()
         globalTaskManager.SetWakeHandler(func(task *BackgroundTask) {

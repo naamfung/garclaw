@@ -1680,6 +1680,19 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 
                                 result := executeTool(ctx, call.ID, call.Name, argsMap, ch, currentRole)
 
+                                // 循环检测
+                                contentStr, _ := result.Content.(string)
+                                isErr := result.Meta.Status == TaskStatusFailed
+                                if loopResult := CheckLoop(call.Name, argsMap, contentStr, isErr); loopResult != nil {
+                                        // 检测到循环，附加警告信息
+                                        contentStr = contentStr + "\n\n" + loopResult.WarningMessage
+                                        if loopResult.Suggestion != "" {
+                                                contentStr = contentStr + "\n\n💡 建议：" + loopResult.Suggestion
+                                        }
+                                        result.Content = contentStr
+                                        log.Printf("[AgentLoop] Loop detected: %s (count: %d)", call.Name, loopResult.LoopCount)
+                                }
+
                                 // 执行 AfterToolCall Hook
                                 if hookManager != nil && hookManager.IsEnabled() {
                                         contentStr, _ := result.Content.(string)
@@ -1753,6 +1766,19 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
                                                 }
 
                                                 result := executeTool(ctx, toolID, toolName, input, ch, currentRole)
+
+                                                // 循环检测
+                                                contentStrLoop, _ := result.Content.(string)
+                                                isErrLoop := result.Meta.Status == TaskStatusFailed
+                                                if loopResult := CheckLoop(toolName, input, contentStrLoop, isErrLoop); loopResult != nil {
+                                                        // 检测到循环，附加警告信息
+                                                        contentStrLoop = contentStrLoop + "\n\n" + loopResult.WarningMessage
+                                                        if loopResult.Suggestion != "" {
+                                                                contentStrLoop = contentStrLoop + "\n\n💡 建议：" + loopResult.Suggestion
+                                                        }
+                                                        result.Content = contentStrLoop
+                                                        log.Printf("[AgentLoop] Loop detected: %s (count: %d)", toolName, loopResult.LoopCount)
+                                                }
 
                                                 // 执行 AfterToolCall Hook
                                                 if hookManager != nil && hookManager.IsEnabled() {
