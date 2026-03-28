@@ -586,6 +586,77 @@ func DetectCommandType(command string) CommandSuggestion {
                 }
         }
 
+        // SSH/SCP 特殊检测 - 需要区分是否真正交互式
+        if strings.Contains(lowerCmd, "ssh ") || strings.Contains(lowerCmd, "scp ") {
+                // 检查是否使用 sshpass（非交互式密码输入）
+                hasSshpass := strings.Contains(lowerCmd, "sshpass")
+
+                // 检查 SSH 是否带有远程命令（非交互式）
+                // 模式: ssh [options] user@host 'command' 或 ssh [options] user@host "command"
+                hasRemoteCommand := false
+                if strings.Contains(lowerCmd, "ssh ") {
+                        // 查找用户@主机后面的命令参数
+                        // 常见模式: ssh ... user@host 'cmd' 或 ssh ... user@host "cmd"
+                        sshIdx := strings.Index(lowerCmd, "ssh ")
+                        afterSsh := lowerCmd[sshIdx:]
+
+                        // 检查是否有单引号或双引号包裹的远程命令
+                        // 注意: sshpass -p 'password' 中的引号是密码的一部分，不是远程命令
+                        // 远程命令通常出现在 user@host 之后
+
+                        // 简化检测: 如果命令中包含 @ 并且在 @ 后面有引号，则认为是远程命令
+                        atIdx := strings.Index(afterSsh, "@")
+                        if atIdx > 0 {
+                                afterAt := afterSsh[atIdx:]
+                                // 检查 @ 后面是否有引号（排除 sshpass -p 'xxx' 中的引号）
+                                // 远程命令通常格式: user@host 'command' 或 user@host "command"
+                                singleQuoteIdx := strings.Index(afterAt, "'")
+                                doubleQuoteIdx := strings.Index(afterAt, "\"")
+
+                                // 如果有引号，检查引号位置是否合理（在主机名后面）
+                                if singleQuoteIdx > 0 || doubleQuoteIdx > 0 {
+                                        // 找到引号后，检查引号内是否有内容（远程命令）
+                                        // 这是一个简化的检测，假设 @ 后面的引号包含远程命令
+                                        hasRemoteCommand = true
+                                }
+                        }
+                }
+
+                // 判断逻辑：
+                // 1. 使用 sshpass 且有远程命令 → 快速命令
+                // 2. 有远程命令（无论是否有 sshpass）→ 快速命令（SSH 会执行完命令后自动退出）
+                // 3. 只有 ssh user@host（无远程命令）→ 交互式
+                if strings.Contains(lowerCmd, "ssh ") {
+                        if hasRemoteCommand {
+                                // SSH 带远程命令，非交互式
+                                return CommandSuggestion{Type: "quick", Message: "SSH 远程命令，将同步执行"}
+                        } else if hasSshpass {
+                                // 有 sshpass 但没检测到远程命令，可能是配置问题，但允许同步执行
+                                return CommandSuggestion{Type: "quick", Message: "SSH 命令（已使用 sshpass），将同步执行"}
+                        }
+                        // 纯 SSH 不带远程命令，交互式
+                        return CommandSuggestion{
+                                Type:             "interactive",
+                                Message:          "ssh 不带命令会进入交互式 shell",
+                                Suggestion:       "使用 sshpass 或密钥认证，并添加远程命令",
+                                NonInteractiveEq: "sshpass -p 'password' ssh user@host 'command'",
+                        }
+                }
+
+                // SCP 检测
+                if strings.Contains(lowerCmd, "scp ") {
+                        if hasSshpass {
+                                return CommandSuggestion{Type: "long_running", Message: "SCP 文件传输（已使用 sshpass），将异步执行"}
+                        }
+                        return CommandSuggestion{
+                                Type:             "interactive",
+                                Message:          "scp 需要密码",
+                                Suggestion:       "使用 sshpass 或密钥认证",
+                                NonInteractiveEq: "sshpass -p 'password' scp",
+                        }
+                }
+        }
+
         // 交互式命令检测
         interactiveMap := map[string]CommandSuggestion{
                 "vim":     {Type: "interactive", Message: "vim 是交互式编辑器", Suggestion: "使用 sed/awk 进行文本处理"},
@@ -597,8 +668,6 @@ func DetectCommandType(command string) CommandSuggestion {
                 "git log": {Type: "interactive", Message: "git log 会分页", Suggestion: "使用 git --no-pager log -n 20", NonInteractiveEq: "git --no-pager log -n 20"},
                 "git diff": {Type: "interactive", Message: "git diff 会分页", Suggestion: "使用 git --no-pager diff", NonInteractiveEq: "git --no-pager diff"},
                 "git commit": {Type: "interactive", Message: "git commit 会打开编辑器", Suggestion: "使用 git commit -m \"message\"", NonInteractiveEq: "git commit -m \"\""},
-                "ssh ":    {Type: "interactive", Message: "ssh 不带命令会进入交互式 shell", Suggestion: "使用 sshpass 或密钥认证", NonInteractiveEq: "sshpass -p 'password' ssh user@host 'command'"},
-                "scp ":    {Type: "interactive", Message: "scp 需要密码", Suggestion: "使用 sshpass 或密钥认证", NonInteractiveEq: "sshpass -p 'password' scp"},
                 "python":  {Type: "interactive", Message: "python 无参数会进入 REPL", Suggestion: "使用 python script.py 或 python -c 'code'"},
                 "python3": {Type: "interactive", Message: "python3 无参数会进入 REPL", Suggestion: "使用 python3 script.py 或 python3 -c 'code'"},
                 "node":    {Type: "interactive", Message: "node 无参数会进入 REPL", Suggestion: "使用 node script.js 或 node -e 'code'"},
