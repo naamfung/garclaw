@@ -321,13 +321,13 @@ LDFLAGS="-X 'main.Version=$VERSION' -X 'main.GitCommit=$GIT_COMMIT' -X 'main.Bui
 if [ -n "$BUILD_TAGS" ]; then
     go build -tags "$BUILD_TAGS" -ldflags "$LDFLAGS" -o garclaw . || {
         printf "\033[0;31mGo 编译失败\033[0m\n"
-        printf "请确保已安装 Go 编译器: go version\n"
+        printf "请确保已安装 Go 编译器\n"
         exit 1
     }
 else
     go build -ldflags "$LDFLAGS" -o garclaw . || {
         printf "\033[0;31mGo 编译失败\033[0m\n"
-        printf "请确保已安装 Go 编译器: go version\n"
+        printf "请确保已安装 Go 编译器\n"
         exit 1
     }
 fi
