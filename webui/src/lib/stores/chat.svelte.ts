@@ -693,11 +693,35 @@ class ChatStore {
                                 this.setChatLoading(assistantMessage.convId, false);
                                 this.clearChatStreaming(assistantMessage.convId);
                                 this.setProcessingState(assistantMessage.convId, null);
+
+                                // 保留已输出的内容，而不是删除消息
+                                // 将已流式输出的部分内容保存到数据库，方便用户查看和修正
                                 const idx = conversationsStore.findMessageIndex(assistantMessage.id);
                                 if (idx !== -1) {
-                                        const failedMessage = conversationsStore.removeMessageAtIndex(idx);
-                                        if (failedMessage) DatabaseService.deleteMessage(failedMessage.id).catch(console.error);
+                                        // 构建已输出的内容（包含推理内容）
+                                        const partialContent = buildCombinedContent();
+                                        // 如果有部分内容，保存到数据库和UI
+                                        if (partialContent && partialContent.trim()) {
+                                                const updateData: Partial<DatabaseMessage> = {
+                                                        content: partialContent,
+                                                        toolCalls: streamedToolCallContent || ''
+                                                };
+                                                if (streamedExtras.length > 0) updateData.extra = streamedExtras;
+                                                if (resolvedModel) updateData.model = resolvedModel;
+
+                                                // 更新UI
+                                                conversationsStore.updateMessageAtIndex(idx, updateData);
+                                                // 保存到数据库
+                                                DatabaseService.updateMessage(assistantMessage.id, updateData).catch(console.error);
+                                                // 更新当前节点
+                                                conversationsStore.updateCurrentNode(assistantMessage.id).catch(console.error);
+                                        } else {
+                                                // 如果没有任何输出内容，才删除空消息
+                                                const failedMessage = conversationsStore.removeMessageAtIndex(idx);
+                                                if (failedMessage) DatabaseService.deleteMessage(failedMessage.id).catch(console.error);
+                                        }
                                 }
+
                                 const contextInfo = (
                                         error as Error & { contextInfo?: { n_prompt_tokens: number; n_ctx: number } }
                                 ).contextInfo;
