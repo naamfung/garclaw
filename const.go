@@ -162,14 +162,6 @@ func BuildSystemPromptForActor(actorName string, am *ActorManager, pm *RoleManag
                 prompt.WriteString(toolSection)
         }
 
-        // 8. 隐式精华总结要求（用于记忆整合优化，用户不可见）
-        prompt.WriteString("\n\n## 隐式总结要求\n\n")
-        prompt.WriteString("每次响应末尾，请用简洁的语言总结本次对话的关键信息（1-3句话）。\n")
-        prompt.WriteString("这个总结对用户不可见，仅用于系统内部记忆管理。\n")
-        prompt.WriteString("格式：在响应末尾添加 `<隐式总结>总结内容<隐式总结/>`，单独一行。\n")
-        prompt.WriteString("示例：`<隐式总结>用户询问了X问题，我提供了Y解决方案，关键点是Z。<隐式总结/>`\n")
-        prompt.WriteString("注意：总结应包含对后续对话有价值的信息，如决策、偏好、重要事实等。此标签内容不会显示给用户。\n")
-
         return prompt.String()
 }
 
