@@ -820,7 +820,7 @@ func getTools(apiType string) interface{} {
                                         },
                                 },
                         },
-                        // ========== Headers 和 UA 设置 ==========
+                        // ========== Headers 与 UA 设置 ==========
                         {
                                 "type": "function",
                                 "function": map[string]interface{}{
@@ -1228,7 +1228,7 @@ func getTools(apiType string) interface{} {
                                 "type": "function",
                                 "function": map[string]interface{}{
                                         "name":        "text_search",
-                                        "description": "全系统文本搜索。在文件中搜索关键词，返回匹配的文件路径、行号和匹配内容。支持正则表达式、大小写敏感等选项。跨平台支持 Windows/Linux/macOS。",
+                                        "description": "全系统文本搜索。在文件中搜索关键词，返回匹配的文件路径、行号与匹配内容。支持正则表达式、大小写敏感等选项。跨平台支持 Windows/Linux/macOS。",
                                         "parameters": map[string]interface{}{
                                                 "type": "object",
                                                 "properties": map[string]interface{}{
@@ -1357,7 +1357,7 @@ func getTools(apiType string) interface{} {
                                 "type": "function",
                                 "function": map[string]interface{}{
                                         "name":        "text_grep",
-                                        "description": "在文件中搜索匹配的行，类似 grep 命令。返回匹配的行及其行号，支持正则表达式和上下文行显示。",
+                                        "description": "在文件中搜索匹配的行，类似 grep 命令。返回匹配的行及其行号，支持正则表达式与上下文行显示。",
                                         "parameters": map[string]interface{}{
                                                 "type": "object",
                                                 "properties": map[string]interface{}{
@@ -1460,7 +1460,7 @@ func getTools(apiType string) interface{} {
                                 "type": "function",
                                 "function": map[string]interface{}{
                                         "name":        "shell_delayed_check",
-                                        "description": "检查后台任务的状态和结果。返回任务的当前状态、已运行时间、输出内容等信息。\n\n🚫 DO NOT POLL: 不要轮询！不要频繁调用此工具检查任务状态。系统会在唤醒时间主动通知你。只有在特殊情况下才需要调用此工具。",
+                                        "description": "检查后台任务的状态与结果。返回任务的当前状态、已运行时间、输出内容等信息。\n\n🚫 DO NOT POLL: 不要轮询！不要频繁调用此工具检查任务状态。系统会在唤醒时间主动通知你。只有在特殊情况下才需要调用此工具。",
                                         "parameters": map[string]interface{}{
                                                 "type": "object",
                                                 "properties": map[string]interface{}{
@@ -1569,7 +1569,7 @@ func getTools(apiType string) interface{} {
                                 "type": "function",
                                 "function": map[string]interface{}{
                                         "name":        "spawn_check",
-                                        "description": "检查子代理任务的执行状态和结果。",
+                                        "description": "检查子代理任务的执行状态与结果。",
                                         "parameters": map[string]interface{}{
                                                 "type": "object",
                                                 "properties": map[string]interface{}{
@@ -2324,7 +2324,7 @@ func getTools(apiType string) interface{} {
                                         "additionalProperties": false,
                                 },
                         },
-                        // ========== Headers 和 UA 设置 ==========
+                        // ========== Headers 与 UA 设置 ==========
                         {
                                 "name":        "browser_set_headers",
                                 "description": "Set custom HTTP headers and navigate to a page. Headers should be in 'Key: Value' format.",
@@ -2673,7 +2673,7 @@ func getTools(apiType string) interface{} {
                         // ========== 文本搜索工具 ==========
                         {
                                 "name":        "text_search",
-                                "description": "全系统文本搜索。在文件中搜索关键词，返回匹配的文件路径、行号和匹配内容。支持正则表达式、大小写敏感等选项。跨平台支持 Windows/Linux/macOS。",
+                                "description": "全系统文本搜索。在文件中搜索关键词，返回匹配的文件路径、行号与匹配内容。支持正则表达式、大小写敏感等选项。跨平台支持 Windows/Linux/macOS。",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -2796,7 +2796,7 @@ func getTools(apiType string) interface{} {
                         // ========== 文本搜索工具（行内搜索）==========
                         {
                                 "name":        "text_grep",
-                                "description": "在文件中搜索匹配的行，类似 grep 命令。返回匹配的行及其行号，支持正则表达式和上下文行显示。",
+                                "description": "在文件中搜索匹配的行，类似 grep 命令。返回匹配的行及其行号，支持正则表达式与上下文行显示。",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -2890,7 +2890,7 @@ func getTools(apiType string) interface{} {
                         },
                         {
                                 "name":        "shell_delayed_check",
-                                "description": "检查后台任务的状态和结果。返回任务的当前状态、已运行时间、输出内容等信息。\n\n🚫 DO NOT POLL: 不要轮询！不要频繁调用此工具检查任务状态。系统会在唤醒时间主动通知你。只有在特殊情况下才需要调用此工具。",
+                                "description": "检查后台任务的状态与结果。返回任务的当前状态、已运行时间、输出内容等信息。\n\n🚫 DO NOT POLL: 不要轮询！不要频繁调用此工具检查任务状态。系统会在唤醒时间主动通知你。只有在特殊情况下才需要调用此工具。",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -2981,7 +2981,7 @@ func getTools(apiType string) interface{} {
                         },
                         {
                                 "name":        "spawn_check",
-                                "description": "检查子代理任务的执行状态和结果。",
+                                "description": "检查子代理任务的执行状态与结果。",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -3035,7 +3035,7 @@ func getToolName(tool map[string]interface{}) string {
         return ""
 }
 
-// getFilteredTools 根据角色权限和工具配置过滤工具列表
+// getFilteredTools 根据角色权限与工具配置过滤工具列表
 // role 为 nil 时返回所有工具（但仍受工具配置限制）
 func getFilteredTools(apiType string, role *Role) interface{} {
         tools := getTools(apiType)
@@ -3045,7 +3045,7 @@ func getFilteredTools(apiType string, role *Role) interface{} {
 
         // 如果没有角色或权限模式为 all，返回过滤后的工具
         if role == nil || role.ToolPermission.Mode == ToolPermissionAll {
-                // 添加 MCP 客户端工具和记忆整合工具
+                // 添加 MCP 客户端工具与记忆整合工具
                 return appendDynamicTools(apiType, tools)
         }
 
@@ -3063,7 +3063,7 @@ func getFilteredTools(apiType string, role *Role) interface{} {
                                 filtered = append(filtered, tool)
                         }
                 }
-                // 添加 MCP 客户端工具和记忆整合工具
+                // 添加 MCP 客户端工具与记忆整合工具
                 return appendDynamicTools(apiType, filtered)
 
         default: // anthropic
@@ -3078,7 +3078,7 @@ func getFilteredTools(apiType string, role *Role) interface{} {
                                 filtered = append(filtered, tool)
                         }
                 }
-                // 添加 MCP 客户端工具和记忆整合工具
+                // 添加 MCP 客户端工具与记忆整合工具
                 return appendDynamicTools(apiType, filtered)
         }
 }
@@ -3145,7 +3145,7 @@ func filterToolsByConfig(apiType string, tools interface{}) interface{} {
         }
 }
 
-// appendDynamicTools 添加动态工具（MCP 客户端工具和记忆整合工具）
+// appendDynamicTools 添加动态工具（MCP 客户端工具与记忆整合工具）
 func appendDynamicTools(apiType string, tools interface{}) interface{} {
         switch apiType {
         case "openai", "ollama":
