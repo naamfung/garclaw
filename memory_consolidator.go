@@ -77,17 +77,28 @@ func (mc *MemoryConsolidator) GetMessageCount(sessionKey string) int {
     return len(mc.sessionMessages[sessionKey])
 }
 
+
 func EstimateTokens(text string) int {
     runes := []rune(text)
-    enCount, zhCount := 0, 0
+    zhCount := 0
     for _, r := range runes {
-        if (r >= 0x4e00 && r <= 0x9fff) || (r >= 0x3400 && r <= 0x4dbf) {
+        // 基本区 + 扩展A-G + 部首 + 笔画
+        if (r >= 0x4e00 && r <= 0x9fff) || // 基本区
+           (r >= 0x3400 && r <= 0x4dbf) || // 扩展A
+           (r >= 0x20000 && r <= 0x2a6df) || // 扩展B
+           (r >= 0x2a700 && r <= 0x2b73f) || // 扩展C
+           (r >= 0x2b740 && r <= 0x2b81f) || // 扩展D
+           (r >= 0x2b820 && r <= 0x2ceaf) || // 扩展E
+           (r >= 0x2ceb0 && r <= 0x2ebef) || // 扩展F
+           (r >= 0x30000 && r <= 0x3134f) || // 扩展G
+           (r >= 0x2e80 && r <= 0x2eff) ||   // 部首补充
+           (r >= 0x31c0 && r <= 0x31ef) {   // 笔画
             zhCount++
-        } else if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-            enCount++
         }
     }
-    return (enCount/4) + (zhCount/2) + (len(runes)-enCount-zhCount)/4
+    
+    otherCount := len(runes) - zhCount
+    return (otherCount)/4 + zhCount/2
 }
 
 func (mc *MemoryConsolidator) EstimateMessagesTokens(messages []ConsolidationMessage) int {
