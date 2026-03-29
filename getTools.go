@@ -3,7 +3,7 @@ package main
 // 工具定义
 func getTools(apiType string) interface{} {
         switch apiType {
-        case "openai", "ollama": // Ollama 使用与 OpenAI 相同的 tools 格式
+        case "openai", "ollama":
                 return []map[string]interface{}{
                         // ========== 原有工具 ==========
                         {
@@ -1612,8 +1612,9 @@ func getTools(apiType string) interface{} {
                         },
                 }
         default: // anthropic
-                return []map[string]interface{}{
-                        // ========== 原有工具（Anthropic 格式） ==========
+                // 返回与 openai 分支完全一致的工具列表，但使用 Anthropic 格式
+                tools := []map[string]interface{}{
+                        // ========== 原有工具 ==========
                         {
                                 "name":        "smart_shell",
                                 "description": "智能执行 shell 命令，自动判断同步或异步执行模式。\n\n✅ 快速命令（ls, cat, grep 等）：同步执行，立即返回结果\n✅ 慢速命令（apt, make, npm install 等）：异步执行，后台运行\n\n系统自动判断命令类型：\n• 包管理器、编译、下载、传输 → 异步执行\n• 其他命令 → 同步执行\n\n可选参数：\n• async: true 强制异步执行\n• sync: true 强制同步执行\n• wake_after_minutes: 异步唤醒时间（默认5分钟）\n\n🚫 DO NOT POLL: 异步任务启动后不要轮询，系统会自动通知结果。",
@@ -1643,13 +1644,17 @@ func getTools(apiType string) interface{} {
                         },
                         {
                                 "name":        "shell",
-                                "description": "Execute a shell command synchronously with a timeout (default 60s). Use for quick commands under 60 seconds: ls, cat, mkdir, rm, cp, mv, grep, find, echo, pwd, which, stat, date.\n\n🚫 CRITICAL - USE shell_delayed INSTEAD FOR:\n• Package managers: apt, yum, dnf, pacman, pkg (FreeBSD/GhostBSD)\n• Compilation: make, cmake, npm install, pip install, cargo build\n• Downloads: wget, curl, git clone, rsync, scp\n• System updates: apt update, pkg update, freebsd-update\n• Docker: docker build\n• Any command that MAY take > 60 seconds\n\nUsing 'shell' for long-running commands will cause TIMEOUT and FAIL!",
+                                "description": "Execute a shell command synchronously with a timeout (default 60s). This tool BLOCKS until the command completes or times out.\n\n✅ USE THIS FOR: ls, cat, mkdir, rm, cp, mv, grep, find, echo, pwd, which, stat, date, simple git commands, and other quick operations under 60 seconds.\n\n🚫 CRITICAL WARNING - USE shell_delayed INSTEAD:\n❌ Package managers: apt, apt-get, yum, dnf, pacman, pkg (FreeBSD/GhostBSD)\n❌ Compilation: make, cmake, npm install, pip install, cargo build, go build\n❌ Downloads: wget, curl, git clone, rsync, scp, sftp\n❌ Docker: docker build, docker-compose build\n❌ System updates: apt update, yum update, pkg update, freebsd-update\n❌ Archives: tar, unzip, 7z (for large files)\n❌ Media: ffmpeg, handbrake\n❌ Any command that MAY take more than 60 seconds\n\nUsing 'shell' for long-running commands will cause TIMEOUT and FAIL the task!\n\n⚠️ INTERACTIVE COMMANDS: ssh, scp, rsync, sudo, su, vim, top etc. may require interactive input and will trigger a confirmation request.",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
                                                 "command": map[string]interface{}{
                                                         "type":        "string",
                                                         "description": "The shell command to execute. For example, use 'ls' or 'ls -la' (Unix/Linux) to list files, 'mkdir test' to create a directory, 'echo hello' to print text.",
+                                                },
+                                                "force": map[string]interface{}{
+                                                        "type":        "boolean",
+                                                        "description": "Set to true to bypass confirmation for potentially blocking commands (ssh, scp, sudo, etc.). Use with caution - the command will execute without user confirmation.",
                                                 },
                                         },
                                         "required":             []string{"command"},
@@ -1735,9 +1740,10 @@ func getTools(apiType string) interface{} {
                                         "additionalProperties": false,
                                 },
                         },
+                        // ========== 基础浏览器工具 ==========
                         {
-                                "name":        "search",
-                                "description": "Search for a keyword using Baidu search engine.",
+                                "name":        "browser_search",
+                                "description": "Search for a keyword using Baidu search engine. Returns a list of search results with titles and links.",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -1751,8 +1757,8 @@ func getTools(apiType string) interface{} {
                                 },
                         },
                         {
-                                "name":        "visit",
-                                "description": "Visit a URL and retrieve its content.",
+                                "name":        "browser_visit",
+                                "description": "Visit a URL and extract the text content from the web page. Useful for reading article content, product descriptions, etc.",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -1766,8 +1772,8 @@ func getTools(apiType string) interface{} {
                                 },
                         },
                         {
-                                "name":        "download",
-                                "description": "Download a web page or file from a given URL.",
+                                "name":        "browser_download",
+                                "description": "Download a web page HTML and save it to a local file. Returns the saved file path.",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -1780,41 +1786,605 @@ func getTools(apiType string) interface{} {
                                         "additionalProperties": false,
                                 },
                         },
+                        // ========== 浏览器增强工具 ==========
                         {
-                                "name":        "todo",
-                                "description": "Update task list. Track progress on multi-step tasks.",
+                                "name":        "browser_click",
+                                "description": "Click an element on a web page. Navigate to the URL and click the specified element using CSS selector. Useful for buttons, links, and other interactive elements.",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
-                                                "items": map[string]interface{}{
-                                                        "type": "array",
-                                                        "items": map[string]interface{}{
-                                                                "type": "object",
-                                                                "properties": map[string]interface{}{
-                                                                        "id": map[string]interface{}{
-                                                                                "type":        "string",
-                                                                                "description": "Task ID.",
-                                                                        },
-                                                                        "text": map[string]interface{}{
-                                                                                "type":        "string",
-                                                                                "description": "Task description.",
-                                                                        },
-                                                                        "status": map[string]interface{}{
-                                                                                "type":        "string",
-                                                                                "enum":        []string{"pending", "in_progress", "completed"},
-                                                                                "description": "Task status: pending, in_progress, or completed.",
-                                                                        },
-                                                                },
-                                                                "required": []string{"id", "text", "status"},
-                                                        },
-                                                        "description": "List of tasks.",
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the element to click. Examples: 'button.submit', '#login-btn', 'a[href*=\"detail\"]', '.btn-primary'",
+                                                },
+                                                "timeout": map[string]interface{}{
+                                                        "type":        "integer",
+                                                        "description": "Optional timeout in seconds. Default: 30. Increase for slow pages.",
                                                 },
                                         },
-                                        "required":             []string{"items"},
+                                        "required":             []string{"url", "selector"},
                                         "additionalProperties": false,
                                 },
                         },
-                        // ========== 插件管理工具（Anthropic 格式） ==========
+                        {
+                                "name":        "browser_type",
+                                "description": "Type text into an input field on a web page. Can optionally submit the form by pressing Enter.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the input field. Examples: 'input[name=\"username\"]', '#search-box', '.search-input'",
+                                                },
+                                                "text": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The text to type into the input field.",
+                                                },
+                                                "submit": map[string]interface{}{
+                                                        "type":        "boolean",
+                                                        "description": "Whether to press Enter after typing (to submit form). Default: false",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector", "text"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_scroll",
+                                "description": "Scroll the web page up or down by a specified amount.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "direction": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "enum":        []string{"up", "down"},
+                                                        "description": "Scroll direction: 'up' or 'down'.",
+                                                },
+                                                "amount": map[string]interface{}{
+                                                        "type":        "integer",
+                                                        "description": "Number of pixels to scroll. Default: 500",
+                                                },
+                                        },
+                                        "required":             []string{"url", "direction"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_wait_element",
+                                "description": "Wait for a specific element to appear on the page. Useful for dynamic content that loads after page load.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the element to wait for.",
+                                                },
+                                                "timeout": map[string]interface{}{
+                                                        "type":        "integer",
+                                                        "description": "Maximum wait time in seconds. Default: 10",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_extract_links",
+                                "description": "Extract all links from a web page. Returns link text and URL for each link found.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                        },
+                                        "required":             []string{"url"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_extract_images",
+                                "description": "Extract all images from a web page. Returns image source URL and alt text for each image.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                        },
+                                        "required":             []string{"url"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_extract_elements",
+                                "description": "Extract content from specific elements matching a CSS selector. Returns text, HTML, and attributes of matched elements.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for elements to extract. Examples: '.article', 'div.content p', 'h2.title'",
+                                                },
+                                                "include_html": map[string]interface{}{
+                                                        "type":        "boolean",
+                                                        "description": "Whether to include HTML content. Default: false",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_screenshot",
+                                "description": "Take a screenshot of a web page. Returns base64-encoded image. Can capture full page or viewport only.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "full_page": map[string]interface{}{
+                                                        "type":        "boolean",
+                                                        "description": "Capture the entire page (including scrollable area) or just the viewport. Default: false (viewport only)",
+                                                },
+                                        },
+                                        "required":             []string{"url"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_execute_js",
+                                "description": "Execute custom JavaScript code on a web page. Returns the result of the script execution.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "script": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "JavaScript code to execute. Must be a function expression. Examples: '() => document.title' or '() => { return {url: location.href, title: document.title}; }'",
+                                                },
+                                        },
+                                        "required":             []string{"url", "script"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_fill_form",
+                                "description": "Fill out and submit a web form. Automatically finds input fields by name or ID attribute.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "form_data": map[string]interface{}{
+                                                        "type":        "object",
+                                                        "description": "Form field values as key-value pairs. Keys match input 'name' or 'id' attributes. Example: {\"username\": \"admin\", \"password\": \"123456\"}",
+                                                },
+                                                "submit_selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for submit button. If empty, presses Enter to submit.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "form_data"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        // ========== 浏览器高级工具 ==========
+                        {
+                                "name":        "browser_hover",
+                                "description": "Hover mouse over an element. Useful for triggering hover menus, tooltips, or hover effects.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the element to hover over.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_double_click",
+                                "description": "Double-click an element on a web page.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the element to double-click.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_right_click",
+                                "description": "Right-click an element to open context menu.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the element to right-click.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_drag",
+                                "description": "Drag an element and drop it onto another element. Useful for drag-and-drop interfaces.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "source_selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the element to drag.",
+                                                },
+                                                "target_selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the drop target.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "source_selector", "target_selector"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_wait_smart",
+                                "description": "Smart wait for element with options: visible, interactable, stable. More reliable than basic wait.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the element.",
+                                                },
+                                                "visible": map[string]interface{}{
+                                                        "type":        "boolean",
+                                                        "description": "Wait for element to be visible. Default: true",
+                                                },
+                                                "interactable": map[string]interface{}{
+                                                        "type":        "boolean",
+                                                        "description": "Wait for element to be clickable/not covered. Default: false",
+                                                },
+                                                "stable": map[string]interface{}{
+                                                        "type":        "boolean",
+                                                        "description": "Wait for element to stop moving/animating. Default: false",
+                                                },
+                                                "timeout": map[string]interface{}{
+                                                        "type":        "integer",
+                                                        "description": "Maximum wait time in seconds. Default: 10",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_navigate",
+                                "description": "Navigate browser: go back, forward, or refresh page.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to first.",
+                                                },
+                                                "action": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "enum":        []string{"back", "forward", "refresh"},
+                                                        "description": "Navigation action: 'back', 'forward', or 'refresh'.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "action"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_get_cookies",
+                                "description": "Get all cookies from a web page.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to get cookies from.",
+                                                },
+                                        },
+                                        "required":             []string{"url"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_cookie_save",
+                                "description": "Save cookies from a web page to a TOON file for persistence. Useful for saving login state.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to get cookies from.",
+                                                },
+                                                "file_path": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "Path to save the cookies file. If empty, uses default name like 'cookies_domain.json'.",
+                                                },
+                                        },
+                                        "required":             []string{"url"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_cookie_load",
+                                "description": "Load cookies from a TOON file and apply them to a web page. Useful for restoring login state.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to apply cookies to.",
+                                                },
+                                                "file_path": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "Path to the cookies file to load.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "file_path"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_snapshot",
+                                "description": "Get a simplified DOM snapshot of the page for visual analysis. Returns element tree with positions.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to analyze.",
+                                                },
+                                                "max_depth": map[string]interface{}{
+                                                        "type":        "integer",
+                                                        "description": "Maximum depth of element tree. Default: 5",
+                                                },
+                                        },
+                                        "required":             []string{"url"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_upload_file",
+                                "description": "Upload files to a file input element.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the file input element.",
+                                                },
+                                                "file_paths": map[string]interface{}{
+                                                        "type":        "array",
+                                                        "items":       map[string]interface{}{"type": "string"},
+                                                        "description": "List of file paths to upload.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector", "file_paths"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_select_option",
+                                "description": "Select options in a dropdown/select element.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the select element.",
+                                                },
+                                                "values": map[string]interface{}{
+                                                        "type":        "array",
+                                                        "items":       map[string]interface{}{"type": "string"},
+                                                        "description": "Option values or text to select.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector", "values"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_key_press",
+                                "description": "Simulate keyboard key presses. Useful for shortcuts like Ctrl+C, Ctrl+Enter, etc.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "keys": map[string]interface{}{
+                                                        "type":        "array",
+                                                        "items":       map[string]interface{}{"type": "string"},
+                                                        "description": "Keys to press in sequence. Examples: ['Control', 'c'], ['Enter'], ['ArrowDown', 'Enter']",
+                                                },
+                                        },
+                                        "required":             []string{"url", "keys"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_element_screenshot",
+                                "description": "Take a screenshot of a specific element on the page.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "selector": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "CSS selector for the element to screenshot.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "selector"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        // ========== PDF 导出工具 ==========
+                        {
+                                "name":        "browser_pdf",
+                                "description": "Export a web page as PDF. Returns base64 encoded PDF data.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to and export as PDF.",
+                                                },
+                                        },
+                                        "required":             []string{"url"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_pdf_from_file",
+                                "description": "Export a local HTML file as PDF. Useful for converting generated HTML to PDF. Returns base64 encoded PDF data.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "file_path": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "Absolute path to the local HTML file to convert to PDF.",
+                                                },
+                                        },
+                                        "required":             []string{"file_path"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        // ========== Headers 和 UA 设置 ==========
+                        {
+                                "name":        "browser_set_headers",
+                                "description": "Set custom HTTP headers and navigate to a page. Headers should be in 'Key: Value' format.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "headers": map[string]interface{}{
+                                                        "type":        "array",
+                                                        "items":       map[string]interface{}{"type": "string"},
+                                                        "description": "Array of headers in 'Key: Value' format, e.g. ['Authorization: Bearer token', 'X-Custom: value']",
+                                                },
+                                        },
+                                        "required":             []string{"url", "headers"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        {
+                                "name":        "browser_set_user_agent",
+                                "description": "Set a custom User-Agent and navigate to a page.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "user_agent": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The User-Agent string to use.",
+                                                },
+                                        },
+                                        "required":             []string{"url", "user_agent"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        // ========== 设备模拟 ==========
+                        {
+                                "name":        "browser_emulate_device",
+                                "description": "Emulate a mobile device (iPhone, iPad, Android, etc.) when accessing a page. Useful for testing responsive design.",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "url": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "The URL to navigate to.",
+                                                },
+                                                "device": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "Device preset: iphone, iphone_landscape, ipad, android_phone, android_tablet, desktop, desktop_mac",
+                                                },
+                                        },
+                                        "required":             []string{"url", "device"},
+                                        "additionalProperties": false,
+                                },
+                        },
+                        // ========== 插件管理工具 ==========
                         {
                                 "name":        "plugin_list",
                                 "description": "List all loaded plugins.",
@@ -1942,7 +2512,7 @@ func getTools(apiType string) interface{} {
                                         "required": []string{"name"},
                                 },
                         },
-                        // ========== Cron 管理工具（Anthropic 格式） ==========
+                        // ========== Cron 管理工具 ==========
                         {
                                 "name":        "cron_add",
                                 "description": "添加一个新的定时任务。任务会在指定时间执行，执行内容是一个自然语言指令。",
@@ -2009,7 +2579,7 @@ func getTools(apiType string) interface{} {
                                         "required": []string{"name"},
                                 },
                         },
-                        // ========== 记忆管理工具（Anthropic 格式） ==========
+                        // ========== 记忆管理工具 ==========
                         {
                                 "name":        "memory_save",
                                 "description": "保存一条记忆。用于记住重要信息、用户偏好、事实等，跨会话持久化保存。",
@@ -2100,7 +2670,7 @@ func getTools(apiType string) interface{} {
                                         "required": []string{},
                                 },
                         },
-                        // ========== 文本搜索工具（Anthropic 格式） ==========
+                        // ========== 文本搜索工具 ==========
                         {
                                 "name":        "text_search",
                                 "description": "全系统文本搜索。在文件中搜索关键词，返回匹配的文件路径、行号和匹配内容。支持正则表达式、大小写敏感等选项。跨平台支持 Windows/Linux/macOS。",
@@ -2139,7 +2709,7 @@ func getTools(apiType string) interface{} {
                                         "required": []string{"keyword"},
                                 },
                         },
-                        // ========== 文本替换工具（Anthropic 格式）==========
+                        // ========== 文本替换工具（类 sed）==========
                         {
                                 "name":        "text_replace",
                                 "description": "强大的文本替换工具，类似 sed 命令。支持字符串替换、正则表达式、行范围限制、多文件操作等。可用于文本处理、代码重构、批量修改等场景。",
@@ -2223,7 +2793,7 @@ func getTools(apiType string) interface{} {
                                         "required": []string{},
                                 },
                         },
-                        // ========== 文本搜索工具（Anthropic 格式）==========
+                        // ========== 文本搜索工具（行内搜索）==========
                         {
                                 "name":        "text_grep",
                                 "description": "在文件中搜索匹配的行，类似 grep 命令。返回匹配的行及其行号，支持正则表达式和上下文行显示。",
@@ -2262,7 +2832,7 @@ func getTools(apiType string) interface{} {
                                         "required": []string{"file_path", "pattern"},
                                 },
                         },
-                        // ========== 文本转换工具（Anthropic 格式）==========
+                        // ========== 文本转换工具 ==========
                         {
                                 "name":        "text_transform",
                                 "description": "文本转换工具，支持大小写转换、行排序、去重、反转、添加行号等操作。",
@@ -2294,10 +2864,11 @@ func getTools(apiType string) interface{} {
                                         "required": []string{"transform"},
                                 },
                         },
-                        // ========== 后台任务管理工具（Anthropic 格式）==========
+                        // ========== 后台任务管理工具 ==========
+                        // shell_delayed 工具（可通过配置禁用）
                         {
                                 "name":        "shell_delayed",
-                                "description": "异步执行一个长时间运行的命令，无超时限制。适用于可能需要几分钟到几小时的任务。\n\n✅ 适用场景：\n• 包管理器：apt/yum/dnf/pacman (Linux), pkg (FreeBSD/GhostBSD)\n• 系统更新：apt update, pkg update, freebsd-update, portsnap\n• 编译构建：make, cmake, npm install, pip install, cargo build\n• 网络传输：ssh, scp, rsync, wget, curl, git clone\n• Docker：docker build, docker-compose build\n• 任何可能超过60秒的命令\n\n🚫 DO NOT POLL: 任务启动后不要轮询！系统会自动通知你结果。",
+                                "description": "Execute a shell command in background with NO timeout. Use this for long-running commands that may take minutes or hours.\n\n✅ USE THIS FOR:\n• Package managers: apt/yum/dnf/pacman (Linux), pkg (FreeBSD/GhostBSD)\n• System updates: apt update, yum update, pkg update, freebsd-update, portsnap\n• Compilation: make, cmake, npm install, pip install, cargo build, go build\n• Network transfers: ssh, scp, rsync, sftp, wget, curl, git clone\n• Docker: docker build, docker-compose build\n• Archives: tar, unzip, 7z (large files)\n• Media encoding: ffmpeg, handbrake\n• Backups, long scripts, any command > 60 seconds\n\n❌ DO NOT USE THIS FOR: quick commands like ls, cat, mkdir - use 'shell' instead.\n\n⏱️ The command runs in background. You specify when to wake up (1-1440 minutes).\n\n🚫 DO NOT POLL: After starting the task, DO NOT call shell_delayed_check repeatedly. The system will automatically notify you when the task completes or wake time arrives.",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -2392,7 +2963,7 @@ func getTools(apiType string) interface{} {
                         // ========== 子代理工具 ==========
                         {
                                 "name":        "spawn",
-                                "description": "创建一个后台子代理执行独立任务。子代理有自己的上下文，可以独立完成复杂任务，完成后会通知你。",
+                                "description": "创建一个后台子代理执行独立任务。子代理有自己的上下文，可以独立完成复杂任务，完成后会通知你。\n\n✅ 适用场景：\n- 需要独立执行的复杂任务\n- 不需要用户交互的后台任务\n- 可以并行执行的任务\n\n❌ 限制：\n- 子代理不能创建新的子代理\n- 子代理不能发送消息给用户\n- 最多执行 15 次工具调用迭代",
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -2445,6 +3016,7 @@ func getTools(apiType string) interface{} {
                                 },
                         },
                 }
+                return tools
         }
 }
 
@@ -2604,4 +3176,3 @@ func appendDynamicTools(apiType string, tools interface{}) interface{} {
                 return toolList
         }
 }
-
