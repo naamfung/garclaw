@@ -60,6 +60,15 @@ var subagentToolBlacklist = map[string]bool{
     "spawn_list":   true,
 }
 
+// nilChannel 是一个空的 Channel 实现，用于子代理工具调用时避免 nil pointer panic
+// 所有方法都是空实现，不会产生任何输出
+type nilChannel struct{}
+
+func (c *nilChannel) WriteChunk(chunk StreamChunk) error { return nil }
+func (c *nilChannel) ID() string                         { return "nil" }
+func (c *nilChannel) Close() error                       { return nil }
+func (c *nilChannel) GetSessionID() string               { return "" }
+
 // NewSubagentManager 创建子代理管理器
 func NewSubagentManager() *SubagentManager {
     ctx, cancel := context.WithCancel(context.Background())
@@ -193,6 +202,7 @@ func (sm *SubagentManager) runSubagent(task *SubagentTask) {
                 continue
             }
 
+            // 使用 nilChannel 避免 panic
             toolResult := executeToolForSubagent(task.ctx, toolCall.Name, toolCall.Input, task.Role)
 
             actions = append(actions, ExperienceAction{
@@ -298,10 +308,11 @@ func CallModelForSubagent(ctx context.Context, history []Message, apiType, baseU
     return response, nil
 }
 
-// executeToolForSubagent 为子代理执行工具，传递 role 进行权限检查
+// executeToolForSubagent 为子代理执行工具，使用 nilChannel 避免 panic
 func executeToolForSubagent(ctx context.Context, toolName string, args map[string]interface{}, role *Role) string {
-    // 使用空 toolID，子代理不需要工具调用 ID
-    result := executeTool(ctx, "", toolName, args, nil, role)
+    // 使用空的 channel 实现，避免 nil pointer panic
+    dummyCh := &nilChannel{}
+    result := executeTool(ctx, "", toolName, args, dummyCh, role)
     contentStr, _ := result.Content.(string)
     if result.Meta.Status == TaskStatusFailed {
         return "Error: " + contentStr

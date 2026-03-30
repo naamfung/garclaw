@@ -20,10 +20,6 @@ import (
 
 var authSessionsFile = "auth_sessions.json"
 
-func init() {
-    authSessionsFile = filepath.Join(globalExecDir, "auth_sessions.json")
-}
-
 // AuthManager 认证管理器
 type AuthManager struct {
         config      *AuthConfig
@@ -46,6 +42,7 @@ var globalAuthManager *AuthManager
 
 // NewAuthManager 创建认证管理器
 func NewAuthManager(config *AuthConfig) *AuthManager {
+        authSessionsFile = filepath.Join(globalExecDir, "auth_sessions.json")
         am := &AuthManager{
                 config:      config,
                 sessions:    make(map[string]*AuthSession),
