@@ -709,19 +709,28 @@ func main() {
     if len(history) > 0 && globalSessionPersist != nil {
         sessionID := fmt.Sprintf("cli_%s", time.Now().Format("20060102_150405"))
         description := "CLI session"
-        if len(history) > 0 {
-            if content, ok := history[0].Content.(string); ok && len(content) > 0 {
-                if len(content) > 50 {
-                    description = content[:50] + "..."
-                } else {
-                    description = content
+        // 找到第一条用户消息作为描述
+        for _, msg := range history {
+            if msg.Role == "user" {
+                if content, ok := msg.Content.(string); ok && len(content) > 0 {
+                    if len(content) > 50 {
+                        description = content[:50] + "..."
+                    } else {
+                        description = content
+                    }
                 }
+                break
             }
         }
         if _, err := globalSessionPersist.SaveSession(sessionID, history, description); err != nil {
             log.Printf("Failed to save CLI session: %v", err)
         } else {
             log.Printf("CLI session saved: %s", sessionID)
+            // 记录会话到HISTORY.md
+            if globalUnifiedMemory != nil {
+                summary := description
+                globalUnifiedMemory.RecordSession(sessionID, "cli", summary, len(history), []string{"cli"})
+            }
         }
     }
 

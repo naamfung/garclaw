@@ -366,8 +366,9 @@ func (m *UnifiedMemory) saveHistoryFile() error {
     var sb strings.Builder
     sb.WriteString("# 会话历史记录\n\n此文件记录 AI 与用户的对话会话历史摘要。\n由 GarClaw AI Agent 自动维护。\n\n## 会话记录\n\n")
     for _, s := range m.sessions {
-        sb.WriteString(fmt.Sprintf("[%s] %s | %d messages | %s | tags: %v\n",
-            s.StartTime.Format("2006-01-02 15:04"), s.SessionID, s.MessageCount, s.Summary, s.Tags))
+        tagStr := strings.Join(s.Tags, ",")
+        sb.WriteString(fmt.Sprintf("[%s] %s | %d messages | %s | tags: %s\n",
+            s.StartTime.Format("2006-01-02 15:04"), s.SessionID, s.MessageCount, s.Summary, tagStr))
     }
     return os.WriteFile(m.historyFilePath, []byte(sb.String()), 0644)
 }
