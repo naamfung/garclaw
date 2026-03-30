@@ -18,7 +18,7 @@ type CronJob struct {
     Schedule    string      `toon:"Schedule" json:"Schedule"`
     UserMessage string      `toon:"UserMessage" json:"UserMessage"`
     Channel     ChannelConf `toon:"Channel" json:"Channel"`
-    SessionID   string      `toon:"SessionID,omitempty" json:"SessionID,omitempty"`
+    SessionID   string      `toon:"SessionID,omitempty" json:"SessionID,omitempty"` // 创建任务的会话ID
 }
 
 // ChannelConf 定义输出目标配置
@@ -73,7 +73,7 @@ func NewCronManager(configPath string, cronConfig *CronConfig) (*CronManager, er
     return cm, nil
 }
 
-// loadJobs 从 cron.toon 加载任务（TOON 格式，顶层为 cron_jobs 数组）
+// loadJobs 从 cron.toon 加载任务
 func (cm *CronManager) loadJobs() error {
     data, err := os.ReadFile(cm.file)
     if err != nil {
@@ -263,28 +263,29 @@ func (cm *CronManager) executeJob(job *CronJob) {
         return
     }
 
-    // 创建 Channel
-    var ch Channel
-    var err error
-
-    // 如果有会话 ID，优先使用会话输出（确保结果返回网页端）
-    if job.SessionID != "" && globalWebSessionManager != nil {
-        session := globalWebSessionManager.Get(job.SessionID)
-        if session != nil {
-            ch = NewSessionChannel(session)
-            log.Printf("[Cron] Using session channel for job %s, session %s", job.Name, job.SessionID)
-        } else {
-            log.Printf("[Cron] Session %s not found for job %s, falling back to configured channel", job.SessionID, job.Name)
-            ch, err = createChannelFromConf(job.Name, &job.Channel)
-        }
-    } else {
-        ch, err = createChannelFromConf(job.Name, &job.Channel)
-    }
-
+    // 1. 创建基础通道（用户配置的目标）
+    baseCh, err := createChannelFromConf(job.Name, &job.Channel)
     if err != nil {
-        log.Printf("Failed to create channel for job %s: %v", job.Name, err)
+        log.Printf("Failed to create base channel for job %s: %v", job.Name, err)
         return
     }
+
+    var ch Channel = baseCh
+
+    // 2. 如果有会话且已连接，将会话通道加入复合输出
+    if job.SessionID != "" && globalWebSessionManager != nil {
+        session := globalWebSessionManager.Get(job.SessionID)
+        if session != nil && session.IsConnected() {
+            sessionCh := NewSessionChannel(session)
+            // 创建复合通道，同时输出到基础通道和会话通道
+            ch = NewCompositeChannel(baseCh, sessionCh)
+            log.Printf("[Cron] Job %s will output to both configured channel and session %s", job.Name, job.SessionID)
+        } else {
+            // 会话存在但未连接，仅使用基础通道
+            log.Printf("[Cron] Session %s not connected, using only configured channel for job %s", job.SessionID, job.Name)
+        }
+    }
+
     defer ch.Close()
 
     // 创建可取消的 context

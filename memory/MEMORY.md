@@ -6,4 +6,5 @@
 ## Facts
 
 - user_name: Zorsion [tags: username,user]
+- shrimp_tutorial_feishu_url: https://yitanger.feishu.cn/docx/VB9RddOTioTMb7xVSYRcgoFjnTf [tags: 虾教程,飞书,养虾,教程]
 
