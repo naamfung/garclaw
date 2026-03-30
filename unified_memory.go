@@ -606,13 +606,21 @@ func (m *UnifiedMemory) GetContextForPrompt(taskDesc string) string {
     var sb strings.Builder
     facts := m.SearchEntries(MemoryCategoryFact, "", 5)
     prefs := m.SearchEntries(MemoryCategoryPreference, "", 3)
-    if len(facts) > 0 || len(prefs) > 0 {
+    projects := m.SearchEntries(MemoryCategoryProject, "", 3)
+    skills := m.SearchEntries(MemoryCategorySkill, "", 3)
+    if len(facts) > 0 || len(prefs) > 0 || len(projects) > 0 || len(skills) > 0 {
         sb.WriteString("## 关于用户的记忆\n\n")
         for _, f := range facts {
             sb.WriteString(fmt.Sprintf("- %s: %s\n", f.Key, f.Value))
         }
         for _, p := range prefs {
             sb.WriteString(fmt.Sprintf("- 偏好: %s: %s\n", p.Key, p.Value))
+        }
+        for _, pr := range projects {
+            sb.WriteString(fmt.Sprintf("- 项目: %s: %s\n", pr.Key, pr.Value))
+        }
+        for _, s := range skills {
+            sb.WriteString(fmt.Sprintf("- 技能: %s: %s\n", s.Key, s.Value))
         }
         sb.WriteString("\n")
     }
