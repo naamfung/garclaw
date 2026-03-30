@@ -1109,8 +1109,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
     case "spawn_cancel":
         content, _ = handleSpawnCancel(ctx, argsMap, ch)
 
-    case "save_memory":
-        content, _ = HandleSaveMemoryTool(argsMap)
+    case "consolidate_memory":
+        content, _ = HandleConsolidateMemory(argsMap)
 
     default:
         if strings.HasPrefix(toolName, "mcp_") && globalMCPClientManager != nil {

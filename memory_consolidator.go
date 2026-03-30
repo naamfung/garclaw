@@ -77,26 +77,23 @@ func (mc *MemoryConsolidator) GetMessageCount(sessionKey string) int {
     return len(mc.sessionMessages[sessionKey])
 }
 
-
 func EstimateTokens(text string) int {
     runes := []rune(text)
     zhCount := 0
     for _, r := range runes {
-        // 基本区 + 扩展A-G + 部首 + 笔画
-        if (r >= 0x4e00 && r <= 0x9fff) || // 基本区
-           (r >= 0x3400 && r <= 0x4dbf) || // 扩展A
-           (r >= 0x20000 && r <= 0x2a6df) || // 扩展B
-           (r >= 0x2a700 && r <= 0x2b73f) || // 扩展C
-           (r >= 0x2b740 && r <= 0x2b81f) || // 扩展D
-           (r >= 0x2b820 && r <= 0x2ceaf) || // 扩展E
-           (r >= 0x2ceb0 && r <= 0x2ebef) || // 扩展F
-           (r >= 0x30000 && r <= 0x3134f) || // 扩展G
-           (r >= 0x2e80 && r <= 0x2eff) ||   // 部首补充
-           (r >= 0x31c0 && r <= 0x31ef) {   // 笔画
+        if (r >= 0x4e00 && r <= 0x9fff) ||
+            (r >= 0x3400 && r <= 0x4dbf) ||
+            (r >= 0x20000 && r <= 0x2a6df) ||
+            (r >= 0x2a700 && r <= 0x2b73f) ||
+            (r >= 0x2b740 && r <= 0x2b81f) ||
+            (r >= 0x2b820 && r <= 0x2ceaf) ||
+            (r >= 0x2ceb0 && r <= 0x2ebef) ||
+            (r >= 0x30000 && r <= 0x3134f) ||
+            (r >= 0x2e80 && r <= 0x2eff) ||
+            (r >= 0x31c0 && r <= 0x31ef) {
             zhCount++
         }
     }
-    
     otherCount := len(runes) - zhCount
     return (otherCount)/4 + zhCount/2
 }
@@ -457,13 +454,14 @@ func GetMemoryConsolidator() *MemoryConsolidator {
     return globalMemoryConsolidator
 }
 
+// GetConsolidationTools 返回记忆整合工具定义（名称改为 consolidate_memory）
 func GetConsolidationTools() []map[string]interface{} {
     return []map[string]interface{}{
         {
             "type": "function",
             "function": map[string]interface{}{
-                "name":        "save_memory",
-                "description": "保存记忆整合结果到持久化存储。",
+                "name":        "consolidate_memory",
+                "description": "将当前对话中的关键信息整合到长期记忆系统中。当对话内容较长或包含重要信息时，使用此工具进行记忆整合。",
                 "parameters": map[string]interface{}{
                     "type": "object",
                     "properties": map[string]interface{}{
@@ -483,7 +481,8 @@ func GetConsolidationTools() []map[string]interface{} {
     }
 }
 
-func HandleSaveMemoryTool(args map[string]interface{}) (string, error) {
+// HandleConsolidateMemory 处理记忆整合工具调用
+func HandleConsolidateMemory(args map[string]interface{}) (string, error) {
     historyEntry, _ := args["history_entry"].(string)
     memoryUpdate, _ := args["memory_update"].(string)
     if historyEntry == "" {
@@ -492,9 +491,8 @@ func HandleSaveMemoryTool(args map[string]interface{}) (string, error) {
     if globalUnifiedMemory != nil {
         globalUnifiedMemory.RecordSession("default", "tool", historyEntry, 0, []string{"manual"})
         if memoryUpdate != "" {
-            // 简单存储为一条事实（或可调用解析）
             globalUnifiedMemory.SaveEntry("fact", "manual_consolidation", memoryUpdate, []string{"manual"}, "global")
         }
     }
-    return "Memory saved successfully", nil
+    return "Memory consolidated successfully", nil
 }
