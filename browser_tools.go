@@ -12,6 +12,7 @@ import (
         "strings"
         "time"
 
+        "github.com/go-rod/rod"
         "github.com/go-rod/rod/lib/input"
         "github.com/go-rod/rod/lib/proto"
 )
@@ -32,6 +33,7 @@ func getBrowserTimeout(timeoutSec int) int {
         }
         return timeout
 }
+
 // ============================================================
 
 // browserSafeOp 执行浏览器操作，捕获 panic 并转换为 error
@@ -40,7 +42,7 @@ func browserSafeOp(op string, fn func() error) (err error) {
                 if r := recover(); r != nil {
                         errStr := fmt.Sprintf("%v", r)
                         isTimeout := strings.Contains(errStr, "context deadline exceeded")
-                        
+
                         if isTimeout {
                                 timeout := globalTimeoutConfig.Browser
                                 if timeout <= 0 {
@@ -56,6 +58,47 @@ func browserSafeOp(op string, fn func() error) (err error) {
 }
 
 // ============================================================
+// 浏览器会话管理辅助函数
+// ============================================================
+
+// getOrCreatePage 获取或创建浏览器页面（使用会话管理器）
+func getOrCreatePage(sessionID, pageID, url string) (*rod.Page, *BrowserSession, error) {
+        mgr := GetBrowserSessionManager()
+        sess, ok := mgr.GetSession(sessionID)
+        if !ok {
+                var err error
+                sess, err = mgr.CreateSession(sessionID)
+                if err != nil {
+                        return nil, nil, err
+                }
+        }
+
+        page, ok := sess.GetPage(pageID)
+        if !ok || page == nil {
+                var err error
+                page, err = sess.CreatePage(pageID, url)
+                if err != nil {
+                        return nil, nil, err
+                }
+        } else if url != "" {
+                if err := page.Navigate(url); err != nil {
+                        return nil, nil, err
+                }
+        }
+
+        // 设置超时
+        timeout := globalTimeoutConfig.Browser
+        if timeout <= 0 {
+                timeout = DefaultBrowserTimeout
+        }
+        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+        defer cancel()
+        page = page.Context(ctx)
+
+        return page, sess, nil
+}
+
+// ============================================================
 // 交互操作类工具
 // ============================================================
 
@@ -63,46 +106,26 @@ func browserSafeOp(op string, fn func() error) (err error) {
 type BrowserClickResult struct {
         Success bool   `json:"success"`
         Message string `json:"message"`
-        URL     string `json:"url,omitempty"` // 点击后的 URL
+        URL     string `json:"url,omitempty"`
 }
 
-// BrowserClick 点击页面元素
-// selector: CSS 选择器，如 "button.submit", "#login-btn", "a[href*='detail']"
-// timeoutSec: 可选超时时间（秒），0 或负数使用默认值
-func BrowserClick(url, selector string, timeoutSec int) (result *BrowserClickResult, err error) {
+// BrowserClick 点击页面元素（支持会话复用）
+func BrowserClick(sessionID, url, selector string, timeoutSec int) (result *BrowserClickResult, err error) {
         err = browserSafeOp("BrowserClick", func() error {
-                result, err = browserClickImpl(url, selector, timeoutSec)
+                result, err = browserClickImpl(sessionID, url, selector, timeoutSec)
                 return err
         })
         return
 }
 
-func browserClickImpl(url, selector string, timeoutSec int) (*BrowserClickResult, error) {
+func browserClickImpl(sessionID, url, selector string, timeoutSec int) (*BrowserClickResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
-        }
-        defer browser.Close()
-
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
         }
 
         // 等待元素出现
@@ -111,20 +134,14 @@ func browserClickImpl(url, selector string, timeoutSec int) (*BrowserClickResult
                 return nil, fmt.Errorf("未找到元素 '%s': %w", selector, err)
         }
 
-        // 滚动到元素可见
         if err := element.ScrollIntoView(); err != nil {
                 log.Printf("滚动到元素失败: %v", err)
         }
 
-        // 点击元素 - 使用 MustClick
         element.MustClick()
-
-        // 等待可能的页面变化
         time.Sleep(500 * time.Millisecond)
 
-        // 获取当前 URL
         info, _ := page.Info()
-
         return &BrowserClickResult{
                 Success: true,
                 Message: fmt.Sprintf("成功点击元素: %s", selector),
@@ -139,44 +156,23 @@ type BrowserTypeResult struct {
         Value   string `json:"value,omitempty"`
 }
 
-// BrowserType 在输入框中输入文本
-// selector: CSS 选择器，如 "input[name='username']", "#search-box"
-// text: 要输入的文本
-// submit: 是否按回车提交
-func BrowserType(url, selector, text string, submit bool, timeoutSec int) (result *BrowserTypeResult, err error) {
+// BrowserType 在输入框中输入文本（支持会话复用）
+func BrowserType(sessionID, url, selector, text string, submit bool, timeoutSec int) (result *BrowserTypeResult, err error) {
         err = browserSafeOp("BrowserType", func() error {
-                result, err = browserTypeImpl(url, selector, text, submit, timeoutSec)
+                result, err = browserTypeImpl(sessionID, url, selector, text, submit, timeoutSec)
                 return err
         })
         return
 }
 
-func browserTypeImpl(url, selector, text string, submit bool, timeoutSec int) (*BrowserTypeResult, error) {
+func browserTypeImpl(sessionID, url, selector, text string, submit bool, timeoutSec int) (*BrowserTypeResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
-        }
-        defer browser.Close()
-
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
         }
 
         // 查找输入框
@@ -209,46 +205,26 @@ func browserTypeImpl(url, selector, text string, submit bool, timeoutSec int) (*
 type BrowserScrollResult struct {
         Success bool   `json:"success"`
         Message string `json:"message"`
-        Height  int    `json:"height,omitempty"` // 页面总高度
+        Height  int    `json:"height,omitempty"`
 }
 
-// BrowserScroll 滚动页面
-// direction: "up" 或 "down"
-// amount: 滚动像素数，如 500
-func BrowserScroll(url, direction string, amount int, timeoutSec int) (result *BrowserScrollResult, err error) {
+// BrowserScroll 滚动页面（支持会话复用）
+func BrowserScroll(sessionID, url, direction string, amount int, timeoutSec int) (result *BrowserScrollResult, err error) {
         err = browserSafeOp("BrowserScroll", func() error {
-                result, err = browserScrollImpl(url, direction, amount, timeoutSec)
+                result, err = browserScrollImpl(sessionID, url, direction, amount, timeoutSec)
                 return err
         })
         return
 }
 
-func browserScrollImpl(url, direction string, amount int, timeoutSec int) (*BrowserScrollResult, error) {
+func browserScrollImpl(sessionID, url, direction string, amount int, timeoutSec int) (*BrowserScrollResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
-        }
-        defer browser.Close()
-
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
         }
 
         // 执行滚动
@@ -281,18 +257,16 @@ type BrowserWaitResult struct {
         Message string `json:"message"`
 }
 
-// BrowserWaitElement 等待元素出现
-// selector: CSS 选择器
-// waitTimeout: 等待超时秒数
-func BrowserWaitElement(url, selector string, waitTimeout int) (result *BrowserWaitResult, err error) {
+// BrowserWaitElement 等待元素出现（支持会话复用）
+func BrowserWaitElement(sessionID, url, selector string, waitTimeout int) (result *BrowserWaitResult, err error) {
         err = browserSafeOp("BrowserWaitElement", func() error {
-                result, err = browserWaitElementImpl(url, selector, waitTimeout)
+                result, err = browserWaitElementImpl(sessionID, url, selector, waitTimeout)
                 return err
         })
         return
 }
 
-func browserWaitElementImpl(url, selector string, waitTimeout int) (*BrowserWaitResult, error) {
+func browserWaitElementImpl(sessionID, url, selector string, waitTimeout int) (*BrowserWaitResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
@@ -301,28 +275,10 @@ func browserWaitElementImpl(url, selector string, waitTimeout int) (*BrowserWait
                 waitTimeout = 10
         }
 
-        timeout := globalTimeoutConfig.Browser
-        if timeout <= 0 {
-                timeout = 30
-        }
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
         }
-        defer browser.Close()
-
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
 
         // 使用独立的超时等待元素
         waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Duration(waitTimeout)*time.Second)
@@ -343,17 +299,16 @@ func browserWaitElementImpl(url, selector string, waitTimeout int) (*BrowserWait
         }, nil
 }
 
-// BrowserWaitIdle 等待页面网络空闲
-// waitTimeout: 最长等待秒数
-func BrowserWaitIdle(url string, waitTimeout int) (result *BrowserWaitResult, err error) {
+// BrowserWaitIdle 等待页面网络空闲（支持会话复用）
+func BrowserWaitIdle(sessionID, url string, waitTimeout int) (result *BrowserWaitResult, err error) {
         err = browserSafeOp("BrowserWaitIdle", func() error {
-                result, err = browserWaitIdleImpl(url, waitTimeout)
+                result, err = browserWaitIdleImpl(sessionID, url, waitTimeout)
                 return err
         })
         return
 }
 
-func browserWaitIdleImpl(url string, waitTimeout int) (*BrowserWaitResult, error) {
+func browserWaitIdleImpl(sessionID, url string, waitTimeout int) (*BrowserWaitResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
@@ -362,28 +317,10 @@ func browserWaitIdleImpl(url string, waitTimeout int) (*BrowserWaitResult, error
                 waitTimeout = 10
         }
 
-        timeout := globalTimeoutConfig.Browser
-        if timeout <= 0 {
-                timeout = 30
-        }
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
         }
-        defer browser.Close()
-
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
 
         // 等待网络空闲
         waitFunc := page.MustWaitRequestIdle()
@@ -417,41 +354,23 @@ type BrowserExtractLinksResult struct {
         Links []LinkInfo `json:"links"`
 }
 
-// BrowserExtractLinks 提取页面所有链接
-func BrowserExtractLinks(url string, timeoutSec int) (result *BrowserExtractLinksResult, err error) {
+// BrowserExtractLinks 提取页面所有链接（支持会话复用）
+func BrowserExtractLinks(sessionID, url string, timeoutSec int) (result *BrowserExtractLinksResult, err error) {
         err = browserSafeOp("BrowserExtractLinks", func() error {
-                result, err = browserExtractLinksImpl(url, timeoutSec)
+                result, err = browserExtractLinksImpl(sessionID, url, timeoutSec)
                 return err
         })
         return
 }
 
-func browserExtractLinksImpl(url string, timeoutSec int) (*BrowserExtractLinksResult, error) {
+func browserExtractLinksImpl(sessionID, url string, timeoutSec int) (*BrowserExtractLinksResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
-        }
-        defer browser.Close()
-
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
         }
 
         // 提取所有链接
@@ -464,7 +383,6 @@ func browserExtractLinksImpl(url string, timeoutSec int) (*BrowserExtractLinksRe
 
         var links []LinkInfo
         if err := json.Unmarshal([]byte(linksJSON), &links); err != nil {
-                // 如果 JSON 解析失败，尝试简单解析
                 links = parseSimpleLinks(linksJSON)
         }
 
@@ -478,18 +396,15 @@ func browserExtractLinksImpl(url string, timeoutSec int) (*BrowserExtractLinksRe
 // parseSimpleLinks 简单解析链接（备用）
 func parseSimpleLinks(jsonStr string) []LinkInfo {
         var links []LinkInfo
-        // 移除首尾的方括号
         jsonStr = strings.Trim(jsonStr, "[]")
         if jsonStr == "" {
                 return links
         }
 
-        // 简单分割处理
         parts := strings.Split(jsonStr, "},{")
         for _, part := range parts {
                 part = strings.Trim(part, "{}")
                 link := LinkInfo{}
-                // 提取 text 和 href
                 if strings.Contains(part, `"text"`) {
                         textStart := strings.Index(part, `"text"`)
                         if textStart != -1 {
@@ -540,44 +455,25 @@ type BrowserExtractImagesResult struct {
         Images []ImageInfo `json:"images"`
 }
 
-// BrowserExtractImages 提取页面所有图片
-func BrowserExtractImages(url string, timeoutSec int) (result *BrowserExtractImagesResult, err error) {
+// BrowserExtractImages 提取页面所有图片（支持会话复用）
+func BrowserExtractImages(sessionID, url string, timeoutSec int) (result *BrowserExtractImagesResult, err error) {
         err = browserSafeOp("BrowserExtractImages", func() error {
-                result, err = browserExtractImagesImpl(url, timeoutSec)
+                result, err = browserExtractImagesImpl(sessionID, url, timeoutSec)
                 return err
         })
         return
 }
 
-func browserExtractImagesImpl(url string, timeoutSec int) (*BrowserExtractImagesResult, error) {
+func browserExtractImagesImpl(sessionID, url string, timeoutSec int) (*BrowserExtractImagesResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
         }
-        defer browser.Close()
 
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
-        }
-
-        // 提取所有图片
         imagesJSON := page.MustEval(`() => {
                 return JSON.stringify(Array.from(document.querySelectorAll('img')).map(img => ({
                         src: img.src,
@@ -614,53 +510,30 @@ type BrowserExtractElementsResult struct {
         Elements []ElementInfo `json:"elements"`
 }
 
-// BrowserExtractElements 提取指定选择器的所有元素
-// selector: CSS 选择器，如 ".article", "div.content p", "h2.title"
-// includeHTML: 是否包含 HTML 内容
-func BrowserExtractElements(url, selector string, includeHTML bool, timeoutSec int) (result *BrowserExtractElementsResult, err error) {
+// BrowserExtractElements 提取指定选择器的所有元素（支持会话复用）
+func BrowserExtractElements(sessionID, url, selector string, includeHTML bool, timeoutSec int) (result *BrowserExtractElementsResult, err error) {
         err = browserSafeOp("BrowserExtractElements", func() error {
-                result, err = browserExtractElementsImpl(url, selector, includeHTML, timeoutSec)
+                result, err = browserExtractElementsImpl(sessionID, url, selector, includeHTML, timeoutSec)
                 return err
         })
         return
 }
 
-func browserExtractElementsImpl(url, selector string, includeHTML bool, timeoutSec int) (*BrowserExtractElementsResult, error) {
+func browserExtractElementsImpl(sessionID, url, selector string, includeHTML bool, timeoutSec int) (*BrowserExtractElementsResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
         }
-        defer browser.Close()
 
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
-        }
-
-        // 构建提取脚本
         includeHTMLStr := "false"
         if includeHTML {
                 includeHTMLStr = "true"
         }
-        // 转义选择器中的特殊字符，防止 JavaScript 注入
-        escapedSelector := selector
-        escapedSelector = strings.ReplaceAll(escapedSelector, `\`, `\\`)
+        escapedSelector := strings.ReplaceAll(selector, `\`, `\\`)
         escapedSelector = strings.ReplaceAll(escapedSelector, `"`, `\"`)
         script := `() => {
                 const selector = "` + escapedSelector + `";
@@ -700,59 +573,37 @@ func browserExtractElementsImpl(url, selector string, includeHTML bool, timeoutS
 type BrowserScreenshotResult struct {
         URL       string `json:"url"`
         Success   bool   `json:"success"`
-        SavedFile string `json:"savedFile,omitempty"` // 截图保存的文件路径
+        SavedFile string `json:"savedFile,omitempty"`
         FullPage  bool   `json:"fullPage"`
         Width     int    `json:"width"`
         Height    int    `json:"height"`
-        Size      int64  `json:"size"` // 文件大小（字节）
+        Size      int64  `json:"size"`
 }
 
-// BrowserScreenshot 页面截图
-// fullPage: 是否截取整个页面（包括滚动区域）
-func BrowserScreenshot(url string, fullPage bool, timeoutSec int) (result *BrowserScreenshotResult, err error) {
+// BrowserScreenshot 页面截图（支持会话复用）
+func BrowserScreenshot(sessionID, url string, fullPage bool, timeoutSec int) (result *BrowserScreenshotResult, err error) {
         err = browserSafeOp("BrowserScreenshot", func() error {
-                result, err = browserScreenshotImpl(url, fullPage, timeoutSec)
+                result, err = browserScreenshotImpl(sessionID, url, fullPage, timeoutSec)
                 return err
         })
         return
 }
 
-func browserScreenshotImpl(url string, fullPage bool, timeoutSec int) (*BrowserScreenshotResult, error) {
+func browserScreenshotImpl(sessionID, url string, fullPage bool, timeoutSec int) (*BrowserScreenshotResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
         }
-        defer browser.Close()
 
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
-        }
-
-        // 等待页面稳定
         time.Sleep(1 * time.Second)
 
-        // 获取页面尺寸
         width := page.MustEval("() => window.innerWidth").Int()
         height := page.MustEval("() => document.body.scrollHeight").Int()
 
-        // 截图
         var screenshot []byte
         if fullPage {
                 screenshot = page.MustScreenshotFullPage()
@@ -760,20 +611,17 @@ func browserScreenshotImpl(url string, fullPage bool, timeoutSec int) (*BrowserS
                 screenshot = page.MustScreenshot()
         }
 
-        // 保存截图到文件，而不是返回 base64（基于程序所在目录）
         downloadDir := filepath.Join(globalExecDir, "download")
         if err := os.MkdirAll(downloadDir, 0755); err != nil {
                 return nil, fmt.Errorf("创建下载目录失败: %w", err)
         }
 
-        // 生成文件名
         timestamp := time.Now().Format("20060102_150405")
         hash := md5.Sum([]byte(url))
         urlHash := fmt.Sprintf("%x", hash)[:8]
         fileName := fmt.Sprintf("screenshot_%s_%s.png", timestamp, urlHash)
         filePath := filepath.Join(downloadDir, fileName)
 
-        // 写入文件
         if err := os.WriteFile(filePath, screenshot, 0644); err != nil {
                 return nil, fmt.Errorf("保存截图失败: %w", err)
         }
@@ -798,45 +646,25 @@ type BrowserExecuteJSResult struct {
         Result  interface{} `json:"result"`
 }
 
-// BrowserExecuteJS 执行自定义 JavaScript
-// script: JavaScript 代码，如 "() => document.title" 或 "() => { return {url: location.href, title: document.title}; }"
-func BrowserExecuteJS(url, script string, timeoutSec int) (result *BrowserExecuteJSResult, err error) {
+// BrowserExecuteJS 执行自定义 JavaScript（支持会话复用）
+func BrowserExecuteJS(sessionID, url, script string, timeoutSec int) (result *BrowserExecuteJSResult, err error) {
         err = browserSafeOp("BrowserExecuteJS", func() error {
-                result, err = browserExecuteJSImpl(url, script, timeoutSec)
+                result, err = browserExecuteJSImpl(sessionID, url, script, timeoutSec)
                 return err
         })
         return
 }
 
-func browserExecuteJSImpl(url, script string, timeoutSec int) (*BrowserExecuteJSResult, error) {
+func browserExecuteJSImpl(sessionID, url, script string, timeoutSec int) (*BrowserExecuteJSResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
         }
-        defer browser.Close()
 
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
-        }
-
-        // 执行 JavaScript
         result := page.MustEval(script).Str()
 
         return &BrowserExecuteJSResult{
@@ -857,51 +685,29 @@ type BrowserFillFormResult struct {
         FinalURL string `json:"finalUrl,omitempty"`
 }
 
-// BrowserFillForm 填写并提交表单
-// formData: 字段名 -> 值的映射，如 {"username": "admin", "password": "123456"}
-// submitSelector: 提交按钮选择器，如 "button[type='submit']"，为空则按回车
-func BrowserFillForm(url string, formData FormData, submitSelector string, timeoutSec int) (result *BrowserFillFormResult, err error) {
+// BrowserFillForm 填写并提交表单（支持会话复用）
+func BrowserFillForm(sessionID, url string, formData FormData, submitSelector string, timeoutSec int) (result *BrowserFillFormResult, err error) {
         err = browserSafeOp("BrowserFillForm", func() error {
-                result, err = browserFillFormImpl(url, formData, submitSelector, timeoutSec)
+                result, err = browserFillFormImpl(sessionID, url, formData, submitSelector, timeoutSec)
                 return err
         })
         return
 }
 
-func browserFillFormImpl(url string, formData FormData, submitSelector string, timeoutSec int) (*BrowserFillFormResult, error) {
+func browserFillFormImpl(sessionID, url string, formData FormData, submitSelector string, timeoutSec int) (*BrowserFillFormResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
         }
-        defer browser.Close()
 
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
-        }
-
-        // 填写每个字段
         for name, value := range formData {
                 selector := fmt.Sprintf("[name='%s']", name)
                 element, err := page.Element(selector)
                 if err != nil {
-                        // 尝试 ID 选择器
                         selector = fmt.Sprintf("#%s", name)
                         element, err = page.Element(selector)
                         if err != nil {
@@ -909,32 +715,24 @@ func browserFillFormImpl(url string, formData FormData, submitSelector string, t
                                 continue
                         }
                 }
-
-                // 点击获取焦点
                 element.MustClick()
-                // 清空并输入
                 element.SelectAllText()
                 element.Input(value)
         }
 
-        // 提交表单
         if submitSelector != "" {
-                // 点击提交按钮
                 btn, err := page.Element(submitSelector)
                 if err != nil {
                         return nil, fmt.Errorf("未找到提交按钮: %w", err)
                 }
                 btn.MustClick()
         } else {
-                // 按回车提交
                 page.Keyboard.Press(input.Enter)
         }
 
-        // 等待页面响应
         time.Sleep(1 * time.Second)
         page.MustWaitLoad()
 
-        // 获取最终 URL
         info, _ := page.Info()
 
         return &BrowserFillFormResult{
@@ -952,47 +750,26 @@ type BrowserPDFResult struct {
         Base64  string `json:"base64,omitempty"`
 }
 
-// BrowserPDF 将页面导出为 PDF
-func BrowserPDF(url string, timeoutSec int) (result *BrowserPDFResult, err error) {
+// BrowserPDF 将页面导出为 PDF（支持会话复用）
+func BrowserPDF(sessionID, url string, timeoutSec int) (result *BrowserPDFResult, err error) {
         err = browserSafeOp("BrowserPDF", func() error {
-                result, err = browserPDFImpl(url, timeoutSec)
+                result, err = browserPDFImpl(sessionID, url, timeoutSec)
                 return err
         })
         return
 }
 
-func browserPDFImpl(url string, timeoutSec int) (*BrowserPDFResult, error) {
+func browserPDFImpl(sessionID, url string, timeoutSec int) (*BrowserPDFResult, error) {
         if err := ValidateURLForFetch(url); err != nil {
                 return nil, err
         }
 
-        timeout := getBrowserTimeout(timeoutSec)
-        ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-        defer cancel()
-
-        browser, err := launchBrowserRod()
+        page, _, err := getOrCreatePage(sessionID, "default", url)
         if err != nil {
                 return nil, err
         }
-        defer browser.Close()
 
-        page := browser.MustPage()
-        page = page.Context(ctx)
-
-        // 导航到页面
-        if err := page.Navigate(url); err != nil {
-                return nil, fmt.Errorf("导航失败: %w", err)
-        }
-
-        page.MustWaitLoad()
-        if ctx.Err() != nil {
-                return nil, fmt.Errorf("浏览器操作超时")
-        }
-
-        // 等待页面稳定
         time.Sleep(1 * time.Second)
-
-        // 导出 PDF
         pdf := page.MustPDF()
 
         return &BrowserPDFResult{
@@ -1002,5 +779,139 @@ func browserPDFImpl(url string, timeoutSec int) (*BrowserPDFResult, error) {
         }, nil
 }
 
-// 确保 proto 包被使用（避免未导入错误）
+// 确保 proto 包被使用
 var _ = proto.InputMouseButtonLeft
+
+// ========== 辅助类型和函数（供 browser_tools_advanced.go 使用）==========
+
+// CookieData 用于持久化 cookie 的数据结构
+type CookieData struct {
+        Name     string  `json:"name"`
+        Value    string  `json:"value"`
+        Domain   string  `json:"domain"`
+        Path     string  `json:"path"`
+        Expires  float64 `json:"expires"`
+        HTTPOnly bool    `json:"httpOnly"`
+        Secure   bool    `json:"secure"`
+        SameSite string  `json:"sameSite"`
+}
+
+// extractDomain 从 URL 提取域名（用于生成 cookie 文件名）
+func extractDomain(urlStr string) string {
+        urlStr = strings.TrimPrefix(urlStr, "https://")
+        urlStr = strings.TrimPrefix(urlStr, "http://")
+        urlStr = strings.TrimPrefix(urlStr, "www.")
+        if idx := strings.Index(urlStr, "/"); idx > 0 {
+                urlStr = urlStr[:idx]
+        }
+        urlStr = strings.ReplaceAll(urlStr, ".", "_")
+        urlStr = strings.ReplaceAll(urlStr, ":", "_")
+        return urlStr
+}
+
+// DevicePresets 预置设备配置（供 BrowserEmulateDevice 使用）
+var DevicePresets = map[string]struct {
+        Width       int
+        Height      int
+        UserAgent   string
+        DeviceScale float64
+        IsMobile    bool
+        HasTouch    bool
+}{
+        "iphone": {
+                Width:       375,
+                Height:      812,
+                UserAgent:   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                DeviceScale: 3,
+                IsMobile:    true,
+                HasTouch:    true,
+        },
+        "iphone_landscape": {
+                Width:       812,
+                Height:      375,
+                UserAgent:   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                DeviceScale: 3,
+                IsMobile:    true,
+                HasTouch:    true,
+        },
+        "ipad": {
+                Width:       768,
+                Height:      1024,
+                UserAgent:   "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                DeviceScale: 2,
+                IsMobile:    true,
+                HasTouch:    true,
+        },
+        "android_phone": {
+                Width:       360,
+                Height:      800,
+                UserAgent:   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+                DeviceScale: 3,
+                IsMobile:    true,
+                HasTouch:    true,
+        },
+        "android_tablet": {
+                Width:       1024,
+                Height:      768,
+                UserAgent:   "Mozilla/5.0 (Linux; Android 14; Pixel Tablet) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                DeviceScale: 2,
+                IsMobile:    true,
+                HasTouch:    true,
+        },
+        "desktop": {
+                Width:       1920,
+                Height:      1080,
+                UserAgent:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                DeviceScale: 1,
+                IsMobile:    false,
+                HasTouch:    false,
+        },
+        "desktop_mac": {
+                Width:       1920,
+                Height:      1080,
+                UserAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                DeviceScale: 1,
+                IsMobile:    false,
+                HasTouch:    false,
+        },
+}
+
+// BrowserPDFFromFileResult 本地文件PDF导出结果
+type BrowserPDFFromFileResult struct {
+        FilePath string `json:"filePath"`
+        Success  bool   `json:"success"`
+        Base64   string `json:"base64,omitempty"`
+        Message  string `json:"message"`
+}
+
+// BrowserPDFFromFile 将本地 HTML 文件导出为 PDF（支持会话复用）
+func BrowserPDFFromFile(sessionID, filePath string) (result *BrowserPDFFromFileResult, err error) {
+        err = browserSafeOp("BrowserPDFFromFile", func() error {
+                result, err = browserPDFFromFileImpl(sessionID, filePath)
+                return err
+        })
+        return
+}
+
+func browserPDFFromFileImpl(sessionID, filePath string) (*BrowserPDFFromFileResult, error) {
+        if _, err := os.Stat(filePath); os.IsNotExist(err) {
+                return nil, fmt.Errorf("文件不存在: %s", filePath)
+        }
+        absPath, err := filepath.Abs(filePath)
+        if err != nil {
+                return nil, fmt.Errorf("获取绝对路径失败: %w", err)
+        }
+        fileURL := "file://" + absPath
+        page, _, err := getOrCreatePage(sessionID, "default", fileURL)
+        if err != nil {
+                return nil, err
+        }
+        time.Sleep(500 * time.Millisecond)
+        pdf := page.MustPDF()
+        return &BrowserPDFFromFileResult{
+                FilePath: filePath,
+                Success:  true,
+                Base64:   base64.StdEncoding.EncodeToString(pdf),
+                Message:  "成功将 HTML 文件导出为 PDF",
+        }, nil
+}

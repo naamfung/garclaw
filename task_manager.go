@@ -13,7 +13,8 @@ import (
         "sync"
         "syscall"
         "time"
-
+        "runtime"
+        "strconv"
         "github.com/google/uuid"
 )
 
@@ -719,16 +720,29 @@ func DetectCommandType(command string) CommandSuggestion {
 
 // ==================== 平台相关函数 ====================
 func getSysProcAttr() *syscall.SysProcAttr {
+        if runtime.GOOS == "windows" {
+                return nil // Windows 不需要设置进程组
+        }
         return &syscall.SysProcAttr{
                 Setpgid: true,
         }
 }
 
 func killProcessGroup(pid int) error {
+        if runtime.GOOS == "windows" {
+                // Windows: 使用 taskkill 终止进程树
+                cmd := exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(pid))
+                return cmd.Run()
+        }
         return syscall.Kill(-pid, syscall.SIGKILL)
 }
 
 func terminateProcessGroup(pid int) error {
+        if runtime.GOOS == "windows" {
+                // Windows: 先尝试优雅终止
+                cmd := exec.Command("taskkill", "/T", "/PID", strconv.Itoa(pid))
+                return cmd.Run()
+        }
         return syscall.Kill(-pid, syscall.SIGTERM)
 }
 

@@ -4,6 +4,7 @@ import (
     "context"
     "fmt"
     "log"
+    "strings"
     "sync"
     "time"
 
@@ -23,12 +24,13 @@ const (
 // SubagentTask 子代理任务
 type SubagentTask struct {
     ID            string          `json:"id"`
-    Task          string          `json:"task"`         // 任务描述
-    SessionID     string          `json:"session_id"`   // 关联的会话ID
+    Task          string          `json:"task"`
+    SessionID     string          `json:"session_id"`
+    Role          *Role           `json:"-"` // 关联的角色（用于权限控制）
     StartTime     time.Time       `json:"start_time"`
     Status        SubagentStatus  `json:"status"`
     Result        string          `json:"result,omitempty"`
-    Iterations    int             `json:"iterations"`   // 执行的迭代次数
+    Iterations    int             `json:"iterations"`
     MaxIterations int             `json:"max_iterations"`
 
     mu       sync.RWMutex
@@ -49,13 +51,13 @@ type SubagentManager struct {
 // SubagentResultHandler 子代理结果处理函数
 type SubagentResultHandler func(task *SubagentTask)
 
-// 子代理工具黑名单（不允许子代理使用的工具）
+// 子代理工具黑名单
 var subagentToolBlacklist = map[string]bool{
-    "spawn":               true, // 不能创建子代理的子代理
-    "message":             true, // 不能发送消息给用户
-    "spawn_check":         true,
-    "spawn_cancel":        true,
-    "spawn_list":          true,
+    "spawn":        true,
+    "message":      true,
+    "spawn_check":  true,
+    "spawn_cancel": true,
+    "spawn_list":   true,
 }
 
 // NewSubagentManager 创建子代理管理器
@@ -73,14 +75,13 @@ func (sm *SubagentManager) SetResultHandler(handler SubagentResultHandler) {
     sm.resultHandler = handler
 }
 
-// generateSubagentID 生成子代理ID
 func generateSubagentID() string {
     id := uuid.New()
     return "subagent_" + id.String()[:8]
 }
 
 // Spawn 创建并启动子代理
-func (sm *SubagentManager) Spawn(task string, sessionID string, maxIterations int) (*SubagentTask, error) {
+func (sm *SubagentManager) Spawn(task string, sessionID string, maxIterations int, role *Role) (*SubagentTask, error) {
     if maxIterations <= 0 {
         maxIterations = 15
     }
@@ -95,6 +96,7 @@ func (sm *SubagentManager) Spawn(task string, sessionID string, maxIterations in
         ID:            taskID,
         Task:          task,
         SessionID:     sessionID,
+        Role:          role,
         StartTime:     time.Now(),
         Status:        SubagentRunning,
         MaxIterations: maxIterations,
@@ -154,7 +156,8 @@ func (sm *SubagentManager) runSubagent(task *SubagentTask) {
         default:
         }
 
-        response, err := CallModelForSubagent(task.ctx, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens)
+        // 使用子代理自己的 role 调用模型
+        response, err := CallModelForSubagent(task.ctx, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, task.Role)
         if err != nil {
             task.mu.Lock()
             task.Status = SubagentFailed
@@ -190,7 +193,7 @@ func (sm *SubagentManager) runSubagent(task *SubagentTask) {
                 continue
             }
 
-            toolResult := executeToolForSubagent(task.ctx, toolCall.Name, toolCall.Input)
+            toolResult := executeToolForSubagent(task.ctx, toolCall.Name, toolCall.Input, task.Role)
 
             actions = append(actions, ExperienceAction{
                 ToolName: toolCall.Name,
@@ -244,15 +247,66 @@ func (sm *SubagentManager) runSubagent(task *SubagentTask) {
     }
 }
 
-// CallModelForSubagent 为子代理调用模型
-func CallModelForSubagent(ctx context.Context, history []Message, apiType, baseURL, apiKey, modelID string, temperature float64, maxTokens int) (Response, error) {
-    return CallModelSync(ctx, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, false, false)
+// CallModelForSubagent 为子代理调用模型（非流式，支持 role 权限过滤）
+func CallModelForSubagent(ctx context.Context, history []Message, apiType, baseURL, apiKey, modelID string,
+    temperature float64, maxTokens int, role *Role) (Response, error) {
+
+    // 使用 CallModel 流式接口，收集所有 chunk 后组装响应
+    chunkChan, err := CallModel(ctx, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, false, false, role)
+    if err != nil {
+        return Response{}, err
+    }
+
+    var content strings.Builder
+    var reasoning strings.Builder
+    var toolCalls []map[string]interface{}
+    var finishReason string
+
+    for chunk := range chunkChan {
+        if chunk.Error != "" {
+            return Response{}, fmt.Errorf("model error: %s", chunk.Error)
+        }
+        if chunk.Content != "" {
+            content.WriteString(chunk.Content)
+        }
+        if chunk.ReasoningContent != "" {
+            reasoning.WriteString(chunk.ReasoningContent)
+        }
+        if chunk.ToolCalls != nil {
+            toolCalls = chunk.ToolCalls
+        }
+        if chunk.Done {
+            finishReason = chunk.FinishReason
+            break
+        }
+    }
+
+    response := Response{
+        StopReason: finishReason,
+    }
+
+    if toolCalls != nil {
+        response.Content = toolCalls
+    } else {
+        response.Content = content.String()
+    }
+
+    if reasoning.Len() > 0 {
+        response.ReasoningContent = reasoning.String()
+    }
+
+    return response, nil
 }
 
-// executeToolForSubagent 为子代理执行工具
-func executeToolForSubagent(ctx context.Context, toolName string, args map[string]interface{}) string {
-    result, _ := callToolInternal(ctx, toolName, args)
-    return result
+// executeToolForSubagent 为子代理执行工具，传递 role 进行权限检查
+func executeToolForSubagent(ctx context.Context, toolName string, args map[string]interface{}, role *Role) string {
+    // 使用空 toolID，子代理不需要工具调用 ID
+    result := executeTool(ctx, "", toolName, args, nil, role)
+    contentStr, _ := result.Content.(string)
+    if result.Meta.Status == TaskStatusFailed {
+        return "Error: " + contentStr
+    }
+    return contentStr
 }
 
 // Check 检查子代理状态
@@ -409,4 +463,3 @@ func (sm *SubagentManager) Stop() {
 }
 
 var globalSubagentManager *SubagentManager
-

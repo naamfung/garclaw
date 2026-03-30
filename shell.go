@@ -6,6 +6,7 @@ import (
     "context"
     "errors"
     "fmt"
+    "log"
     "os"
     "os/exec"
     "runtime"
@@ -27,6 +28,45 @@ type BlockingCommandInfo struct {
     IsBlocking    bool
     Reason        string
     Suggestions   []string
+}
+
+// ExpandAlias 递归展开别名，防止循环
+func ExpandAlias(command string, aliases map[string]string) string {
+        if aliases == nil || len(aliases) == 0 {
+                return command
+        }
+
+        // 使用集合记录已展开的别名，防止循环
+        visited := make(map[string]bool)
+        return expandAliasRecursive(command, aliases, visited)
+}
+
+func expandAliasRecursive(command string, aliases map[string]string, visited map[string]bool) string {
+        trimmed := strings.TrimSpace(command)
+        if trimmed == "" {
+                return command
+        }
+
+        fields := strings.Fields(trimmed)
+        if len(fields) == 0 {
+                return command
+        }
+
+        firstWord := fields[0]
+        if expanded, ok := aliases[firstWord]; ok {
+                if visited[firstWord] {
+                        log.Printf("[Alias] Circular alias detected: %s", firstWord)
+                        return command // 返回原命令，避免无限循环
+                }
+                visited[firstWord] = true
+                // 递归展开别名后的命令
+                newCommand := expanded
+                if len(fields) > 1 {
+                        newCommand = newCommand + " " + strings.Join(fields[1:], " ")
+                }
+                return expandAliasRecursive(newCommand, aliases, visited)
+        }
+        return command
 }
 
 func detectBlockingCommand(command string) BlockingCommandInfo {

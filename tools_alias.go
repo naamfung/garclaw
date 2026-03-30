@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"os"
-	"strings"
 
 	"github.com/toon-format/toon-go"
 )
@@ -49,32 +48,3 @@ func LoadToolsAliases(path string) (map[string]string, error) {
 	return aliases, nil
 }
 
-// ExpandAlias checks if the first word of a command matches an alias and expands it.
-// If no alias matches, the original command is returned unchanged.
-func ExpandAlias(command string, aliases map[string]string) string {
-	if aliases == nil || len(aliases) == 0 {
-		return command
-	}
-
-	trimmed := strings.TrimSpace(command)
-	if trimmed == "" {
-		return command
-	}
-
-	// Extract the first word
-	fields := strings.Fields(trimmed)
-	if len(fields) == 0 {
-		return command
-	}
-
-	firstWord := fields[0]
-	if expanded, ok := aliases[firstWord]; ok {
-		// Replace the first word with the alias command, preserving the rest of the arguments
-		if len(fields) > 1 {
-			return expanded + " " + strings.Join(fields[1:], " ")
-		}
-		return expanded
-	}
-
-	return command
-}

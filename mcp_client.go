@@ -253,27 +253,30 @@ func (c *MCPClient) listToolsStdio() error {
 }
 
 func (c *MCPClient) sendRequestStdio(req JSONRPCRequest) (*JSONRPCResponse, error) {
-    // 发送请求
-    reqBytes, err := json.Marshal(req)
-    if err != nil {
-        return nil, err
-    }
+        // 发送请求
+        reqBytes, err := json.Marshal(req)
+        if err != nil {
+                return nil, err
+        }
+        c.stdin.Write(append(reqBytes, '\n'))
 
-    c.stdin.Write(append(reqBytes, '\n'))
-
-    // 读取响应
-    reader := bufio.NewReader(c.stdout)
-    line, err := reader.ReadString('\n')
-    if err != nil {
-        return nil, err
-    }
-
-    var resp JSONRPCResponse
-    if err := json.Unmarshal([]byte(line), &resp); err != nil {
-        return nil, err
-    }
-
-    return &resp, nil
+        // 读取响应（可能跨多行）
+        reader := bufio.NewReader(c.stdout)
+        var buffer strings.Builder
+        for {
+                line, err := reader.ReadString('\n')
+                if err != nil {
+                        return nil, err
+                }
+                buffer.WriteString(line)
+                // 尝试解析累积的数据
+                var resp JSONRPCResponse
+                if err := json.Unmarshal([]byte(buffer.String()), &resp); err == nil {
+                        return &resp, nil
+                }
+                // 如果还没收到完整的 JSON，继续读取
+                // 简单判断：如果当前行是空行或已包含完整的括号，但解析失败则继续
+        }
 }
 
 // ============================================================

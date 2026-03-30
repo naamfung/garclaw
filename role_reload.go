@@ -67,7 +67,7 @@ func (l *RoleHotLoader) recordInitialModTimes() {
                 if err != nil {
                         return nil
                 }
-                if !info.IsDir() && filepath.Ext(path) == ".toon" {
+                if !info.IsDir() && (filepath.Ext(path) == ".toon" || filepath.Ext(path) == ".md") {
                         l.fileModTimes[path] = info.ModTime()
                 }
                 return nil
@@ -87,7 +87,7 @@ func (l *RoleHotLoader) watchLoop() {
                         if event.Op&fsnotify.Write == fsnotify.Write || 
                            event.Op&fsnotify.Create == fsnotify.Create ||
                            event.Op&fsnotify.Remove == fsnotify.Remove {
-                                if filepath.Ext(event.Name) == ".toon" {
+                                if filepath.Ext(event.Name) == ".toon" || filepath.Ext(event.Name) == ".md" {
                                         log.Printf("Role file changed: %s", event.Name)
                                         l.handleFileChange(event.Name, event.Op)
                                 }
@@ -130,7 +130,7 @@ func (l *RoleHotLoader) checkForChanges() {
                 if err != nil || info.IsDir() {
                         return nil
                 }
-                if filepath.Ext(path) != ".toon" {
+                if filepath.Ext(path) != ".toon" && filepath.Ext(path) != ".md" {
                         return nil
                 }
 

@@ -110,10 +110,11 @@ type HookToolCallRecord struct {
 
 // RepeatedCallTracker 追踪重复的工具调用
 type RepeatedCallTracker struct {
-        mu       sync.RWMutex
-        records  map[int64][]HookToolCallRecord // 按 ChatID 分组
-        maxItems int                           // 每个 chat 保留的最大记录数
-        threshold int                          // 重复次数阈值
+        mu            sync.RWMutex
+        records       map[int64][]HookToolCallRecord
+        maxItems      int
+        threshold     int
+        lastCmdPerTool map[int64]map[string]string // chatID -> toolName -> lastCommand
 }
 
 // 全局重复调用跟踪器
@@ -122,9 +123,10 @@ var globalCallTracker *RepeatedCallTracker
 // NewRepeatedCallTracker 创建新的跟踪器
 func NewRepeatedCallTracker(maxItems, threshold int) *RepeatedCallTracker {
         return &RepeatedCallTracker{
-                records:   make(map[int64][]HookToolCallRecord),
-                maxItems:  maxItems,
-                threshold: threshold,
+                records:        make(map[int64][]HookToolCallRecord),
+                maxItems:       maxItems,
+                threshold:      threshold,
+                lastCmdPerTool: make(map[int64]map[string]string),
         }
 }
 
@@ -140,19 +142,21 @@ func (t *RepeatedCallTracker) Record(chatID int64, toolName, command string, isE
                 Timestamp: time.Now(),
         }
 
-        // 获取或创建记录列表
         records := t.records[chatID]
         records = append(records, record)
-
-        // 限制记录数量，保留最新的
         if len(records) > t.maxItems {
                 records = records[len(records)-t.maxItems:]
         }
         t.records[chatID] = records
+
+        // 更新最后命令映射
+        if _, ok := t.lastCmdPerTool[chatID]; !ok {
+                t.lastCmdPerTool[chatID] = make(map[string]string)
+        }
+        t.lastCmdPerTool[chatID][toolName] = command
 }
 
-// CheckRepeatedCall 检查是否有重复调用（不管成功还是失败）
-// 返回：重复次数、是否触发阈值、警告消息
+// CheckRepeatedCall 检查是否有重复调用（连续相同命令）
 func (t *RepeatedCallTracker) CheckRepeatedCall(chatID int64, toolName, command string) (int, bool, string) {
         t.mu.RLock()
         records := t.records[chatID]
@@ -162,18 +166,16 @@ func (t *RepeatedCallTracker) CheckRepeatedCall(chatID int64, toolName, command 
                 return 0, false, ""
         }
 
-        // 统计连续完全相同的命令（不管成功还是失败）
+        // 统计连续完全相同的命令（从最新往前）
         consecutiveCount := 0
         var sampleCommands []string
         hasFailure := false
 
-        // 从最新的记录往前查找
         for i := len(records) - 1; i >= 0; i-- {
                 r := records[i]
                 if r.ToolName != toolName {
                         break
                 }
-                // 只检查完全相同的命令
                 if r.Command == command {
                         consecutiveCount++
                         if r.IsError {
@@ -183,12 +185,10 @@ func (t *RepeatedCallTracker) CheckRepeatedCall(chatID int64, toolName, command 
                                 sampleCommands = append(sampleCommands, r.Command)
                         }
                 } else {
-                        // 命令不同，停止计数
-                        break
+                        break // 命令不同，停止计数
                 }
         }
 
-        // 检查是否达到阈值
         if consecutiveCount >= t.threshold {
                 var warning string
                 if hasFailure {
@@ -216,31 +216,30 @@ func (t *RepeatedCallTracker) CheckRepeatedCall(chatID int64, toolName, command 
         return consecutiveCount, false, ""
 }
 
-// CheckAndResetIfDifferent 检查上一条命令是否不同，如果不同则重置计数器
+// CheckAndResetIfDifferent 检查上一条命令是否不同，如果不同则返回 true（表示连续计数已自然归零）
+// 注意：这里不执行任何删除操作，因为 CheckRepeatedCall 已经基于命令比较来统计连续次数。
+// 此方法仅用于日志或外部判断，保持与原有接口兼容。
 func (t *RepeatedCallTracker) CheckAndResetIfDifferent(chatID int64, toolName, command string) bool {
         t.mu.RLock()
-        records := t.records[chatID]
-        t.mu.RUnlock()
+        defer t.mu.RUnlock()
 
-        if len(records) < 2 {
+        if _, ok := t.lastCmdPerTool[chatID]; !ok {
                 return false
         }
-
-        // 检查倒数第二条（上一条）是否不同
-        prevRecord := records[len(records)-2]
-        if prevRecord.ToolName == toolName && prevRecord.Command != command {
-                // 命令有变化，重置计数器
-                t.Clear(chatID)
+        lastCmd, exists := t.lastCmdPerTool[chatID][toolName]
+        if exists && lastCmd != command {
+                // 命令已改变，连续计数会自然归零，无需清空任何记录
                 return true
         }
         return false
 }
 
-// Clear 清除指定 chat 的记录
+// Clear 清除指定 chat 的所有记录（仅用于会话结束等场景）
 func (t *RepeatedCallTracker) Clear(chatID int64) {
         t.mu.Lock()
         defer t.mu.Unlock()
         delete(t.records, chatID)
+        delete(t.lastCmdPerTool, chatID)
 }
 
 // HookManager 管理 Hook 的注册、启用/禁用和执行

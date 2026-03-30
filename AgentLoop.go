@@ -12,6 +12,8 @@ import (
     "github.com/toon-format/toon-go"
 )
 
+const MaxHistoryMessages = 100
+
 // AGENTIC_TAGS 用于前端解析工具调用的标记
 const (
     AgenticToolCallStart   = "<<<AGENTIC_TOOL_CALL_START>>>"
@@ -296,7 +298,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                 if t, ok := argsMap["timeout"].(float64); ok {
                     timeout = int(t)
                 }
-                result, err := BrowserClick(url, selector, timeout)
+                // 修正：传递 sessionID
+                result, err := BrowserClick(ch.GetSessionID(), url, selector, timeout)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -325,7 +328,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                     if t, ok := argsMap["timeout"].(float64); ok {
                         timeout = int(t)
                     }
-                    result, err := BrowserType(url, selector, text, submit, timeout)
+                    // 修正：传递 sessionID
+                    result, err := BrowserType(ch.GetSessionID(), url, selector, text, submit, timeout)
                     if err != nil {
                         content = "Error: " + err.Error()
                     } else {
@@ -354,7 +358,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                 if t, ok := argsMap["timeout"].(float64); ok {
                     timeout = int(t)
                 }
-                result, err := BrowserScroll(url, direction, amount, timeout)
+                // 修正：传递 sessionID
+                result, err := BrowserScroll(ch.GetSessionID(), url, direction, amount, timeout)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -378,7 +383,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                 if t, ok := argsMap["timeout"].(float64); ok {
                     timeout = int(t)
                 }
-                result, err := BrowserWaitElement(url, selector, timeout)
+                // 修正：传递 sessionID
+                result, err := BrowserWaitElement(ch.GetSessionID(), url, selector, timeout)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -398,7 +404,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if t, ok := argsMap["timeout"].(float64); ok {
                 timeout = int(t)
             }
-            result, err := BrowserExtractLinks(url, timeout)
+            // 修正：传递 sessionID
+            result, err := BrowserExtractLinks(ch.GetSessionID(), url, timeout)
             if err != nil {
                 content = "Error: " + err.Error()
             } else {
@@ -417,7 +424,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if t, ok := argsMap["timeout"].(float64); ok {
                 timeout = int(t)
             }
-            result, err := BrowserExtractImages(url, timeout)
+            // 修正：传递 sessionID
+            result, err := BrowserExtractImages(ch.GetSessionID(), url, timeout)
             if err != nil {
                 content = "Error: " + err.Error()
             } else {
@@ -441,7 +449,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                 if t, ok := argsMap["timeout"].(float64); ok {
                     timeout = int(t)
                 }
-                result, err := BrowserExtractElements(url, selector, includeHTML, timeout)
+                // 修正：传递 sessionID
+                result, err := BrowserExtractElements(ch.GetSessionID(), url, selector, includeHTML, timeout)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -462,7 +471,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if t, ok := argsMap["timeout"].(float64); ok {
                 timeout = int(t)
             }
-            result, err := BrowserScreenshot(url, fullPage, timeout)
+            // 修正：传递 sessionID
+            result, err := BrowserScreenshot(ch.GetSessionID(), url, fullPage, timeout)
             if err != nil {
                 content = "Error: " + err.Error()
             } else {
@@ -485,7 +495,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                 if t, ok := argsMap["timeout"].(float64); ok {
                     timeout = int(t)
                 }
-                result, err := BrowserExecuteJS(url, script, timeout)
+                // 修正：传递 sessionID
+                result, err := BrowserExecuteJS(ch.GetSessionID(), url, script, timeout)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -516,7 +527,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                 if t, ok := argsMap["timeout"].(float64); ok {
                     timeout = int(t)
                 }
-                result, err := BrowserFillForm(url, formData, submitSelector, timeout)
+                // 修正：传递 sessionID
+                result, err := BrowserFillForm(ch.GetSessionID(), url, formData, submitSelector, timeout)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -537,7 +549,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if !ok || selector == "" {
                 content = "Error: Empty selector in browser_hover tool call"
             } else {
-                result, err := BrowserHover(url, selector)
+                // 修正：传递 sessionID
+                result, err := BrowserHover(ch.GetSessionID(), url, selector)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -557,7 +570,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if !ok || selector == "" {
                 content = "Error: Empty selector in browser_double_click tool call"
             } else {
-                result, err := BrowserDoubleClick(url, selector)
+                // 修正：传递 sessionID
+                result, err := BrowserDoubleClick(ch.GetSessionID(), url, selector)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -577,7 +591,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if !ok || selector == "" {
                 content = "Error: Empty selector in browser_right_click tool call"
             } else {
-                result, err := BrowserRightClick(url, selector)
+                // 修正：传递 sessionID
+                result, err := BrowserRightClick(ch.GetSessionID(), url, selector)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -601,7 +616,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                 if !ok || targetSelector == "" {
                     content = "Error: Empty target_selector in browser_drag tool call"
                 } else {
-                    result, err := BrowserDrag(url, sourceSelector, targetSelector)
+                    // 修正：传递 sessionID
+                    result, err := BrowserDrag(ch.GetSessionID(), url, sourceSelector, targetSelector)
                     if err != nil {
                         content = "Error: " + err.Error()
                     } else {
@@ -637,7 +653,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                 if t, ok := argsMap["timeout"].(float64); ok {
                     opts.Timeout = int(t)
                 }
-                result, err := BrowserWaitForSmart(url, selector, opts)
+                // 修正：传递 sessionID
+                result, err := BrowserWaitForSmart(ch.GetSessionID(), url, selector, opts)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -661,11 +678,11 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                 var err error
                 switch action {
                 case "back":
-                    result, err = BrowserNavigateBack(url)
+                    result, err = BrowserNavigateBack(ch.GetSessionID(), url)
                 case "forward":
-                    result, err = BrowserNavigateForward(url)
+                    result, err = BrowserNavigateForward(ch.GetSessionID(), url)
                 case "refresh":
-                    result, err = BrowserRefresh(url)
+                    result, err = BrowserRefresh(ch.GetSessionID(), url)
                 default:
                     content = "Error: Invalid action: " + action
                 }
@@ -684,7 +701,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
         if !ok || url == "" {
             content = "Error: Empty url in browser_get_cookies tool call"
         } else {
-            result, err := BrowserGetCookies(url)
+            // 修正：传递 sessionID
+            result, err := BrowserGetCookies(ch.GetSessionID(), url)
             if err != nil {
                 content = "Error: " + err.Error()
             } else {
@@ -700,7 +718,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             content = "Error: Empty url in browser_cookie_save tool call"
         } else {
             filePath, _ := argsMap["file_path"].(string)
-            result, err := BrowserCookieSave(url, filePath)
+            // 修正：传递 sessionID
+            result, err := BrowserCookieSave(ch.GetSessionID(), url, filePath)
             if err != nil {
                 content = "Error: " + err.Error()
             } else {
@@ -719,7 +738,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if !ok || filePath == "" {
                 content = "Error: Empty file_path in browser_cookie_load tool call"
             } else {
-                result, err := BrowserCookieLoad(url, filePath)
+                // 修正：传递 sessionID
+                result, err := BrowserCookieLoad(ch.GetSessionID(), url, filePath)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -739,7 +759,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if d, ok := argsMap["max_depth"].(float64); ok {
                 maxDepth = int(d)
             }
-            result, err := BrowserSnapshot(url, maxDepth)
+            // 修正：传递 sessionID
+            result, err := BrowserSnapshot(ch.GetSessionID(), url, maxDepth)
             if err != nil {
                 content = "Error: " + err.Error()
             } else {
@@ -768,7 +789,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                             filePaths = append(filePaths, s)
                         }
                     }
-                    result, err := BrowserUploadFile(url, selector, filePaths)
+                    // 修正：传递 sessionID
+                    result, err := BrowserUploadFile(ch.GetSessionID(), url, selector, filePaths)
                     if err != nil {
                         content = "Error: " + err.Error()
                     } else {
@@ -799,7 +821,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                             values = append(values, s)
                         }
                     }
-                    result, err := BrowserSelectOption(url, selector, values)
+                    // 修正：传递 sessionID
+                    result, err := BrowserSelectOption(ch.GetSessionID(), url, selector, values)
                     if err != nil {
                         content = "Error: " + err.Error()
                     } else {
@@ -826,7 +849,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                         keys = append(keys, s)
                     }
                 }
-                result, err := BrowserKeyPress(url, keys)
+                // 修正：传递 sessionID
+                result, err := BrowserKeyPress(ch.GetSessionID(), url, keys)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -846,7 +870,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if !ok || selector == "" {
                 content = "Error: Empty selector in browser_element_screenshot tool call"
             } else {
-                result, err := BrowserElementScreenshot(url, selector)
+                // 修正：传递 sessionID
+                result, err := BrowserElementScreenshot(ch.GetSessionID(), url, selector)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -866,7 +891,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if t, ok := argsMap["timeout"].(float64); ok {
                 timeout = int(t)
             }
-            result, err := BrowserPDF(url, timeout)
+            // 修正：传递 sessionID
+            result, err := BrowserPDF(ch.GetSessionID(), url, timeout)
             if err != nil {
                 content = "Error: " + err.Error()
             } else {
@@ -881,7 +907,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
         if !ok || filePath == "" {
             content = "Error: Empty file_path in browser_pdf_from_file tool call"
         } else {
-            result, err := BrowserPDFFromFile(filePath)
+            // 修正：传递 sessionID
+            result, err := BrowserPDFFromFile(ch.GetSessionID(), filePath)
             if err != nil {
                 content = "Error: " + err.Error()
             } else {
@@ -906,7 +933,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
                         headers = append(headers, hStr)
                     }
                 }
-                result, err := BrowserSetHeaders(url, headers)
+                // 修正：传递 sessionID
+                result, err := BrowserSetHeaders(ch.GetSessionID(), url, headers)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -926,7 +954,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if !ok || userAgent == "" {
                 content = "Error: Empty user_agent in browser_set_user_agent tool call"
             } else {
-                result, err := BrowserSetUserAgent(url, userAgent)
+                // 修正：传递 sessionID
+                result, err := BrowserSetUserAgent(ch.GetSessionID(), url, userAgent)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -946,7 +975,8 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
             if !ok || device == "" {
                 content = "Error: Empty device in browser_emulate_device tool call"
             } else {
-                result, err := BrowserEmulateDevice(url, device)
+                // 修正：传递 sessionID
+                result, err := BrowserEmulateDevice(ch.GetSessionID(), url, device)
                 if err != nil {
                     content = "Error: " + err.Error()
                 } else {
@@ -1301,6 +1331,25 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
             return messages, ctx.Err()
         default:
         }
+
+        // ========== 新增：每次循环开始前截断历史 ==========
+        if len(messages) > MaxHistoryMessages {
+            keep := MaxHistoryMessages
+            if messages[0].Role == "system" {
+                newMessages := make([]Message, 0, keep)
+                newMessages = append(newMessages, messages[0])
+                start := len(messages) - (keep - 1)
+                if start < 1 {
+                    start = 1
+                }
+                newMessages = append(newMessages, messages[start:]...)
+                messages = newMessages
+            } else {
+                messages = messages[len(messages)-keep:]
+            }
+            log.Printf("[AgentLoop] History truncated to %d messages", len(messages))
+        }
+        // ===============================================
 
         if hookManager != nil && hookManager.IsEnabled() {
             hookResult := hookManager.RunBeforeModel(ctx, 0, "", iteration, "", len(messages), 0)
