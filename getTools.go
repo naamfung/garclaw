@@ -1223,6 +1223,69 @@ func getTools(apiType string) interface{} {
                                         },
                                 },
                         },
+                        // ========== Profile 工具 ==========
+                        {
+                                "type": "function",
+                                "function": map[string]interface{}{
+                                        "name":        "profile_check",
+                                        "description": "检查哪些引导（bootstrap）所需的关键信息尚未收集。返回缺失的 key 列表。",
+                                        "parameters": map[string]interface{}{
+                                                "type":       "object",
+                                                "properties": map[string]interface{}{},
+                                                "required":    []string{},
+                                        },
+                                },
+                        },
+                        {
+                                "type": "function",
+                                "function": map[string]interface{}{
+                                        "name":        "actor_identity_set",
+                                        "description": "设置演员的 IDENTITY.md 文件。将内容写入 profiles/actors/<actor_name>/IDENTITY.md。",
+                                        "parameters": map[string]interface{}{
+                                                "type": "object",
+                                                "properties": map[string]interface{}{
+                                                        "actor_name": map[string]interface{}{
+                                                                "type":        "string",
+                                                                "description": "演员名称，如 \"hero_lin\"",
+                                                        },
+                                                        "content": map[string]interface{}{
+                                                                "type":        "string",
+                                                                "description": "IDENTITY.md 的 Markdown 内容",
+                                                        },
+                                                },
+                                                "required": []string{"actor_name", "content"},
+                                        },
+                                },
+                        },
+                        {
+                                "type": "function",
+                                "function": map[string]interface{}{
+                                        "name":        "actor_identity_clear",
+                                        "description": "删除演员的 IDENTITY.md 文件（profiles/actors/<actor_name>/IDENTITY.md）。",
+                                        "parameters": map[string]interface{}{
+                                                "type": "object",
+                                                "properties": map[string]interface{}{
+                                                        "actor_name": map[string]interface{}{
+                                                                "type":        "string",
+                                                                "description": "演员名称",
+                                                        },
+                                                },
+                                                "required": []string{"actor_name"},
+                                        },
+                                },
+                        },
+                        {
+                                "type": "function",
+                                "function": map[string]interface{}{
+                                        "name":        "profile_reload",
+                                        "description": "强制重新从磁盘加载所有 profile 文件（USER.md, SOUL.md, AGENT.md, TOOLS.md, actors/*/IDENTITY.md）。",
+                                        "parameters": map[string]interface{}{
+                                                "type":       "object",
+                                                "properties": map[string]interface{}{},
+                                                "required":    []string{},
+                                        },
+                                },
+                        },
                         // ========== 文本搜索工具 ==========
                         {
                                 "type": "function",
@@ -2670,6 +2733,57 @@ func getTools(apiType string) interface{} {
                                         "required": []string{},
                                 },
                         },
+                        // ========== Profile 工具 ==========
+                        {
+                                "name":        "profile_check",
+                                "description": "检查哪些引导（bootstrap）所需的关键信息尚未收集。返回缺失的 key 列表。",
+                                "input_schema": map[string]interface{}{
+                                        "type":       "object",
+                                        "properties": map[string]interface{}{},
+                                        "required":    []string{},
+                                },
+                        },
+                        {
+                                "name":        "actor_identity_set",
+                                "description": "设置演员的 IDENTITY.md 文件。将内容写入 profiles/actors/<actor_name>/IDENTITY.md。",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "actor_name": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "演员名称，如 \"hero_lin\"",
+                                                },
+                                                "content": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "IDENTITY.md 的 Markdown 内容",
+                                                },
+                                        },
+                                        "required": []string{"actor_name", "content"},
+                                },
+                        },
+                        {
+                                "name":        "actor_identity_clear",
+                                "description": "删除演员的 IDENTITY.md 文件（profiles/actors/<actor_name>/IDENTITY.md）。",
+                                "input_schema": map[string]interface{}{
+                                        "type": "object",
+                                        "properties": map[string]interface{}{
+                                                "actor_name": map[string]interface{}{
+                                                        "type":        "string",
+                                                        "description": "演员名称",
+                                                },
+                                        },
+                                        "required": []string{"actor_name"},
+                                },
+                        },
+                        {
+                                "name":        "profile_reload",
+                                "description": "强制重新从磁盘加载所有 profile 文件（USER.md, SOUL.md, AGENT.md, TOOLS.md, actors/*/IDENTITY.md）。",
+                                "input_schema": map[string]interface{}{
+                                        "type":       "object",
+                                        "properties": map[string]interface{}{},
+                                        "required":    []string{},
+                                },
+                        },
                         // ========== 文本搜索工具 ==========
                         {
                                 "name":        "text_search",
@@ -3013,6 +3127,25 @@ func getTools(apiType string) interface{} {
                                                 },
                                         },
                                         "required": []string{"task_id"},
+                                },
+                        },
+                        // ========== Lisp/Scheme 计算工具 ==========
+                        {
+                                "type": "function",
+                                "function": map[string]interface{}{
+                                        "name":        "scheme_eval",
+                                        "description": "执行 Clojure/Lisp (S-表达式) 并返回计算结果。\n\n✅ 适用场景：\n• 精确数学计算（整数/浮点运算、三角函数、对数、幂运算等）\n• 列表处理（map, filter, reduce, cons, first, rest 等）\n• 复杂逻辑运算（递归、高阶函数、闭包）\n• 需要精确数值结果的场景（避免 LLM 浮点幻觉）\n\n支持的语法（Clojure 方言）：\n• 整数算术: (+ 1 2 3), (* 4 5), (- 10 3), (/ 20 4)\n• 浮点算术: (f+ 1.5 2.3), (f* 3.14 2), (f/ 10 3)\n• 数学函数: (sqrt 16), (pow 2 10), (abs -5), (sin PI), (cos 0), (log 100), (exp 1)\n• 比较: (< 1 2), (> 3 1), (>= 5 5), (<= 1 1), (= 4 4)\n• 列表操作: (map (fn [x] (* x x)) '(1 2 3)), (filter odd? '(1 2 3 4 5)), (reduce + 0 '(1 2 3))\n• 条件: (if (> x 0) \"positive\" \"non-positive\"), (cond (< x 0) \"neg\" (= x 0) \"zero\" :else \"pos\")\n• 定义: (defn square [x] (* x x)), (def x 42)\n• let 绑定: (let [a 10 b 20] (+ a b))\n• 常量: PI, E\n\n⚠️ 每次调用创建独立的沙箱环境，不会保留上一次的变量定义。",
+                                        "parameters": map[string]interface{}{
+                                                "type": "object",
+                                                "properties": map[string]interface{}{
+                                                        "expression": map[string]interface{}{
+                                                                "type":        "string",
+                                                                "description": "Clojure/Lisp S-表达式。示例: (+ 1 2 3), (defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 10)",
+                                                        },
+                                                },
+                                                "required":             []string{"expression"},
+                                                "additionalProperties": false,
+                                        },
                                 },
                         },
                 }
