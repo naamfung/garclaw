@@ -100,7 +100,40 @@ func BuildSystemPromptForActor(actorName string, am *ActorManager, pm *RoleManag
 
         var prompt strings.Builder
 
-        // 1. 角色身份和背景
+        // === 0. 全局 Profile 注入（OpenClaw 兼容层）===
+        if globalProfileLoader != nil {
+                profile := globalProfileLoader.GetProfile()
+
+                // 0a. 灵魂宪法（最高优先级，所有角色共同遵守）
+                if profile.Soul != "" {
+                        prompt.WriteString("# 灵魂宪法\n\n")
+                        prompt.WriteString(profile.Soul)
+                        prompt.WriteString("\n\n")
+                }
+
+                // 0b. 关于雇主
+                if profile.User != "" {
+                        prompt.WriteString("# 关于雇主\n\n")
+                        prompt.WriteString(profile.User)
+                        prompt.WriteString("\n\n")
+                }
+
+                // 0c. 工作协议
+                if profile.Agent != "" {
+                        prompt.WriteString("# 工作协议\n\n")
+                        prompt.WriteString(profile.Agent)
+                        prompt.WriteString("\n\n")
+                }
+
+                // 0d. 工具环境
+                if profile.ToolsDoc != "" {
+                        prompt.WriteString("# 工具环境\n\n")
+                        prompt.WriteString(profile.ToolsDoc)
+                        prompt.WriteString("\n\n")
+                }
+        }
+
+        // === 1. 角色身份和背景 ===
         prompt.WriteString("# 角色身份\n\n")
         if actor.CharacterName != "" {
                 prompt.WriteString(fmt.Sprintf("**角色名**：%s\n\n", actor.CharacterName))
@@ -111,26 +144,24 @@ func BuildSystemPromptForActor(actorName string, am *ActorManager, pm *RoleManag
                 prompt.WriteString("\n\n")
         }
 
-        // 2. 角色模板内容
+        // === 2. 角色模板内容（含宪法 Constitution）===
         prompt.WriteString(role.BuildSystemPrompt())
 
-        // 3. 角色-技能绑定（注入角色绑定的技能提示）
+        // === 3. 角色-技能绑定 ===
         if len(role.Skills) > 0 && globalSkillManager != nil {
                 prompt.WriteString("\n\n## 角色专属技能\n\n")
                 prompt.WriteString("作为此角色，你已掌握以下专业技能：\n\n")
-
                 for _, skillName := range role.Skills {
                         skill, ok := globalSkillManager.GetSkill(skillName)
                         if !ok {
                                 continue
                         }
-                        // 注入完整的技能提示
                         prompt.WriteString(skill.BuildSkillPrompt())
                         prompt.WriteString("\n")
                 }
         }
 
-        // 4. 可用技能索引（只显示未绑定的技能，供用户选择激活）
+        // === 4. 可用技能索引 ===
         if globalSkillManager != nil {
                 availableSkills := buildAvailableSkillsIndex(role.Skills)
                 if availableSkills != "" {
@@ -139,14 +170,14 @@ func BuildSystemPromptForActor(actorName string, am *ActorManager, pm *RoleManag
                 }
         }
 
-        // 5. 手动激活的额外技能（如果有）
+        // === 5. 手动激活的额外技能 ===
         if skillPrompt := GetActiveSkillPrompt(); skillPrompt != "" {
                 prompt.WriteString("\n\n---\n")
                 prompt.WriteString("## 额外激活技能\n\n")
                 prompt.WriteString(skillPrompt)
         }
 
-        // 6. 场景上下文（如果有）
+        // === 6. 场景上下文 ===
         if stage != nil {
                 stageContext := stage.BuildStageContext(am, pm)
                 if stageContext != "" {
@@ -155,7 +186,17 @@ func BuildSystemPromptForActor(actorName string, am *ActorManager, pm *RoleManag
                 }
         }
 
-        // 7. 通用工具说明（根据角色权限过滤）
+        // === 7. Actor 专属人设微调（从 profiles/actors/<name>/IDENTITY.md）===
+        if globalProfileLoader != nil {
+                profile := globalProfileLoader.GetProfile()
+                if identityContent, ok := profile.Actors[actorName]; ok && identityContent != "" {
+                        prompt.WriteString("\n\n# 当前人设微调\n\n")
+                        prompt.WriteString(identityContent)
+                        prompt.WriteString("\n\n")
+                }
+        }
+
+        // === 8. 通用工具说明（根据角色权限过滤）===
         toolSection := BuildToolSectionForRole(role)
         if toolSection != "" {
                 prompt.WriteString("\n\n")

@@ -1021,6 +1021,15 @@ func executeTool(ctx context.Context, toolID, toolName string, argsMap map[strin
     case "memory_list":
         content, _ = handleMemoryList(ctx, argsMap, ch)
 
+    case "profile_check":
+        content, _ = handleProfileCheck(ctx, argsMap, ch)
+    case "actor_identity_set":
+        content, _ = handleActorIdentitySet(ctx, argsMap, ch)
+    case "actor_identity_clear":
+        content, _ = handleActorIdentityClear(ctx, argsMap, ch)
+    case "profile_reload":
+        content, _ = handleProfileReload(ctx, argsMap, ch)
+
     case "text_search":
         keyword, ok := argsMap["keyword"].(string)
         if !ok || keyword == "" {
@@ -1242,6 +1251,17 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
                 systemPrompt = BuildSystemPromptForActor(currentActor, globalActorManager, globalRoleManager, globalStage)
             } else {
                 systemPrompt = SYSTEM_PROMPT
+            }
+
+            // === Bootstrap: 首次对话引导 ===
+            // 检查记忆中是否存在必要字段（user.name, user.birth_year, user.gender, assistant.name）
+            // 如果缺失，强制注入引导提示，要求模型主动询问用户收集信息
+            if globalUnifiedMemory != nil && IsBootstrapNeeded(globalUnifiedMemory) {
+                bootstrapPrompt := GetBootstrapMissingKeysPrompt(globalUnifiedMemory)
+                if bootstrapPrompt != "" {
+                    // Prepend bootstrap instruction to the system prompt
+                    systemPrompt = bootstrapPrompt + "\n\n---\n\n" + systemPrompt
+                }
             }
 
             if systemPrompt != "" {

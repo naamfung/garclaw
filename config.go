@@ -153,6 +153,17 @@ type ToolsConfig struct {
     ShellDelayed ShellDelayedConfig `toon:"ShellDelayed" json:"ShellDelayed"`
 }
 
+// ProfileConfig 个人资料配置
+type ProfileConfig struct {
+    ReloadMode string `toon:"ReloadMode" json:"ReloadMode"` // "once" or "per_session"
+}
+
+// GroupChatConfig 群聊配置
+type GroupChatConfig struct {
+    DefaultPolicy string   `toon:"DefaultPolicy" json:"DefaultPolicy"` // "open", "mention", "allowlist"
+    AllowList     []string `toon:"AllowList" json:"AllowList"`
+}
+
 // 主配置结构
 type Config struct {
     APIConfig      APIConfig        `toon:"APIConfig" json:"APIConfig"`
@@ -162,6 +173,10 @@ type Config struct {
     DiscordConfig  *DiscordConfig   `toon:"DiscordConfig,omitempty" json:"DiscordConfig,omitempty"`
     SlackConfig    *SlackConfig     `toon:"SlackConfig,omitempty" json:"SlackConfig,omitempty"`
     FeishuConfig   *FeishuConfig    `toon:"FeishuConfig,omitempty" json:"FeishuConfig,omitempty"`
+    IRCConfig      *IRCConfig       `toon:"IRCConfig,omitempty" json:"IRCConfig,omitempty"`
+    WebhookConfig  *WebhookConfig   `toon:"WebhookConfig,omitempty" json:"WebhookConfig,omitempty"`
+    XMPPConfig     *XMPPConfig      `toon:"XMPPConfig,omitempty" json:"XMPPConfig,omitempty"`
+    MatrixConfig   *MatrixConfig    `toon:"MatrixConfig,omitempty" json:"MatrixConfig,omitempty"`
     BrowserConfig  BrowserConfig    `toon:"BrowserConfig" json:"BrowserConfig"`
     PluginsDir     string           `toon:"PluginsDir" json:"PluginsDir"`
     DataDir        string           `toon:"DataDir" json:"DataDir"`
@@ -175,6 +190,8 @@ type Config struct {
     Hooks          *HooksConfig     `toon:"Hooks,omitempty" json:"Hooks,omitempty"`
     Tools          ToolsConfig      `toon:"Tools" json:"Tools"`
     Memory         *MemoryConfig    `toon:"Memory,omitempty" json:"Memory,omitempty"`
+    ProfileConfig  ProfileConfig    `toon:"Profile,omitempty" json:"Profile,omitempty"`
+    GroupChatConfig *GroupChatConfig `toon:"GroupChat,omitempty" json:"GroupChat,omitempty"`
 }
 
 // 加载配置文件

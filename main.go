@@ -68,6 +68,30 @@ var globalFeishuConfig *FeishuConfig
 // 全局变量：Feishu Channel
 var globalFeishuChannel *FeishuChannel
 
+// 全局变量：IRC 配置
+var globalIRCConfig *IRCConfig
+
+// 全局变量：IRC Channel
+var globalIRCChannel *IRCChannel
+
+// 全局变量：Webhook 配置
+var globalWebhookConfig *WebhookConfig
+
+// 全局变量：Webhook Channel
+var globalWebhookChannel *WebhookChannel
+
+// 全局变量：XMPP 配置
+var globalXMPPConfig *XMPPConfig
+
+// 全局变量：XMPP Channel
+var globalXMPPChannel *XMPPChannel
+
+// 全局变量：Matrix 配置
+var globalMatrixConfig *MatrixConfig
+
+// 全局变量：Matrix Channel
+var globalMatrixChannel *MatrixChannel
+
 // 全局变量：超时配置
 var globalTimeoutConfig TimeoutConfig
 
@@ -193,6 +217,10 @@ func main() {
     globalDiscordConfig = config.DiscordConfig // 赋值全局 Discord 配置
     globalSlackConfig = config.SlackConfig // 赋值全局 Slack 配置
     globalFeishuConfig = config.FeishuConfig // 赋值全局 Feishu 配置
+    globalIRCConfig = config.IRCConfig       // 赋值全局 IRC 配置
+    globalWebhookConfig = config.WebhookConfig // 赋值全局 Webhook 配置
+    globalXMPPConfig = config.XMPPConfig     // 赋值全局 XMPP 配置
+    globalMatrixConfig = config.MatrixConfig  // 赋值全局 Matrix 配置
     globalTimeoutConfig = config.Timeout   // 赋值全局超时配置
     globalToolsConfig = config.Tools      // 赋值工具开关配置
     defaultRole = config.DefaultRole  // 赋值默认人格
@@ -376,6 +404,25 @@ func main() {
 
     // 初始化场景管理器
     globalStage = NewStage()
+
+    // 初始化 ProfileLoader（加载 profiles/USER.md, SOUL.md, AGENT.md, TOOLS.md 及 actors/*/IDENTITY.md）
+    profilesDir := filepath.Join(globalExecDir, "profiles")
+    globalProfileLoader, err = NewProfileLoader(profilesDir)
+    if err != nil {
+        log.Printf("Warning: failed to start profile loader: %v", err)
+    } else {
+        defer globalProfileLoader.Stop()
+        log.Println("Profile loader started.")
+    }
+
+    // 加载工具别名（tools.toon）
+    toolsAliasPath := filepath.Join(globalExecDir, "tools.toon")
+    globalToolsAliases, err = LoadToolsAliases(toolsAliasPath)
+    if err != nil {
+        log.Printf("Tools aliases not loaded: %v", err)
+    } else {
+        log.Printf("Tools aliases loaded: %d entries", len(globalToolsAliases))
+    }
 
     // 初始化技能管理器
     skillsDir := filepath.Join(globalExecDir, "skills")
@@ -586,6 +633,102 @@ func main() {
         }
     }
 
+    // 启动 IRC Bot（如果配置了 IRC）
+    if config.IRCConfig != nil && config.IRCConfig.Enabled {
+        ircChannel, err := NewIRCChannel(config.IRCConfig)
+        if err != nil {
+            log.Printf("Warning: failed to create IRC channel: %v", err)
+        } else {
+            globalIRCChannel = ircChannel
+            err = ircChannel.Start(func(chatID, senderID, content string, metadata map[string]interface{}) {
+                log.Printf("IRC message from %s: %s", senderID, content)
+                GetBus().RegisterUserChannel(senderID, "irc")
+                go func() {
+                    ctx := context.Background()
+                    ProcessChannelMessage(ctx, "irc", senderID, content, metadata, ircChannel)
+                }()
+            })
+            if err != nil {
+                log.Printf("Warning: failed to start IRC bot: %v", err)
+            } else {
+                log.Println("IRC bot started")
+                ircChannel.RegisterToBus()
+            }
+        }
+    }
+
+    // 启动 Webhook 服务（如果配置了 Webhook）
+    if config.WebhookConfig != nil && config.WebhookConfig.Enabled {
+        webhookChannel, err := NewWebhookChannel(config.WebhookConfig)
+        if err != nil {
+            log.Printf("Warning: failed to create Webhook channel: %v", err)
+        } else {
+            globalWebhookChannel = webhookChannel
+            err = webhookChannel.Start(func(chatID, senderID, content string, metadata map[string]interface{}) {
+                log.Printf("Webhook message from %s: %s", senderID, content)
+                GetBus().RegisterUserChannel(senderID, "webhook")
+                go func() {
+                    ctx := context.Background()
+                    ProcessChannelMessage(ctx, "webhook", senderID, content, metadata, webhookChannel)
+                }()
+            })
+            if err != nil {
+                log.Printf("Warning: failed to start Webhook server: %v", err)
+            } else {
+                log.Println("Webhook server started")
+                webhookChannel.RegisterToBus()
+            }
+        }
+    }
+
+    // 启动 XMPP Bot（如果配置了 XMPP）
+    if config.XMPPConfig != nil && config.XMPPConfig.Enabled {
+        xmppChannel, err := NewXMPPChannel(config.XMPPConfig)
+        if err != nil {
+            log.Printf("Warning: failed to create XMPP channel: %v", err)
+        } else {
+            globalXMPPChannel = xmppChannel
+            err = xmppChannel.Start(func(chatID, senderID, content string, metadata map[string]interface{}) {
+                log.Printf("XMPP message from %s: %s", senderID, content)
+                GetBus().RegisterUserChannel(senderID, "xmpp")
+                go func() {
+                    ctx := context.Background()
+                    ProcessChannelMessage(ctx, "xmpp", senderID, content, metadata, xmppChannel)
+                }()
+            })
+            if err != nil {
+                log.Printf("Warning: failed to start XMPP bot: %v", err)
+            } else {
+                log.Println("XMPP bot started")
+                xmppChannel.RegisterToBus()
+            }
+        }
+    }
+
+    // 启动 Matrix Bot（如果配置了 Matrix）
+    if config.MatrixConfig != nil && config.MatrixConfig.Enabled {
+        matrixChannel, err := NewMatrixChannel(config.MatrixConfig)
+        if err != nil {
+            log.Printf("Warning: failed to create Matrix channel: %v", err)
+        } else {
+            globalMatrixChannel = matrixChannel
+            err = matrixChannel.Start(func(chatID, senderID, content string, metadata map[string]interface{}) {
+                log.Printf("Matrix message from %s: %s", senderID, content)
+                GetBus().RegisterUserChannel(senderID, "matrix")
+                go func() {
+                    ctx := context.Background()
+                    ProcessChannelMessage(ctx, "matrix", senderID, content, metadata, matrixChannel)
+                }()
+            })
+            if err != nil {
+                log.Printf("Warning: failed to start Matrix bot: %v", err)
+            } else {
+                log.Println("Matrix bot started")
+                matrixChannel.RegisterToBus()
+            }
+        }
+    }
+
     // 调试模式：直接执行提示词并退出
     if prompt != "" {
         runDebugMode(prompt)
@@ -647,7 +790,27 @@ func main() {
             globalFeishuChannel.Stop()
         }
 
-        // 8. 停止定时任务管理器
+        // 8. 停止 IRC Bot
+        if globalIRCChannel != nil {
+            globalIRCChannel.Stop()
+        }
+
+        // 9. 停止 Webhook 服务
+        if globalWebhookChannel != nil {
+            globalWebhookChannel.Stop()
+        }
+
+        // 10. 停止 XMPP Bot
+        if globalXMPPChannel != nil {
+            globalXMPPChannel.Stop()
+        }
+
+        // 11. 停止 Matrix Bot
+        if globalMatrixChannel != nil {
+            globalMatrixChannel.Stop()
+        }
+
+        // 12. 停止定时任务管理器
         if globalCronManager != nil {
             globalCronManager.Stop()
         }

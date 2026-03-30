@@ -311,6 +311,30 @@ if [ "${ENABLE_FEISHU:-}" = "1" ] || [ "${ENABLE_ALL_CHANNELS:-}" = "1" ]; then
     TAG_DESCRIPTIONS="$TAG_DESCRIPTIONS feishu"
 fi
 
+if [ "${ENABLE_IRC:-}" = "1" ] || [ "${ENABLE_ALL_CHANNELS:-}" = "1" ]; then
+    if [ -n "$BUILD_TAGS" ]; then BUILD_TAGS="$BUILD_TAGS,"; fi
+    BUILD_TAGS="${BUILD_TAGS}irc"
+    TAG_DESCRIPTIONS="$TAG_DESCRIPTIONS irc"
+fi
+
+if [ "${ENABLE_WEBHOOK:-}" = "1" ] || [ "${ENABLE_ALL_CHANNELS:-}" = "1" ]; then
+    if [ -n "$BUILD_TAGS" ]; then BUILD_TAGS="$BUILD_TAGS,"; fi
+    BUILD_TAGS="${BUILD_TAGS}webhook"
+    TAG_DESCRIPTIONS="$TAG_DESCRIPTIONS webhook"
+fi
+
+if [ "${ENABLE_XMPP:-}" = "1" ] || [ "${ENABLE_ALL_CHANNELS:-}" = "1" ]; then
+    if [ -n "$BUILD_TAGS" ]; then BUILD_TAGS="$BUILD_TAGS,"; fi
+    BUILD_TAGS="${BUILD_TAGS}xmpp"
+    TAG_DESCRIPTIONS="$TAG_DESCRIPTIONS xmpp"
+fi
+
+if [ "${ENABLE_MATRIX:-}" = "1" ] || [ "${ENABLE_ALL_CHANNELS:-}" = "1" ]; then
+    if [ -n "$BUILD_TAGS" ]; then BUILD_TAGS="$BUILD_TAGS,"; fi
+    BUILD_TAGS="${BUILD_TAGS}matrix"
+    TAG_DESCRIPTIONS="$TAG_DESCRIPTIONS matrix"
+fi
+
 # 显示启用的渠道
 if [ -n "$TAG_DESCRIPTIONS" ]; then
     printf "启用扩展渠道:%s\n" "$TAG_DESCRIPTIONS"
@@ -344,4 +368,8 @@ printf "  ENABLE_TELEGRAM=1 ./build.sh  - 启用 Telegram 渠道\n"
 printf "  ENABLE_DISCORD=1 ./build.sh   - 启用 Discord 渠道\n"
 printf "  ENABLE_SLACK=1 ./build.sh     - 启用 Slack 渠道\n"
 printf "  ENABLE_FEISHU=1 ./build.sh    - 启用飞书渠道\n"
+printf "  ENABLE_IRC=1 ./build.sh       - 启用 IRC 渠道\n"
+printf "  ENABLE_WEBHOOK=1 ./build.sh   - 启用 Webhook 渠道\n"
+printf "  ENABLE_XMPP=1 ./build.sh      - 启用 XMPP 渠道\n"
+printf "  ENABLE_MATRIX=1 ./build.sh    - 启用 Matrix 渠道\n"
 printf "  ENABLE_ALL_CHANNELS=1 ./build.sh - 启用所有扩展渠道\n\n"
