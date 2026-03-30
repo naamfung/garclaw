@@ -4,11 +4,14 @@ import (
     "context"
     "fmt"
     "log"
+    "os"
+    "path/filepath"
     "strings"
     "sync"
     "time"
 )
 
+// ========== 原有类型定义保持不变 ==========
 type MemoryConsolidatorConfig struct {
     ContextWindowTokens      int     `json:"context_window_tokens"`
     MaxCompletionTokens      int     `json:"max_completion_tokens"`
@@ -442,6 +445,64 @@ func (mc *MemoryConsolidator) ResetSessionOffset(sessionKey string) {
     mc.sessionOffset[sessionKey] = 0
 }
 
+// ========== 新增：写入每日日志 ==========
+func (mc *MemoryConsolidator) WriteDailyLog(sessionID string, messages []Message) error {
+    if len(messages) == 0 {
+        return nil
+    }
+    // 确保 memory 目录存在
+    memoryDir := filepath.Join(globalExecDir, "memory")
+    if err := os.MkdirAll(memoryDir, 0755); err != nil {
+        return err
+    }
+
+    today := time.Now().Format("2006-01-02")
+    dailyLogPath := filepath.Join(memoryDir, today+".md")
+
+    // 提取关键信息
+    var entries []string
+    for _, msg := range messages {
+        if msg.Role == "user" {
+            if content, ok := msg.Content.(string); ok && content != "" {
+                entries = append(entries, fmt.Sprintf("- [用户] %s", truncateString(content, 200)))
+            }
+        } else if msg.Role == "assistant" {
+            if msg.ToolCalls != nil {
+                entries = append(entries, fmt.Sprintf("- [工具调用] %v", msg.ToolCalls))
+            } else if content, ok := msg.Content.(string); ok && content != "" {
+                entries = append(entries, fmt.Sprintf("- [助手] %s", truncateString(content, 200)))
+            }
+        } else if msg.Role == "tool" {
+            if content, ok := msg.Content.(string); ok && content != "" {
+                entries = append(entries, fmt.Sprintf("- [工具结果] %s", truncateString(content, 100)))
+            }
+        }
+    }
+
+    if len(entries) == 0 {
+        return nil
+    }
+
+    f, err := os.OpenFile(dailyLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+    if err != nil {
+        return err
+    }
+    defer f.Close()
+
+    timestamp := time.Now().Format("15:04:05")
+    header := fmt.Sprintf("\n## 会话 %s [%s]\n", sessionID, timestamp)
+    if _, err := f.WriteString(header); err != nil {
+        return err
+    }
+    for _, entry := range entries {
+        if _, err := f.WriteString(entry + "\n"); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+// ========== 全局函数 ==========
 var globalMemoryConsolidator *MemoryConsolidator
 
 func InitMemoryConsolidator(config MemoryConsolidatorConfig, memory *UnifiedMemory) {
@@ -454,7 +515,7 @@ func GetMemoryConsolidator() *MemoryConsolidator {
     return globalMemoryConsolidator
 }
 
-// GetConsolidationTools 返回记忆整合工具定义（名称改为 consolidate_memory）
+// GetConsolidationTools 返回记忆整合工具定义
 func GetConsolidationTools() []map[string]interface{} {
     return []map[string]interface{}{
         {

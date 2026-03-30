@@ -9,59 +9,67 @@ import (
 
 // handleCronAdd 添加定时任务
 func handleCronAdd(ctx context.Context, argsMap map[string]interface{}, ch Channel) (string, bool) {
-        if globalCronManager == nil {
-                return "Error: cron manager not initialized", false
-        }
+    if globalCronManager == nil {
+        return "Error: cron manager not initialized", false
+    }
 
-        name, ok := argsMap["name"].(string)
-        if !ok || name == "" {
-                return "Error: missing or invalid 'name'", false
-        }
-        schedule, ok := argsMap["schedule"].(string)
-        if !ok || schedule == "" {
-                return "Error: missing or invalid 'schedule'", false
-        }
-        userMsg, ok := argsMap["user_message"].(string)
-        if !ok || userMsg == "" {
-                return "Error: missing or invalid 'user_message'", false
-        }
+    name, ok := argsMap["name"].(string)
+    if !ok || name == "" {
+        return "Error: missing or invalid 'name'", false
+    }
+    schedule, ok := argsMap["schedule"].(string)
+    if !ok || schedule == "" {
+        return "Error: missing or invalid 'schedule'", false
+    }
+    userMsg, ok := argsMap["user_message"].(string)
+    if !ok || userMsg == "" {
+        return "Error: missing or invalid 'user_message'", false
+    }
 
-        // 解析 channel 配置
-        var channelConf ChannelConf
-        if chConf, ok := argsMap["channel"]; ok {
-                switch v := chConf.(type) {
-                case map[string]interface{}:
-                        channelConf = parseChannelConf(v)
-                case string:
-                        if err := toon.Unmarshal([]byte(v), &channelConf); err != nil {
-                                return fmt.Sprintf("Error parsing channel config: %v", err), false
-                        }
-                default:
-                        return "Error: channel config must be object or TOON string", false
-                }
-        } else {
-                // 默认使用 log
-                channelConf = ChannelConf{Type: "log"}
+    // 解析 category 参数
+    category := "scheduled"
+    if cat, ok := argsMap["category"].(string); ok && cat != "" {
+        if cat != "heartbeat" && cat != "scheduled" {
+            return fmt.Sprintf("Error: category must be 'heartbeat' or 'scheduled', got %s", cat), false
         }
+        category = cat
+    }
 
-        // 获取当前会话 ID
-        sessionID := ""
-        if ch != nil {
-                sessionID = ch.GetSessionID()
+    // 解析 channel 配置
+    var channelConf ChannelConf
+    if chConf, ok := argsMap["channel"]; ok {
+        switch v := chConf.(type) {
+        case map[string]interface{}:
+            channelConf = parseChannelConf(v)
+        case string:
+            if err := toon.Unmarshal([]byte(v), &channelConf); err != nil {
+                return fmt.Sprintf("Error parsing channel config: %v", err), false
+            }
+        default:
+            return "Error: channel config must be object or TOON string", false
         }
+    } else {
+        channelConf = ChannelConf{Type: "log"}
+    }
 
-        job := &CronJob{
-                Name:        name,
-                Schedule:    schedule,
-                UserMessage: userMsg,
-                Channel:     channelConf,
-                SessionID:   sessionID,  // 保存会话 ID
-        }
+    sessionID := ""
+    if ch != nil {
+        sessionID = ch.GetSessionID()
+    }
 
-        if err := globalCronManager.AddJob(job); err != nil {
-                return fmt.Sprintf("Error adding job: %v", err), false
-        }
-        return fmt.Sprintf("Job '%s' added successfully. Schedule: %s\n\n注意: 任务执行不再有固定超时限制。如需执行长时间任务，请在任务中使用 shell_delayed 工具。", name, schedule), false
+    job := &CronJob{
+        Name:        name,
+        Schedule:    schedule,
+        UserMessage: userMsg,
+        Channel:     channelConf,
+        SessionID:   sessionID,
+        Category:    category,
+    }
+
+    if err := globalCronManager.AddJob(job); err != nil {
+        return fmt.Sprintf("Error adding job: %v", err), false
+    }
+    return fmt.Sprintf("Job '%s' added successfully. Schedule: %s\nCategory: %s", name, schedule, category), false
 }
 
 // handleCronRemove 删除任务

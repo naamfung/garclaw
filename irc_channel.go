@@ -117,3 +117,24 @@ func (irc *IRCChannel) shouldRespond(content string, isDirectMention bool) bool 
                 return isDirectMention
         }
 }
+
+func (ic *IRCChannel) shouldRespondInGroup(channel, message string) bool {
+    // 使用全局群聊策略
+    if globalGroupChatConfig != nil {
+        return ShouldRespondInGroup(globalGroupChatConfig, channel, message, ic.config.Nick)
+    }
+    // 回退
+    policy := ic.config.GroupPolicy
+    if policy == "" {
+        return strings.Contains(message, "@"+ic.config.Nick)
+    }
+    switch policy {
+    case "open":
+        return true
+    case "mention":
+        return strings.Contains(message, "@"+ic.config.Nick)
+    default:
+        return false
+    }
+}
+

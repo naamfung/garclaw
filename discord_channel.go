@@ -327,25 +327,25 @@ func (dc *DiscordChannel) isAllowed(userID string) bool {
 }
 
 func (dc *DiscordChannel) shouldRespondInGroup(msg *DiscordMessageCreate) bool {
-        if dc.config.GroupPolicy == "open" {
-                return true
+    // 使用全局群聊策略
+    if globalGroupChatConfig != nil {
+        return ShouldRespondInGroup(globalGroupChatConfig,
+            msg.GuildID,
+            msg.Content,
+            dc.botUserID)
+    }
+    // 回退
+    if dc.config.GroupPolicy == "open" {
+        return true
+    }
+    for _, mention := range msg.Mentions {
+        if mention.ID == dc.botUserID {
+            return true
         }
-
-        // 检查 @提及
-        for _, mention := range msg.Mentions {
-                if mention.ID == dc.botUserID {
-                        return true
-                }
-        }
-
-        // 检查消息内容中的提及
-        mention1 := fmt.Sprintf("<@%s>", dc.botUserID)
-        mention2 := fmt.Sprintf("<@!%s>", dc.botUserID)
-        if strings.Contains(msg.Content, mention1) || strings.Contains(msg.Content, mention2) {
-                return true
-        }
-
-        return false
+    }
+    mention1 := fmt.Sprintf("<@%s>", dc.botUserID)
+    mention2 := fmt.Sprintf("<@!%s>", dc.botUserID)
+    return strings.Contains(msg.Content, mention1) || strings.Contains(msg.Content, mention2)
 }
 
 func (dc *DiscordChannel) sendTyping(channelID string) {

@@ -477,28 +477,39 @@ func (tc *TelegramChannel) isAllowed(user *tele.User) bool {
 }
 
 func (tc *TelegramChannel) shouldProcessGroupMessage(c tele.Context) bool {
-        if c.Chat().Type == tele.ChatPrivate {
-                return true
-        }
-        if tc.config.GroupPolicy == "open" {
-                return true
-        }
+    // 私聊总是响应
+    if c.Chat().Type == tele.ChatPrivate {
+        return true
+    }
 
-        text := c.Text()
-        if text != "" {
-                mention := fmt.Sprintf("@%s", tc.botUsername)
-                if strings.Contains(text, mention) {
-                        return true
-                }
-        }
+    // 使用全局群聊策略（如果配置了）
+    if globalGroupChatConfig != nil {
+        return ShouldRespondInGroup(globalGroupChatConfig,
+            strconv.FormatInt(c.Chat().ID, 10),
+            c.Text(),
+            tc.botUsername)
+    }
 
-        if replyTo := c.Message().ReplyTo; replyTo != nil {
-                if replyTo.Sender != nil && replyTo.Sender.ID == tc.botID {
-                        return true
-                }
-        }
+    // 回退到原有逻辑（保持兼容）
+    if tc.config.GroupPolicy == "open" {
+        return true
+    }
 
-        return false
+    text := c.Text()
+    if text != "" {
+        mention := fmt.Sprintf("@%s", tc.botUsername)
+        if strings.Contains(text, mention) {
+            return true
+        }
+    }
+
+    if replyTo := c.Message().ReplyTo; replyTo != nil {
+        if replyTo.Sender != nil && replyTo.Sender.ID == tc.botID {
+            return true
+        }
+    }
+
+    return false
 }
 
 func (tc *TelegramChannel) senderID(user *tele.User) string {

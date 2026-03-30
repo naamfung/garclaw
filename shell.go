@@ -1,3 +1,4 @@
+// shell.go - 完整修复版本
 package main
 
 import (
@@ -17,46 +18,38 @@ type CmdResult struct {
     Stderr        string
     ExitCode      int
     Err           error
-    ConfirmRequired bool     `json:"confirm_required,omitempty"` // 是否需要确认
-    ConfirmMessage string    `json:"confirm_message,omitempty"`  // 确认提示信息
-    Suggestions   []string  `json:"suggestions,omitempty"`      // 建议的替代命令
+    ConfirmRequired bool     `json:"confirm_required,omitempty"`
+    ConfirmMessage string    `json:"confirm_message,omitempty"`
+    Suggestions   []string  `json:"suggestions,omitempty"`
 }
 
-// BlockingCommandInfo 阻塞命令检测结果
 type BlockingCommandInfo struct {
     IsBlocking    bool
     Reason        string
     Suggestions   []string
 }
 
-// detectBlockingCommand 检测命令是否可能阻塞（需要交互输入）
 func detectBlockingCommand(command string) BlockingCommandInfo {
     lowerCmd := strings.ToLower(command)
     cmdFields := strings.Fields(lowerCmd)
 
-    info := BlockingCommandInfo{
-        IsBlocking: false,
-    }
+    info := BlockingCommandInfo{IsBlocking: false}
 
     if len(cmdFields) == 0 {
         return info
     }
 
-    // 获取命令名（去除路径前缀）
     cmdName := cmdFields[0]
     if idx := strings.LastIndex(cmdName, "/"); idx >= 0 {
         cmdName = cmdName[idx+1:]
     }
 
-    // 检测 ssh 命令
+    // SSH
     if cmdName == "ssh" {
-        // 检查是否有 sshpass 前缀（在原始命令中检查）
         if !strings.HasPrefix(strings.TrimSpace(command), "sshpass") {
-            // 检查是否有密码认证相关参数
             hasPasswordAuth := strings.Contains(lowerCmd, "passwordauthentication=yes") ||
-                               strings.Contains(lowerCmd, "passwordauthentication yes") ||
-                               strings.Contains(lowerCmd, "-o stricthostkeychecking=no") && !strings.Contains(lowerCmd, "-i ")
-
+                strings.Contains(lowerCmd, "passwordauthentication yes") ||
+                strings.Contains(lowerCmd, "-o stricthostkeychecking=no") && !strings.Contains(lowerCmd, "-i ")
             if hasPasswordAuth || !strings.Contains(lowerCmd, "-i ") {
                 info.IsBlocking = true
                 info.Reason = "ssh 命令可能需要交互输入密码"
@@ -70,11 +63,9 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
         }
     }
 
-    // 检测 scp 命令
+    // SCP
     if cmdName == "scp" {
-        // 检查是否有 sshpass 前缀
         if !strings.HasPrefix(strings.TrimSpace(command), "sshpass") {
-            // scp 默认可能需要密码
             if !strings.Contains(lowerCmd, "-i ") {
                 info.IsBlocking = true
                 info.Reason = "scp 命令可能需要交互输入密码"
@@ -88,7 +79,7 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
         }
     }
 
-    // 检测 rsync 命令（使用 ssh 时）
+    // rsync
     if cmdName == "rsync" {
         if strings.Contains(lowerCmd, "-e ssh") || strings.Contains(lowerCmd, "-e 'ssh") || strings.Contains(lowerCmd, "-e\"ssh") {
             if !strings.HasPrefix(strings.TrimSpace(command), "sshpass") && !strings.Contains(lowerCmd, "-i ") {
@@ -104,9 +95,8 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
         }
     }
 
-    // 检测 sudo/su 命令
+    // sudo/su
     if cmdName == "sudo" || cmdName == "su" {
-        // 检查是否使用 -S 参数（从 stdin 读取密码）
         if !strings.Contains(lowerCmd, "-s") && !strings.Contains(lowerCmd, "-S") {
             info.IsBlocking = true
             info.Reason = fmt.Sprintf("%s 命令可能需要交互输入密码", cmdName)
@@ -119,7 +109,7 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
         }
     }
 
-    // 检测 sftp/ftp 命令
+    // sftp/ftp
     if cmdName == "sftp" || cmdName == "ftp" {
         info.IsBlocking = true
         info.Reason = fmt.Sprintf("%s 命令通常需要交互输入", cmdName)
@@ -131,7 +121,6 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
         return info
     }
 
-    // 检测交互式程序
     interactivePrograms := []string{"vim", "vi", "nano", "emacs", "less", "more", "top", "htop", "screen", "tmux", "mysql", "psql", "sqlite3"}
     for _, prog := range interactivePrograms {
         if cmdName == prog {
@@ -149,12 +138,10 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
     return info
 }
 
-// CheckBlockingCommand 检查命令是否可能阻塞，返回检测结果
 func CheckBlockingCommand(command string) BlockingCommandInfo {
     return detectBlockingCommand(command)
 }
 
-// BuildConfirmMessage 构建确认提示消息
 func BuildConfirmMessage(info BlockingCommandInfo, originalCmd string) string {
     var sb strings.Builder
     sb.WriteString("⚠️ 此命令可能需要交互输入进而导致操作阻塞。\n\n")
@@ -170,22 +157,10 @@ func BuildConfirmMessage(info BlockingCommandInfo, originalCmd string) string {
 func isDangerousCommand(command string) bool {
     lowerCmd := strings.ToLower(command)
 
-    // 危险系统命令
     dangerousPatterns := []string{
-        "rm -rf /",
-        "rm -rf /*",
-        "mkfs",
-        "dd if=",
-        "format",
-        ":(){ :|:& };:",
-        "chmod 777 /",
-        "chown -R",
-        "> /dev/sda",
-        "shutdown",
-        "reboot",
-        "halt",
-        "init 0",
-        "poweroff",
+        "rm -rf /", "rm -rf /*", "mkfs", "dd if=", "format",
+        ":(){ :|:& };:", "chmod 777 /", "chown -R", "> /dev/sda",
+        "shutdown", "reboot", "halt", "init 0", "poweroff",
     }
     for _, pattern := range dangerousPatterns {
         if strings.Contains(lowerCmd, pattern) {
@@ -193,29 +168,16 @@ func isDangerousCommand(command string) bool {
         }
     }
 
-    // Lua 相关命令黑名单（防止绕过内部 Lua 环境）
     luaBlacklist := []string{
-        "lua",
-        "luajit",
-        "luarocks",
-        "moon",
-        "moonc",
-        "fengari",
-        "luvit",
-        "lit",
+        "lua", "luajit", "luarocks", "moon", "moonc", "fengari", "luvit", "lit",
     }
-
-    // 提取命令的第一个词（命令名）
     cmdParts := strings.Fields(lowerCmd)
     if len(cmdParts) > 0 {
         firstWord := cmdParts[0]
-        // 移除路径前缀，只保留命令名
         if idx := strings.LastIndex(firstWord, "/"); idx >= 0 {
             firstWord = firstWord[idx+1:]
         }
-
         for _, blocked := range luaBlacklist {
-            // 精确匹配或带版本号匹配 (如 lua5.3, lua54)
             if firstWord == blocked ||
                 strings.HasPrefix(firstWord, blocked+"5.") ||
                 strings.HasPrefix(firstWord, blocked+"5") ||
@@ -225,28 +187,11 @@ func isDangerousCommand(command string) bool {
         }
     }
 
-    // 检查命令中是否包含 lua 相关调用（如通过管道或子 shell）
     luaCallPatterns := []string{
-        "; lua",
-        "&& lua",
-        "|| lua",
-        "| lua",
-        "`lua",
-        "$(lua",
-        "; luajit",
-        "&& luajit",
-        "|| luajit",
-        "| luajit",
-        "`luajit",
-        "$(luajit",
-        "; luarocks",
-        "&& luarocks",
-        "|| luarocks",
-        "| luarocks",
-        "`luarocks",
-        "$(luarocks",
+        "; lua", "&& lua", "|| lua", "| lua", "`lua", "$(lua",
+        "; luajit", "&& luajit", "|| luajit", "| luajit", "`luajit", "$(luajit",
+        "; luarocks", "&& luarocks", "|| luarocks", "| luarocks", "`luarocks", "$(luarocks",
     }
-
     for _, pattern := range luaCallPatterns {
         if strings.Contains(lowerCmd, pattern) {
             return true
@@ -260,19 +205,26 @@ func runShell(ctx context.Context, command string) CmdResult {
     return runShellWithTimeout(ctx, command, false, false)
 }
 
-// runShellWithBlockingCheck 执行 shell 命令，首先检查是否可能阻塞
-// 如果可能阻塞且 force=false，返回确认请求而非执行
-// 如果 force=true 或确认命令不阻塞，则执行命令
-// 如果是阻塞命令确认后执行，使用更短的超时
+// runShellWithTimeout 执行命令，增加别名展开
 func runShellWithTimeout(ctx context.Context, command string, force bool, isBlockingConfirmed bool) CmdResult {
+    // ========== 新增：展开命令别名 ==========
+    if globalToolsAliases != nil && len(globalToolsAliases) > 0 {
+        expanded := ExpandAlias(command, globalToolsAliases)
+        if expanded != command {
+            if IsDebug {
+                fmt.Printf("[runShell] Alias expanded: %q -> %q\n", command, expanded)
+            }
+            command = expanded
+        }
+    }
+    // ======================================
+
     if IsDebug {
         fmt.Printf("[runShell] executing: %q, force=%v, isBlockingConfirmed=%v\n", command, force, isBlockingConfirmed)
     }
 
-    // 检测是否为阻塞命令
     blockingInfo := detectBlockingCommand(command)
 
-    // 如果可能阻塞且未强制执行，返回确认请求
     if blockingInfo.IsBlocking && !force && !isBlockingConfirmed {
         return CmdResult{
             ConfirmRequired: true,
@@ -281,17 +233,12 @@ func runShellWithTimeout(ctx context.Context, command string, force bool, isBloc
         }
     }
 
-    // 如果传入的 context 没有设置超时，使用配置的默认超时
-    // 阻塞命令确认后执行时使用更短超时
     var cancel context.CancelFunc
     if _, hasDeadline := ctx.Deadline(); !hasDeadline {
         var timeout time.Duration
-
         if isBlockingConfirmed || blockingInfo.IsBlocking {
-            // 阻塞命令使用更短超时
             timeout = time.Duration(DefaultBlockingCmdTimeout) * time.Second
         } else {
-            // 普通命令使用默认超时
             timeout = time.Duration(globalTimeoutConfig.Shell) * time.Second
             if timeout <= 0 {
                 timeout = time.Duration(DefaultShellTimeout) * time.Second
@@ -303,9 +250,7 @@ func runShellWithTimeout(ctx context.Context, command string, force bool, isBloc
 
     if BlockDangerousCommands {
         if isDangerousCommand(command) {
-            return CmdResult{
-                Err: errors.New("dangerous command blocked"),
-            }
+            return CmdResult{Err: errors.New("dangerous command blocked")}
         }
     } else {
         if IsDebug {
@@ -354,35 +299,24 @@ func runShellWithTimeout(ctx context.Context, command string, force bool, isBloc
 func handleWindowsTouch(command string) CmdResult {
     parts := strings.Fields(command)
     if len(parts) < 2 {
-        return CmdResult{
-            Err: errors.New("touch command requires a file path"),
-        }
+        return CmdResult{Err: errors.New("touch command requires a file path")}
     }
     filePath := strings.Join(parts[1:], " ")
 
     if _, err := os.Stat(filePath); os.IsNotExist(err) {
         file, err := os.Create(filePath)
         if err != nil {
-            return CmdResult{
-                Err: fmt.Errorf("failed to create file: %w", err),
-            }
+            return CmdResult{Err: fmt.Errorf("failed to create file: %w", err)}
         }
         file.Close()
     } else {
         now := time.Now()
         err := os.Chtimes(filePath, now, now)
         if err != nil {
-            return CmdResult{
-                Err: fmt.Errorf("failed to update timestamps: %w", err),
-            }
+            return CmdResult{Err: fmt.Errorf("failed to update timestamps: %w", err)}
         }
     }
-    return CmdResult{
-        Stdout:   "(no output)",
-        Stderr:   "",
-        ExitCode: 0,
-        Err:      nil,
-    }
+    return CmdResult{Stdout: "(no output)", ExitCode: 0}
 }
 
 func truncateOutput(output string) string {
@@ -439,4 +373,3 @@ func translateUnixToWindows(command string) string {
         return command
     }
 }
-

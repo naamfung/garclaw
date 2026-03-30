@@ -328,18 +328,23 @@ func (sc *SlackChannel) isAllowed(userID, channelID, channelType string) bool {
 }
 
 func (sc *SlackChannel) shouldRespondInChannel(eventType, text, channelID string) bool {
-        switch sc.config.GroupPolicy {
-        case "open":
-                return true
-        case "mention":
-                if eventType == "app_mention" {
-                        return true
-                }
-                return strings.Contains(text, fmt.Sprintf("<@%s>", sc.botUserID))
-        case "allowlist":
-                return sc.groupAllowed[channelID]
+    // 使用全局群聊策略
+    if globalGroupChatConfig != nil {
+        return ShouldRespondInGroup(globalGroupChatConfig, channelID, text, sc.botUserID)
+    }
+    // 回退到原有逻辑
+    switch sc.config.GroupPolicy {
+    case "open":
+        return true
+    case "mention":
+        if eventType == "app_mention" {
+            return true
         }
-        return false
+        return strings.Contains(text, fmt.Sprintf("<@%s>", sc.botUserID))
+    case "allowlist":
+        return sc.groupAllowed[channelID]
+    }
+    return false
 }
 
 func (sc *SlackChannel) stripBotMention(text string) string {

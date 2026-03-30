@@ -1805,6 +1805,16 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 
     ch.WriteChunk(StreamChunk{Done: true})
 
+    // 写入每日日志
+    if globalMemoryConsolidator != nil {
+        sessionID := ch.GetSessionID()
+        if sessionID != "" {
+            if err := globalMemoryConsolidator.WriteDailyLog(sessionID, messages); err != nil {
+                log.Printf("[MemoryConsolidator] WriteDailyLog error: %v", err)
+            }
+        }
+    }
+
     if globalMemoryConsolidator != nil {
         go func() {
             sessionKey := "default"

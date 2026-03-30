@@ -197,5 +197,4 @@ func loadFileContent(path string) string {
 	return string(data)
 }
 
-// globalProfileLoader is the global profile loader instance.
-var globalProfileLoader *ProfileLoader
+// NOTE: globalProfileLoader is declared in main.go, not here.

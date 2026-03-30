@@ -134,6 +134,12 @@ var globalAuthConfig AuthConfig
 // 全局变量：程序所在目录（用于构建相对路径）
 var globalExecDir string
 
+// 全局变量：Profile 加载器
+var globalProfileLoader *ProfileLoader
+
+// 全局变量：群聊策略全局配置（指针类型，与 Config 中一致）
+var globalGroupChatConfig *GroupChatConfig
+
 // 消息结构
 type Message struct {
     Role             string      `json:"role"`
@@ -212,19 +218,22 @@ func main() {
     thinking = config.APIConfig.Thinking
     BlockDangerousCommands = config.APIConfig.BlockDangerousCommands
     UserModeBrowser = config.BrowserConfig.UserMode
-    globalEmailConfig = config.EmailConfig // 赋值全局邮件配置
-    globalTelegramConfig = config.TelegramConfig // 赋值全局 Telegram 配置
-    globalDiscordConfig = config.DiscordConfig // 赋值全局 Discord 配置
-    globalSlackConfig = config.SlackConfig // 赋值全局 Slack 配置
-    globalFeishuConfig = config.FeishuConfig // 赋值全局 Feishu 配置
-    globalIRCConfig = config.IRCConfig       // 赋值全局 IRC 配置
-    globalWebhookConfig = config.WebhookConfig // 赋值全局 Webhook 配置
-    globalXMPPConfig = config.XMPPConfig     // 赋值全局 XMPP 配置
-    globalMatrixConfig = config.MatrixConfig  // 赋值全局 Matrix 配置
-    globalTimeoutConfig = config.Timeout   // 赋值全局超时配置
-    globalToolsConfig = config.Tools      // 赋值工具开关配置
-    defaultRole = config.DefaultRole  // 赋值默认人格
-    globalAuthConfig = config.Auth    // 赋值全局认证配置
+    globalEmailConfig = config.EmailConfig
+    globalTelegramConfig = config.TelegramConfig
+    globalDiscordConfig = config.DiscordConfig
+    globalSlackConfig = config.SlackConfig
+    globalFeishuConfig = config.FeishuConfig
+    globalIRCConfig = config.IRCConfig
+    globalWebhookConfig = config.WebhookConfig
+    globalXMPPConfig = config.XMPPConfig
+    globalMatrixConfig = config.MatrixConfig
+    globalTimeoutConfig = config.Timeout
+    globalToolsConfig = config.Tools
+    defaultRole = config.DefaultRole
+    globalAuthConfig = config.Auth
+
+    // 设置全局群聊策略（注意：config.GroupChatConfig 已经是指针类型）
+    globalGroupChatConfig = config.GroupChatConfig
 
     // 初始化安全配置
     SetSecurityConfig(config.Security)
@@ -294,16 +303,13 @@ func main() {
     globalTaskManager.SetWakeHandler(func(task *BackgroundTask) {
         log.Printf("[TaskManager] Task %s wake up, status: %s", task.ID, task.Status)
 
-        // 获取任务输出
         task.mu.RLock()
         output := truncateTaskOutput(task.Stdout.String())
-        _ = truncateTaskOutput(task.Stderr.String()) // stderr 已包含在 GetTaskWakeMessage 中
+        _ = truncateTaskOutput(task.Stderr.String())
         task.mu.RUnlock()
 
-        // 生成唤醒消息
         wakeMsg := GetTaskWakeMessage(task)
 
-        // 通过消息总线发送唤醒通知
         if task.SessionID != "" {
             GetBus().NotifyDelayedTask(
                 task.ID,
@@ -314,20 +320,13 @@ func main() {
             )
             log.Printf("[TaskManager] Wake notification sent for task %s to session %s", task.ID, task.SessionID)
 
-            // 如果会话存在且连接，触发新的模型调用
             if globalWebSessionManager != nil {
                 if session := globalWebSessionManager.Get(task.SessionID); session != nil {
-                    // 检查会话是否连接且没有其他任务运行
                     if session.IsConnected() && !session.IsTaskRunning() {
-                        // 添加系统消息到历史
                         session.AddToHistory("user", wakeMsg)
-
-                        // 触发新的模型调用
                         log.Printf("[TaskManager] Triggering model call for session %s", task.SessionID)
                         go TriggerDelayedTaskWake(session, wakeMsg)
                     } else if session.IsTaskRunning() {
-                        log.Printf("[TaskManager] Session %s has running task, queuing wake message", task.SessionID)
-                        // 如果有任务运行，将唤醒消息加入队列
                         session.EnqueueOutput(StreamChunk{
                             Content: "\n\n" + wakeMsg + "\n\n",
                         })
@@ -355,7 +354,6 @@ func main() {
     globalSubagentManager = NewSubagentManager()
     globalSubagentManager.SetResultHandler(func(task *SubagentTask) {
         log.Printf("[Subagent] Task %s completed: %s", task.ID, task.Status)
-        // 通过消息总线发送通知
         if task.SessionID != "" {
             GetBus().NotifySubagent(task.ID, string(task.Status), task.Result, task.SessionID)
         }
@@ -370,7 +368,6 @@ func main() {
     // 初始化心跳服务
     if config.Heartbeat.Enabled {
         globalHeartbeatService = NewHeartbeatService(config.Heartbeat, globalExecDir)
-        // 设置消息总线通知器
         SetHeartbeatNotifier(NewBusHeartbeatNotifier())
         if err := globalHeartbeatService.Start(); err != nil {
             log.Printf("Warning: failed to start heartbeat service: %v", err)
@@ -439,7 +436,6 @@ func main() {
         initMCPTools(globalMCPServer)
         log.Printf("MCP server started (transport: %s)", config.MCP.Transport)
 
-        // 如果是 stdio 模式，启动 stdio 传输
         if config.MCP.Transport == "stdio" {
             ctx, cancel := context.WithCancel(context.Background())
             defer cancel()
@@ -447,7 +443,7 @@ func main() {
             if err := globalMCPServer.StartStdio(ctx); err != nil {
                 log.Fatalf("MCP stdio error: %v", err)
             }
-            return // stdio 模式下不继续其他初始化
+            return
         }
     }
 
@@ -465,7 +461,6 @@ func main() {
 
     // 初始化记忆整合器
     consolidatorConfig := DefaultMemoryConsolidatorConfig()
-    // 应用配置文件中的覆盖
     if config.Memory != nil {
         if config.Memory.MinMessagesToConsolidate > 0 {
             consolidatorConfig.MinMessagesToConsolidate = config.Memory.MinMessagesToConsolidate
@@ -477,7 +472,7 @@ func main() {
             consolidatorConfig.ContextWindowTokens = config.Memory.ContextWindowTokens
         }
     }
-    InitMemoryConsolidator(consolidatorConfig, globalUnifiedMemory) // 注意：需要修改 memory_consolidator.go 以接受 *UnifiedMemory
+    InitMemoryConsolidator(consolidatorConfig, globalUnifiedMemory)
     log.Printf("Memory consolidator initialized (MinMsgs: %d, Ratio: %.2f%%)",
         consolidatorConfig.MinMessagesToConsolidate,
         consolidatorConfig.ConsolidationRatio*100)
@@ -503,7 +498,7 @@ func main() {
         log.Printf("Hook manager started. %d hooks found, %d enabled", len(hooks), enabledCount)
     }
 
-    // 启动 HTTP 服务器（如果配置了监听地址）
+    // 启动 HTTP 服务器
     if config.HTTPServer.Listen != "" {
         httpServer := NewHTTPServer(config.HTTPServer.Listen)
         go func() {
@@ -511,7 +506,7 @@ func main() {
         }()
     }
 
-    // 启动邮件轮询（如果配置了邮件）
+    // 启动邮件轮询
     var emailPoller *EmailPoller
     if config.EmailConfig != nil {
         emailPoller = &EmailPoller{config: config.EmailConfig, stop: make(chan struct{})}
@@ -519,21 +514,16 @@ func main() {
         log.Println("Email polling started")
     }
 
-    // 启动 Telegram Bot（如果配置了 Telegram）
+    // 启动 Telegram Bot
     if config.TelegramConfig != nil && config.TelegramConfig.Enabled {
         telegramChannel, err := NewTelegramChannel(config.TelegramConfig)
         if err != nil {
             log.Printf("Warning: failed to create Telegram channel: %v", err)
         } else {
             globalTelegramChannel = telegramChannel
-            // 启动 Telegram Bot
             err = telegramChannel.Start(func(chatID, senderID, content string, metadata map[string]interface{}) {
-                // 处理 Telegram 消息
                 log.Printf("Telegram message from %s: %s", senderID, content)
-                // 注册用户到消息总线
                 GetBus().RegisterUserChannel(senderID, "telegram")
-
-                // 使用渠道会话管理器处理消息
                 go func() {
                     ctx := context.Background()
                     ProcessChannelMessage(ctx, "telegram", senderID, content, metadata, telegramChannel)
@@ -543,13 +533,12 @@ func main() {
                 log.Printf("Warning: failed to start Telegram bot: %v", err)
             } else {
                 log.Println("Telegram bot started")
-                // 注册到消息总线
                 telegramChannel.RegisterToBus()
             }
         }
     }
 
-    // 启动 Discord Bot（如果配置了 Discord）
+    // 启动 Discord Bot
     if config.DiscordConfig != nil && config.DiscordConfig.Enabled {
         discordChannel, err := NewDiscordChannel(config.DiscordConfig)
         if err != nil {
@@ -558,10 +547,7 @@ func main() {
             globalDiscordChannel = discordChannel
             err = discordChannel.Start(func(chatID, senderID, content string, metadata map[string]interface{}) {
                 log.Printf("Discord message from %s: %s", senderID, content)
-                // 注册用户到消息总线
                 GetBus().RegisterUserChannel(senderID, "discord")
-
-                // 使用渠道会话管理器处理消息
                 go func() {
                     ctx := context.Background()
                     ProcessChannelMessage(ctx, "discord", senderID, content, metadata, discordChannel)
@@ -571,13 +557,12 @@ func main() {
                 log.Printf("Warning: failed to start Discord bot: %v", err)
             } else {
                 log.Println("Discord bot started")
-                // 注册到消息总线
                 discordChannel.RegisterToBus()
             }
         }
     }
 
-    // 启动 Slack Bot（如果配置了 Slack）
+    // 启动 Slack Bot
     if config.SlackConfig != nil && config.SlackConfig.Enabled {
         slackChannel, err := NewSlackChannel(config.SlackConfig)
         if err != nil {
@@ -586,10 +571,7 @@ func main() {
             globalSlackChannel = slackChannel
             err = slackChannel.Start(func(chatID, senderID, content string, metadata map[string]interface{}) {
                 log.Printf("Slack message from %s: %s", senderID, content)
-                // 注册用户到消息总线
                 GetBus().RegisterUserChannel(senderID, "slack")
-
-                // 使用渠道会话管理器处理消息
                 go func() {
                     ctx := context.Background()
                     ProcessChannelMessage(ctx, "slack", senderID, content, metadata, slackChannel)
@@ -599,13 +581,12 @@ func main() {
                 log.Printf("Warning: failed to start Slack bot: %v", err)
             } else {
                 log.Println("Slack bot started")
-                // 注册到消息总线
                 slackChannel.RegisterToBus()
             }
         }
     }
 
-    // 启动 Feishu Bot（如果配置了飞书）
+    // 启动 Feishu Bot
     if config.FeishuConfig != nil && config.FeishuConfig.Enabled {
         feishuChannel, err := NewFeishuChannel(config.FeishuConfig)
         if err != nil {
@@ -614,10 +595,7 @@ func main() {
             globalFeishuChannel = feishuChannel
             err = feishuChannel.Start(func(chatID, senderID, content string, metadata map[string]interface{}) {
                 log.Printf("Feishu message from %s: %s", senderID, content)
-                // 注册用户到消息总线
                 GetBus().RegisterUserChannel(senderID, "feishu")
-
-                // 使用渠道会话管理器处理消息
                 go func() {
                     ctx := context.Background()
                     ProcessChannelMessage(ctx, "feishu", senderID, content, metadata, feishuChannel)
@@ -627,13 +605,12 @@ func main() {
                 log.Printf("Warning: failed to start Feishu bot: %v", err)
             } else {
                 log.Println("Feishu bot started")
-                // 注册到消息总线
                 feishuChannel.RegisterToBus()
             }
         }
     }
 
-    // 启动 IRC Bot（如果配置了 IRC）
+    // 启动 IRC Bot
     if config.IRCConfig != nil && config.IRCConfig.Enabled {
         ircChannel, err := NewIRCChannel(config.IRCConfig)
         if err != nil {
@@ -657,7 +634,7 @@ func main() {
         }
     }
 
-    // 启动 Webhook 服务（如果配置了 Webhook）
+    // 启动 Webhook 服务
     if config.WebhookConfig != nil && config.WebhookConfig.Enabled {
         webhookChannel, err := NewWebhookChannel(config.WebhookConfig)
         if err != nil {
@@ -681,7 +658,7 @@ func main() {
         }
     }
 
-    // 启动 XMPP Bot（如果配置了 XMPP）
+    // 启动 XMPP Bot
     if config.XMPPConfig != nil && config.XMPPConfig.Enabled {
         xmppChannel, err := NewXMPPChannel(config.XMPPConfig)
         if err != nil {
@@ -705,7 +682,7 @@ func main() {
         }
     }
 
-    // 启动 Matrix Bot（如果配置了 Matrix）
+    // 启动 Matrix Bot
     if config.MatrixConfig != nil && config.MatrixConfig.Enabled {
         matrixChannel, err := NewMatrixChannel(config.MatrixConfig)
         if err != nil {
@@ -735,7 +712,7 @@ func main() {
         return
     }
 
-    // 命令行界面（使用 readline）
+    // 命令行界面
     rl, err := readline.New("GarClaw /> ")
     if err != nil {
         log.Fatalf("Failed to create readline: %v", err)
@@ -745,77 +722,52 @@ func main() {
     cmdChan := NewCmdChannel()
     var history []Message
 
-    // 创建可取消的根 context
     ctx, cancel := context.WithCancel(context.Background())
     globalCancel = cancel
 
-    // 捕获 Ctrl+C 优雅退出
     sigCh := make(chan os.Signal, 1)
     signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
     go func() {
         <-sigCh
         fmt.Println("\nShutting down...")
 
-        // 1. 取消所有使用全局 context 的操作
         cancel()
 
-        // 2. 保存所有渠道会话
         if globalChannelSessionManager != nil {
             log.Println("Saving all sessions...")
             globalChannelSessionManager.SaveAllSessions()
         }
 
-        // 3. 停止邮件轮询
         if emailPoller != nil {
             emailPoller.Stop()
         }
-
-        // 4. 停止 Telegram Bot
         if globalTelegramChannel != nil {
             globalTelegramChannel.Stop()
         }
-
-        // 5. 停止 Discord Bot
         if globalDiscordChannel != nil {
             globalDiscordChannel.Stop()
         }
-
-        // 6. 停止 Slack Bot
         if globalSlackChannel != nil {
             globalSlackChannel.Stop()
         }
-
-        // 7. 停止 Feishu Bot
         if globalFeishuChannel != nil {
             globalFeishuChannel.Stop()
         }
-
-        // 8. 停止 IRC Bot
         if globalIRCChannel != nil {
             globalIRCChannel.Stop()
         }
-
-        // 9. 停止 Webhook 服务
         if globalWebhookChannel != nil {
             globalWebhookChannel.Stop()
         }
-
-        // 10. 停止 XMPP Bot
         if globalXMPPChannel != nil {
             globalXMPPChannel.Stop()
         }
-
-        // 11. 停止 Matrix Bot
         if globalMatrixChannel != nil {
             globalMatrixChannel.Stop()
         }
-
-        // 12. 停止定时任务管理器
         if globalCronManager != nil {
             globalCronManager.Stop()
         }
-
-        // 9. 关闭 readline（让主循环退出）
         rl.Close()
     }()
 
@@ -836,7 +788,6 @@ func main() {
             continue
         }
 
-        // 统一处理斜杠命令
         if strings.HasPrefix(line, "/") {
             if globalRoleManager != nil && globalActorManager != nil && globalStage != nil {
                 result := ProcessSlashCommand(line, globalRoleManager, globalActorManager, globalStage)
@@ -851,7 +802,6 @@ func main() {
         }
 
         history = append(history, Message{Role: "user", Content: line})
-        // 开始新任务追踪
         if globalTaskTracker != nil {
             globalTaskTracker.StartNewTask(line)
         }
@@ -861,18 +811,15 @@ func main() {
         } else {
             history = newHistory
         }
-        // 标记任务完成
         if globalTaskTracker != nil {
             globalTaskTracker.MarkCompleted()
         }
         fmt.Println()
     }
 
-    // 保存命令行会话
     if len(history) > 0 && globalSessionPersist != nil {
         sessionID := fmt.Sprintf("cli_%s", time.Now().Format("20060102_150405"))
         description := "CLI session"
-        // 找到第一条用户消息作为描述
         for _, msg := range history {
             if msg.Role == "user" {
                 if content, ok := msg.Content.(string); ok && len(content) > 0 {
@@ -889,7 +836,6 @@ func main() {
             log.Printf("Failed to save CLI session: %v", err)
         } else {
             log.Printf("CLI session saved: %s", sessionID)
-            // 记录会话到HISTORY.md
             if globalUnifiedMemory != nil {
                 summary := description
                 globalUnifiedMemory.RecordSession(sessionID, "cli", summary, len(history), []string{"cli"})
@@ -902,39 +848,31 @@ func main() {
     }
 }
 
-// runDebugMode 调试模式：执行提示词并退出
 func runDebugMode(prompt string) {
     log.Println("[Debug Mode] Starting...")
 
-    // 创建可取消的 context
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    // 创建命令通道
     cmdChan := NewCmdChannel()
 
-    // 构建消息历史
     var history []Message
     history = append(history, Message{Role: "user", Content: prompt})
 
-    // 开始任务追踪
     if globalTaskTracker != nil {
         globalTaskTracker.StartNewTask(prompt)
     }
 
-    // 调用 AgentLoop
     newHistory, err := AgentLoop(ctx, cmdChan, history, apiType, baseURL, apiKey, modelID, temperature, maxTokens, stream, thinking)
     if err != nil {
         log.Printf("[Debug Mode] Agent error: %v", err)
         os.Exit(1)
     }
 
-    // 标记任务完成
     if globalTaskTracker != nil {
         globalTaskTracker.MarkCompleted()
     }
 
-    // 输出最终结果（如果有的话）
     if len(newHistory) > 0 {
         lastMsg := newHistory[len(newHistory)-1]
         if content, ok := lastMsg.Content.(string); ok && content != "" {

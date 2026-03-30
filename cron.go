@@ -18,7 +18,8 @@ type CronJob struct {
     Schedule    string      `toon:"Schedule" json:"Schedule"`
     UserMessage string      `toon:"UserMessage" json:"UserMessage"`
     Channel     ChannelConf `toon:"Channel" json:"Channel"`
-    SessionID   string      `toon:"SessionID,omitempty" json:"SessionID,omitempty"` // 创建任务的会话ID
+    SessionID   string      `toon:"SessionID,omitempty" json:"SessionID,omitempty"`
+    Category    string      `toon:"Category,omitempty" json:"Category,omitempty"` // "heartbeat" 或 "scheduled"
 }
 
 // ChannelConf 定义输出目标配置
@@ -126,7 +127,7 @@ func (cm *CronManager) saveJobsWithData(jobs []CronJob) error {
     return os.Rename(tmp, cm.file)
 }
 
-// AddJob 添加或更新任务（如果已存在则先删除）
+// AddJob 添加任务时，若 Category 为空则设为 "scheduled"
 func (cm *CronManager) AddJob(job *CronJob) error {
     if job.Name == "" {
         return fmt.Errorf("job name cannot be empty")
@@ -137,16 +138,17 @@ func (cm *CronManager) AddJob(job *CronJob) error {
     if job.UserMessage == "" {
         return fmt.Errorf("user_message cannot be empty")
     }
+    if job.Category == "" {
+        job.Category = "scheduled"
+    }
 
     cm.mu.Lock()
     defer cm.mu.Unlock()
 
-    // 如果已存在，先移除
     if _, exists := cm.jobs[job.Name]; exists {
         cm.removeJobUnlocked(job.Name)
     }
 
-    // 添加任务到 cron
     entryID, err := cm.cron.AddFunc(job.Schedule, func() {
         cm.executeJob(job)
     })
@@ -155,11 +157,9 @@ func (cm *CronManager) AddJob(job *CronJob) error {
     }
 
     cm.jobs[job.Name] = entryID
-    // 深拷贝任务内容
     jobCopy := *job
     cm.jobData[job.Name] = &jobCopy
 
-    // 持久化 - 使用 saveJobsUnlocked，因为锁已持有
     return cm.saveJobsUnlocked()
 }
 
@@ -343,6 +343,17 @@ func (cm *CronManager) executeJob(job *CronJob) {
     // 启动 AgentLoop
     newHistory, err := AgentLoop(ctx, ch, history, apiType, baseURL, apiKey, modelID,
         temperature, maxTokens, stream, thinking)
+
+    // 如果是心跳任务，发布心跳事件
+    if job.Category == "heartbeat" {
+        status := "completed"
+        output := "任务执行完成"
+        if err != nil {
+            status = "failed"
+            output = err.Error()
+        }
+        GetBus().NotifyCron(job.Name, status, output)
+    }
 
     if err != nil {
         if err == context.Canceled {
