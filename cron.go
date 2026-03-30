@@ -18,6 +18,7 @@ type CronJob struct {
     Schedule    string      `toon:"Schedule" json:"Schedule"`
     UserMessage string      `toon:"UserMessage" json:"UserMessage"`
     Channel     ChannelConf `toon:"Channel" json:"Channel"`
+    SessionID   string      `toon:"SessionID,omitempty" json:"SessionID,omitempty"`
 }
 
 // ChannelConf 定义输出目标配置
@@ -252,7 +253,6 @@ func (cm *CronManager) Stop() {
 }
 
 // executeJob 执行任务（由调度器调用）
-// 注意：任务执行不再有僵硬的超时限制，模型可以通过 shell_delayed 工具自行控制长时间任务
 func (cm *CronManager) executeJob(job *CronJob) {
     // 获取并发控制信号量
     select {
@@ -264,15 +264,30 @@ func (cm *CronManager) executeJob(job *CronJob) {
     }
 
     // 创建 Channel
-    ch, err := createChannelFromConf(job.Name, &job.Channel)
+    var ch Channel
+    var err error
+
+    // 如果有会话 ID，优先使用会话输出（确保结果返回网页端）
+    if job.SessionID != "" && globalWebSessionManager != nil {
+        session := globalWebSessionManager.Get(job.SessionID)
+        if session != nil {
+            ch = NewSessionChannel(session)
+            log.Printf("[Cron] Using session channel for job %s, session %s", job.Name, job.SessionID)
+        } else {
+            log.Printf("[Cron] Session %s not found for job %s, falling back to configured channel", job.SessionID, job.Name)
+            ch, err = createChannelFromConf(job.Name, &job.Channel)
+        }
+    } else {
+        ch, err = createChannelFromConf(job.Name, &job.Channel)
+    }
+
     if err != nil {
         log.Printf("Failed to create channel for job %s: %v", job.Name, err)
         return
     }
     defer ch.Close()
 
-    // 创建可取消的 context，同时监听 stopChan
-    // 不再设置超时，任务可以无限运行，模型通过 shell_delayed 控制长时间任务
+    // 创建可取消的 context
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
@@ -281,7 +296,7 @@ func (cm *CronManager) executeJob(job *CronJob) {
     cm.runningJobs[job.Name] = cancel
     cm.mu.Unlock()
 
-    // 任务结束时清理 cancel 函数和监听 goroutine
+    // 任务结束时清理 cancel 函数
     defer func() {
         cm.mu.Lock()
         delete(cm.runningJobs, job.Name)
@@ -311,7 +326,6 @@ func (cm *CronManager) executeJob(job *CronJob) {
         if globalRoleManager != nil && globalActorManager != nil && globalStage != nil {
             result := ProcessSlashCommand(trimmedMsg, globalRoleManager, globalActorManager, globalStage)
             if result.Handled {
-                // cron 场景下，IsExit 和 IsStop 无意义，只返回响应
                 if result.Response != "" {
                     ch.WriteChunk(StreamChunk{Content: result.Response, Done: true})
                 }
@@ -325,8 +339,7 @@ func (cm *CronManager) executeJob(job *CronJob) {
         {Role: "user", Content: job.UserMessage},
     }
 
-    // 启动 AgentLoop（使用全局 API 配置）
-    // 任务不再有超时限制，模型可以自行决定是否使用 shell_delayed 处理长时间任务
+    // 启动 AgentLoop
     newHistory, err := AgentLoop(ctx, ch, history, apiType, baseURL, apiKey, modelID,
         temperature, maxTokens, stream, thinking)
 

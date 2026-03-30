@@ -9,7 +9,6 @@ import (
 
 // handleCronAdd 添加定时任务
 func handleCronAdd(ctx context.Context, argsMap map[string]interface{}, ch Channel) (string, bool) {
-        // 检查定时任务管理器是否已初始化
         if globalCronManager == nil {
                 return "Error: cron manager not initialized", false
         }
@@ -45,15 +44,18 @@ func handleCronAdd(ctx context.Context, argsMap map[string]interface{}, ch Chann
                 channelConf = ChannelConf{Type: "log"}
         }
 
-        // timeout_sec 参数已废弃，保留向后兼容但不生效
-        // 模型现在应该使用 shell_delayed 工具来控制长时间任务
-        _ = argsMap["timeout_sec"] // 忽略此参数
+        // 获取当前会话 ID
+        sessionID := ""
+        if ch != nil {
+                sessionID = ch.GetSessionID()
+        }
 
         job := &CronJob{
                 Name:        name,
                 Schedule:    schedule,
                 UserMessage: userMsg,
                 Channel:     channelConf,
+                SessionID:   sessionID,  // 保存会话 ID
         }
 
         if err := globalCronManager.AddJob(job); err != nil {
