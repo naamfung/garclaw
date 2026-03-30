@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
-    "os"
-    "path/filepath"
 )
 
 // ============================================================
@@ -18,14 +18,12 @@ import (
 // 提供网页登录密码验证功能
 // ============================================================
 
-var authSessionsFile = "auth_sessions.json"
-
 // AuthManager 认证管理器
 type AuthManager struct {
-        config      *AuthConfig
-        sessions    map[string]*AuthSession
-        mu          sync.RWMutex
-        persistFile string
+	config      *AuthConfig
+	sessions    map[string]*AuthSession
+	mu          sync.RWMutex
+	persistFile string
 }
 
 // AuthSession 认证会话
@@ -42,53 +40,55 @@ var globalAuthManager *AuthManager
 
 // NewAuthManager 创建认证管理器
 func NewAuthManager(config *AuthConfig) *AuthManager {
-        authSessionsFile = filepath.Join(globalExecDir, "auth_sessions.json")
-        am := &AuthManager{
-                config:      config,
-                sessions:    make(map[string]*AuthSession),
-                persistFile: filepath.Join(globalExecDir, authSessionsFile),
-        }
-        // 加载已有会话
-        am.loadSessions()
-        if config.SessionToken != "" {
-                am.sessions[config.SessionToken] = &AuthSession{
-                        Token:     config.SessionToken,
-                        CreatedAt: time.Now(),
-                        ExpiresAt: time.Now().Add(time.Duration(config.TokenExpiry) * time.Hour),
-                }
-        }
-        go am.cleanupExpiredSessions()
-        return am
+	// 修复：直接使用 globalExecDir 拼接，避免重复拼接
+	persistFile := filepath.Join(globalExecDir, "auth_sessions.json")
+
+	am := &AuthManager{
+		config:      config,
+		sessions:    make(map[string]*AuthSession),
+		persistFile: persistFile,
+	}
+	// 加载已有会话
+	am.loadSessions()
+	if config.SessionToken != "" {
+		am.sessions[config.SessionToken] = &AuthSession{
+			Token:     config.SessionToken,
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(time.Duration(config.TokenExpiry) * time.Hour),
+		}
+	}
+	go am.cleanupExpiredSessions()
+	return am
 }
 
 func (am *AuthManager) saveSessions() {
-        data, err := json.Marshal(am.sessions)
-        if err != nil {
-                log.Printf("Failed to marshal auth sessions: %v", err)
-                return
-        }
-        os.WriteFile(am.persistFile, data, 0600)
+	data, err := json.Marshal(am.sessions)
+	if err != nil {
+		log.Printf("Failed to marshal auth sessions: %v", err)
+		return
+	}
+	os.WriteFile(am.persistFile, data, 0600)
 }
 
 func (am *AuthManager) loadSessions() {
-        data, err := os.ReadFile(am.persistFile)
-        if err != nil {
-                return
-        }
-        var sessions map[string]*AuthSession
-        if err := json.Unmarshal(data, &sessions); err != nil {
-                log.Printf("Failed to unmarshal auth sessions: %v", err)
-                return
-        }
-        // 过滤过期的
-        now := time.Now()
-        for k, v := range sessions {
-                if now.After(v.ExpiresAt) {
-                        delete(sessions, k)
-                }
-        }
-        am.sessions = sessions
-        am.saveSessions()
+	data, err := os.ReadFile(am.persistFile)
+	if err != nil {
+		return
+	}
+	var sessions map[string]*AuthSession
+	if err := json.Unmarshal(data, &sessions); err != nil {
+		log.Printf("Failed to unmarshal auth sessions: %v", err)
+		return
+	}
+	// 过滤过期的
+	now := time.Now()
+	for k, v := range sessions {
+		if now.After(v.ExpiresAt) {
+			delete(sessions, k)
+		}
+	}
+	am.sessions = sessions
+	am.saveSessions()
 }
 
 // generateToken 生成随机令牌
@@ -506,3 +506,4 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func IsAuthEnabled() bool {
 	return globalAuthManager != nil && globalAuthManager.config.Enabled
 }
+

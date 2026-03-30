@@ -96,23 +96,23 @@ func (m *BrowserSessionManager) GetSession(sessionID string) (*BrowserSession, b
 // CloseSession 关闭并移除指定的浏览器会话
 // 这是防止资源泄漏的关键方法，调用方应在 WebSession 停止时调用此方法
 func (m *BrowserSessionManager) CloseSession(sessionID string) error {
-        m.closeMu.Lock()
-        defer m.closeMu.Unlock()
+    m.closeMu.Lock()
+    defer m.closeMu.Unlock()
 
-        m.mu.Lock()
-        sess, ok := m.sessions[sessionID]
-        if !ok {
-                m.mu.Unlock()
-                return nil
-        }
-        delete(m.sessions, sessionID)
+    m.mu.Lock()
+    sess, ok := m.sessions[sessionID]
+    if !ok {
         m.mu.Unlock()
-
-        if sess.Browser != nil {
-                log.Printf("[BrowserSessionManager] Closing browser session %s", sessionID)
-                sess.Browser.Close()
-        }
         return nil
+    }
+    delete(m.sessions, sessionID)
+    m.mu.Unlock()
+
+    if sess.Browser != nil {
+        log.Printf("[BrowserSessionManager] Closing browser session %s", sessionID)
+        sess.Browser.Close()
+    }
+    return nil
 }
 
 // CloseAllSessions 关闭所有浏览器会话（用于程序退出时清理）
