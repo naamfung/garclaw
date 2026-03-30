@@ -979,8 +979,9 @@ func (s *HTTPServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 // processUserInput 处理用户输入（后台任务）
 func processUserInput(session *WebSession, input string) {
-        // 原子操作：检查并设置任务状态
-        if !session.TryStartTask() {
+        // 原子操作：检查并设置任务状态，获取任务ID
+        ok, taskID := session.TryStartTask()
+        if !ok {
                 session.EnqueueOutput(StreamChunk{
                         Error: "已有任务在执行中，请使用 /stop 取消后再试",
                 })
@@ -993,14 +994,13 @@ func processUserInput(session *WebSession, input string) {
         session.EnqueueOutput(StreamChunk{TaskRunning: true})
         defer func() {
                 // 检查任务是否被取消
-                // 如果被取消，CancelTask() 已经设置了 TaskRunning=false，不需要再设置
                 select {
                 case <-taskCtx.Done():
                         // 任务被取消，CancelTask() 已经处理了状态
-                        log.Printf("[Session %s] processUserInput: task was cancelled, skipping state reset", session.ID)
+                        log.Printf("[Session %s] processUserInput: task was cancelled", session.ID)
                 default:
-                        // 任务正常完成，重置状态
-                        session.SetTaskRunning(false)
+                        // 任务正常完成，重置状态（仅当 taskID 匹配时）
+                        session.SetTaskRunning(false, taskID)
                         session.EnqueueOutput(StreamChunk{TaskRunning: false})
                 }
         }()
@@ -1042,8 +1042,9 @@ func processUserInput(session *WebSession, input string) {
 func TriggerDelayedTaskWake(session *WebSession, wakeMessage string) {
         log.Printf("[TaskManager] TriggerDelayedTaskWake started for session %s", session.ID)
 
-        // 原子操作：检查并设置任务状态
-        if !session.TryStartTask() {
+        // 原子操作：检查并设置任务状态，获取任务ID
+        ok, taskID := session.TryStartTask()
+        if !ok {
                 log.Printf("[TaskManager] Session %s has running task, skipping wake trigger", session.ID)
                 return
         }
@@ -1053,14 +1054,13 @@ func TriggerDelayedTaskWake(session *WebSession, wakeMessage string) {
 
         session.EnqueueOutput(StreamChunk{TaskRunning: true})
         defer func() {
-                // 检查任务是否被取消
                 select {
                 case <-taskCtx.Done():
                         // 任务被取消，CancelTask() 已经处理了状态
                         log.Printf("[TaskManager] TriggerDelayedTaskWake: task was cancelled for session %s", session.ID)
                 default:
-                        // 任务正常完成，重置状态
-                        session.SetTaskRunning(false)
+                        // 任务正常完成，重置状态（仅当 taskID 匹配时）
+                        session.SetTaskRunning(false, taskID)
                         session.EnqueueOutput(StreamChunk{TaskRunning: false})
                         log.Printf("[TaskManager] TriggerDelayedTaskWake completed for session %s", session.ID)
                 }
@@ -1085,7 +1085,6 @@ func TriggerDelayedTaskWake(session *WebSession, wakeMessage string) {
 
         if err != nil {
                 log.Printf("[TaskManager] AgentLoop error for session %s: %v", session.ID, err)
-                // 即使发生错误，也要保存已生成的消息历史（防止消息丢失）
                 if len(newHistory) > len(history) {
                         session.SetHistory(newHistory)
                         log.Printf("[TaskManager] Saved partial history after error for session %s (old: %d, new: %d)", session.ID, len(history), len(newHistory))

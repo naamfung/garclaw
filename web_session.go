@@ -27,9 +27,10 @@ type WebSession struct {
         OutputQueue chan StreamChunk  // 输出缓冲队列
 
         // 任务控制（用于取消当前正在执行的任务）
-        TaskRunning bool
-        TaskCtx     context.Context
-        TaskCancel  context.CancelFunc
+        TaskRunning   bool
+        currentTaskID string            // 当前任务唯一ID
+        TaskCtx       context.Context
+        TaskCancel    context.CancelFunc
 
         // WebSocket 连接控制（独立于任务控制，用于管理 WebSocket 生命周期）
         WsCtx    context.Context
@@ -40,7 +41,6 @@ type WebSession struct {
         OutputDone  chan struct{} // 通知输出协程结束
 
         // 消息同步：跟踪已发送给前端的消息索引
-        // 用于在重连时发送错过的新消息
         LastSentIndex int
 
         mu sync.RWMutex
@@ -51,12 +51,12 @@ func NewWebSession() *WebSession {
         taskCtx, taskCancel := context.WithCancel(context.Background())
         wsCtx, wsCancel := context.WithCancel(context.Background())
         s := &WebSession{
-                ID:          uuid.New().String()[:8], // 使用短 ID
+                ID:          uuid.New().String()[:8],
                 History:     make([]Message, 0),
                 CreatedAt:   time.Now(),
                 LastSeen:    time.Now(),
-                InputQueue:  make(chan WebInput, 100),   // 输入缓冲
-                OutputQueue: make(chan StreamChunk, 500), // 输出缓冲
+                InputQueue:  make(chan WebInput, 100),
+                OutputQueue: make(chan StreamChunk, 500),
                 TaskCtx:     taskCtx,
                 TaskCancel:  taskCancel,
                 WsCtx:       wsCtx,
@@ -92,15 +92,12 @@ func (s *WebSession) SetHistory(h []Message) {
 }
 
 // GetNewMessages 获取未发送给前端的新消息（用于重连时同步）
-// 返回自 LastSentIndex 之后的所有消息
 func (s *WebSession) GetNewMessages() []Message {
         s.mu.RLock()
         defer s.mu.RUnlock()
-
         if s.LastSentIndex >= len(s.History) {
                 return nil
         }
-
         newMsgs := make([]Message, len(s.History)-s.LastSentIndex)
         copy(newMsgs, s.History[s.LastSentIndex:])
         return newMsgs
@@ -132,7 +129,6 @@ func (s *WebSession) EnqueueOutput(chunk StreamChunk) {
         select {
         case s.OutputQueue <- chunk:
         default:
-                // 队列满，丢弃最旧的，加入新的
                 select {
                 case <-s.OutputQueue:
                 default:
@@ -143,26 +139,35 @@ func (s *WebSession) EnqueueOutput(chunk StreamChunk) {
 }
 
 // TryStartTask 尝试启动任务（原子操作）
-// 如果已有任务在运行，返回 false；否则设置任务运行状态并返回 true
-func (s *WebSession) TryStartTask() bool {
+// 返回 (是否成功, 任务ID)
+func (s *WebSession) TryStartTask() (bool, string) {
         s.mu.Lock()
         defer s.mu.Unlock()
         if s.TaskRunning {
                 log.Printf("[Session %s] TryStartTask: rejected (TaskRunning=true)", s.ID)
-                return false
+                return false, ""
         }
         s.TaskRunning = true
-        log.Printf("[Session %s] TryStartTask: accepted (TaskRunning set to true)", s.ID)
-        return true
+        taskID := uuid.New().String()
+        s.currentTaskID = taskID
+        log.Printf("[Session %s] TryStartTask: accepted, taskID=%s", s.ID, taskID)
+        return true, taskID
 }
 
-// SetTaskRunning 设置任务运行状态
-func (s *WebSession) SetTaskRunning(running bool) {
+// SetTaskRunning 设置任务运行状态，仅当 taskID 匹配时才执行
+func (s *WebSession) SetTaskRunning(running bool, taskID string) {
         s.mu.Lock()
         defer s.mu.Unlock()
+        if s.currentTaskID != taskID {
+                log.Printf("[Session %s] SetTaskRunning: taskID mismatch (got %s, expected %s), ignoring", s.ID, taskID, s.currentTaskID)
+                return
+        }
         old := s.TaskRunning
         s.TaskRunning = running
-        log.Printf("[Session %s] SetTaskRunning: %v -> %v", s.ID, old, running)
+        if !running {
+                s.currentTaskID = ""
+        }
+        log.Printf("[Session %s] SetTaskRunning: %v -> %v (taskID=%s)", s.ID, old, running, taskID)
 }
 
 // IsTaskRunning 检查任务是否运行中
@@ -180,13 +185,10 @@ func (s *WebSession) GetTaskCtx() context.Context {
 }
 
 // SetConnected 设置连接状态
-// 当连接断开时，记录当前历史长度作为"已发送"标记
 func (s *WebSession) SetConnected(connected bool) {
         s.mu.Lock()
         defer s.mu.Unlock()
         s.Connected = connected
-        // 当连接断开时，记录当前历史长度
-        // 这样重连时可以发送新消息
         if !connected {
                 s.LastSentIndex = len(s.History)
         }
@@ -212,13 +214,10 @@ func (s *WebSession) CancelWs() {
 func (s *WebSession) ResetWsCtx() {
         s.mu.Lock()
         defer s.mu.Unlock()
-        // 检查是否已经取消
         select {
         case <-s.WsCtx.Done():
-                // 已取消，重置
                 s.WsCtx, s.WsCancel = context.WithCancel(context.Background())
         default:
-                // 未取消，不需要重置
         }
 }
 
@@ -227,11 +226,12 @@ func (s *WebSession) CancelTask() {
         s.mu.Lock()
         defer s.mu.Unlock()
         if s.TaskCancel != nil && s.TaskRunning {
-                log.Printf("[Session %s] CancelTask: cancelling task (TaskRunning was true)", s.ID)
+                log.Printf("[Session %s] CancelTask: cancelling task (taskID=%s)", s.ID, s.currentTaskID)
                 s.TaskCancel()
-                // 重置 context
+                // 重置 context 和状态
                 s.TaskCtx, s.TaskCancel = context.WithCancel(context.Background())
                 s.TaskRunning = false
+                s.currentTaskID = ""
                 log.Printf("[Session %s] CancelTask: TaskRunning set to false", s.ID)
         } else {
                 log.Printf("[Session %s] CancelTask: no task to cancel (TaskRunning=%v)", s.ID, s.TaskRunning)
@@ -257,19 +257,17 @@ type WebSessionManager struct {
         sessions map[string]*WebSession
         mu       sync.RWMutex
 
-        // 配置
-        SessionTimeout time.Duration // 会话超时时间
-        MaxSessions    int           // 最大会话数
+        SessionTimeout time.Duration
+        MaxSessions    int
 }
 
 // NewWebSessionManager 创建会话管理器
 func NewWebSessionManager() *WebSessionManager {
         sm := &WebSessionManager{
                 sessions:      make(map[string]*WebSession),
-                SessionTimeout: 30 * time.Minute, // 默认 30 分钟超时
-                MaxSessions:    100,              // 默认最多 100 个会话
+                SessionTimeout: 30 * time.Minute,
+                MaxSessions:    100,
         }
-        // 启动清理协程
         go sm.cleanupLoop()
         return sm
 }
@@ -279,7 +277,6 @@ func (sm *WebSessionManager) GetOrCreate(sessionID string) *WebSession {
         sm.mu.Lock()
         defer sm.mu.Unlock()
 
-        // 如果提供了 session ID 且存在，返回现有会话
         if sessionID != "" {
                 if s, ok := sm.sessions[sessionID]; ok {
                         s.LastSeen = time.Now()
@@ -287,13 +284,10 @@ func (sm *WebSessionManager) GetOrCreate(sessionID string) *WebSession {
                 }
         }
 
-        // 检查是否超过最大会话数
         if len(sm.sessions) >= sm.MaxSessions {
-                // 清理最旧的会话
                 sm.cleanupOldestLocked()
         }
 
-        // 创建新会话
         s := NewWebSession()
         sm.sessions[s.ID] = s
         return s
@@ -323,7 +317,6 @@ func (sm *WebSessionManager) Remove(sessionID string) {
 func (sm *WebSessionManager) cleanupLoop() {
         ticker := time.NewTicker(5 * time.Minute)
         defer ticker.Stop()
-
         for range ticker.C {
                 sm.cleanup()
         }
@@ -342,12 +335,9 @@ func (sm *WebSessionManager) cleanup() {
                 connected := s.Connected
                 s.mu.RUnlock()
 
-                // 如果任务运行中或已连接，不清理
                 if running || connected {
                         continue
                 }
-
-                // 超时清理
                 if now.Sub(lastSeen) > sm.SessionTimeout {
                         log.Printf("Session %s expired, removing", id)
                         s.Stop()
@@ -367,11 +357,9 @@ func (sm *WebSessionManager) cleanupOldestLocked() {
                 running := s.TaskRunning
                 s.mu.RUnlock()
 
-                // 跳过运行中的任务
                 if running {
                         continue
                 }
-
                 if oldestID == "" || lastSeen.Before(oldestTime) {
                         oldestID = id
                         oldestTime = lastSeen
