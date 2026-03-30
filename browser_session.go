@@ -18,19 +18,20 @@ import (
 
 // BrowserSession 浏览器会话
 type BrowserSession struct {
-        ID        string
-        Browser   *rod.Browser
-        Pages     map[string]*rod.Page
+        ID         string
+        Browser    *rod.Browser
+        Pages      map[string]*rod.Page
         ActivePage string
-        CreatedAt time.Time
-        LastUsed  time.Time
-        mu        sync.Mutex
+        CreatedAt  time.Time
+        LastUsed   time.Time
+        mu         sync.Mutex
 }
 
 // BrowserSessionManager 浏览器会话管理器
 type BrowserSessionManager struct {
-        sessions map[string]*BrowserSession
-        mu       sync.RWMutex
+        sessions    map[string]*BrowserSession
+        mu          sync.RWMutex
+        closeMu     sync.Mutex // 用于避免重复关闭
 }
 
 var (
@@ -44,11 +45,14 @@ func GetBrowserSessionManager() *BrowserSessionManager {
                 globalBrowserSessionManager = &BrowserSessionManager{
                         sessions: make(map[string]*BrowserSession),
                 }
+                // 启动空闲会话清理协程
+                go globalBrowserSessionManager.cleanupIdleSessions()
         })
         return globalBrowserSessionManager
 }
 
 // CreateSession 创建新的浏览器会话
+// 如果会话已存在，直接返回现有会话并更新 LastUsed
 func (m *BrowserSessionManager) CreateSession(sessionID string) (*BrowserSession, error) {
         m.mu.Lock()
         defer m.mu.Unlock()
@@ -62,7 +66,7 @@ func (m *BrowserSessionManager) CreateSession(sessionID string) (*BrowserSession
         // 启动浏览器
         browser, err := launchBrowserRod()
         if err != nil {
-                return nil, err
+                return nil, fmt.Errorf("启动浏览器失败: %w", err)
         }
 
         sess := &BrowserSession{
@@ -74,10 +78,11 @@ func (m *BrowserSessionManager) CreateSession(sessionID string) (*BrowserSession
         }
 
         m.sessions[sessionID] = sess
+        log.Printf("[BrowserSessionManager] Created session %s", sessionID)
         return sess, nil
 }
 
-// GetSession 获取会话
+// GetSession 获取会话（不创建）
 func (m *BrowserSessionManager) GetSession(sessionID string) (*BrowserSession, bool) {
         m.mu.RLock()
         defer m.mu.RUnlock()
@@ -88,21 +93,79 @@ func (m *BrowserSessionManager) GetSession(sessionID string) (*BrowserSession, b
         return sess, ok
 }
 
-// CloseSession 关闭会话
+// CloseSession 关闭并移除指定的浏览器会话
+// 这是防止资源泄漏的关键方法，调用方应在 WebSession 停止时调用此方法
 func (m *BrowserSessionManager) CloseSession(sessionID string) error {
-        m.mu.Lock()
-        defer m.mu.Unlock()
+        m.closeMu.Lock()
+        defer m.closeMu.Unlock()
 
+        m.mu.Lock()
         sess, ok := m.sessions[sessionID]
         if !ok {
+                m.mu.Unlock()
                 return nil
         }
+        delete(m.sessions, sessionID)
+        m.mu.Unlock()
 
         if sess.Browser != nil {
+                log.Printf("[BrowserSessionManager] Closing browser session %s", sessionID)
                 sess.Browser.Close()
         }
-        delete(m.sessions, sessionID)
         return nil
+}
+
+// CloseAllSessions 关闭所有浏览器会话（用于程序退出时清理）
+func (m *BrowserSessionManager) CloseAllSessions() {
+        m.mu.RLock()
+        sessions := make([]*BrowserSession, 0, len(m.sessions))
+        for _, sess := range m.sessions {
+                sessions = append(sessions, sess)
+        }
+        m.mu.RUnlock()
+
+        for _, sess := range sessions {
+                if sess.Browser != nil {
+                        sess.Browser.Close()
+                }
+        }
+        m.mu.Lock()
+        m.sessions = make(map[string]*BrowserSession)
+        m.mu.Unlock()
+        log.Printf("[BrowserSessionManager] All browser sessions closed")
+}
+
+// cleanupIdleSessions 定期清理空闲超时的会话
+// 空闲超时时间默认 30 分钟
+func (m *BrowserSessionManager) cleanupIdleSessions() {
+        ticker := time.NewTicker(5 * time.Minute)
+        defer ticker.Stop()
+
+        for range ticker.C {
+                m.cleanupIdleSessionsOnce()
+        }
+}
+
+func (m *BrowserSessionManager) cleanupIdleSessionsOnce() {
+        idleThreshold := 30 * time.Minute
+        now := time.Now()
+        toClose := make([]string, 0)
+
+        m.mu.RLock()
+        for id, sess := range m.sessions {
+                if now.Sub(sess.LastUsed) > idleThreshold {
+                        toClose = append(toClose, id)
+                }
+        }
+        m.mu.RUnlock()
+
+        for _, id := range toClose {
+                if err := m.CloseSession(id); err != nil {
+                        log.Printf("[BrowserSessionManager] Failed to close idle session %s: %v", id, err)
+                } else {
+                        log.Printf("[BrowserSessionManager] Closed idle session %s", id)
+                }
+        }
 }
 
 // CreatePage 在会话中创建新页面
@@ -113,7 +176,7 @@ func (s *BrowserSession) CreatePage(pageID string, url string) (*rod.Page, error
         // 创建新页面
         page, err := s.Browser.Page(proto.TargetCreateTarget{URL: url})
         if err != nil {
-                return nil, err
+                return nil, fmt.Errorf("创建页面失败: %w", err)
         }
 
         s.Pages[pageID] = page
@@ -215,8 +278,6 @@ type PageInfo struct {
         Active bool   `json:"active"`
 }
 
-// 注意：launchBrowserRod 函数在 services.go 中定义
-
 // ============================================================
 // 浏览器会话工具函数
 // ============================================================
@@ -252,7 +313,7 @@ type BrowserSessionCloseResult struct {
         Message string `json:"message"`
 }
 
-// BrowserSessionClose 关闭浏览器会话
+// BrowserSessionClose 关闭浏览器会话（应在 WebSession 停止时调用）
 func BrowserSessionClose(sessionID string) (*BrowserSessionCloseResult, error) {
         mgr := GetBrowserSessionManager()
         err := mgr.CloseSession(sessionID)
@@ -271,10 +332,10 @@ func BrowserSessionClose(sessionID string) (*BrowserSessionCloseResult, error) {
 
 // BrowserPageCreateResult 创建页面结果
 type BrowserPageCreateResult struct {
-        Success bool     `json:"success"`
-        PageID  string   `json:"page_id"`
-        URL     string   `json:"url"`
-        Title   string   `json:"title"`
+        Success bool       `json:"success"`
+        PageID  string     `json:"page_id"`
+        URL     string     `json:"url"`
+        Title   string     `json:"title"`
         Pages   []PageInfo `json:"pages"`
 }
 
@@ -368,7 +429,7 @@ func BrowserPageClose(sessionID, pageID string) error {
 // GetOrCreatePage 获取或创建页面（内部辅助函数）
 func GetOrCreatePage(sessionID, pageID, url string) (*rod.Page, *BrowserSession, error) {
         mgr := GetBrowserSessionManager()
-        
+
         // 获取或创建会话
         sess, ok := mgr.GetSession(sessionID)
         if !ok {
@@ -401,7 +462,7 @@ func GetOrCreatePage(sessionID, pageID, url string) (*rod.Page, *BrowserSession,
         }
         ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
         defer cancel()
-        _ = ctx // 页面使用 Context() 方法
+        page = page.Context(ctx)
 
         return page, sess, nil
 }
