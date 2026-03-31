@@ -788,29 +788,40 @@ func NewLoopDetector(maxHistory, threshold int) *LoopDetector {
 
 // generateFingerprint 生成工具调用的指纹（用于快速比较）
 func generateFingerprint(toolName string, args map[string]interface{}) string {
-        // 对于shell命令，使用命令内容作为指纹
-        if toolName == "shell" || toolName == "smart_shell" {
-                if cmd, ok := args["command"].(string); ok {
-                        return toolName + ":" + cmd
-                }
+    // 对于shell命令，使用命令内容作为指纹
+    if toolName == "shell" || toolName == "smart_shell" {
+        if cmd, ok := args["command"].(string); ok {
+            return toolName + ":" + cmd
         }
-        
-        // 对于文件操作，使用文件名作为指纹的一部分
-        if toolName == "read_file_line" || toolName == "read_all_lines" {
-                if filename, ok := args["filename"].(string); ok {
-                        return toolName + ":" + filename
-                }
+    }
+
+    // 新增：对于 ssh_exec，同样使用命令内容作为指纹
+    if toolName == "ssh_exec" {
+        if cmd, ok := args["command"].(string); ok {
+            return toolName + ":" + cmd
         }
-        
-        // 对于浏览器操作，使用URL作为指纹的一部分
-        if strings.HasPrefix(toolName, "browser_") {
-                if url, ok := args["url"].(string); ok {
-                        return toolName + ":" + url
-                }
+        // 如果没有 command 参数（理论上不会），退而求其次使用 session_id
+        if sessionID, ok := args["session_id"].(string); ok {
+            return toolName + ":" + sessionID
         }
-        
-        // 默认：使用工具名称
-        return toolName
+    }
+
+    // 对于文件操作，使用文件名作为指纹的一部分
+    if toolName == "read_file_line" || toolName == "read_all_lines" {
+        if filename, ok := args["filename"].(string); ok {
+            return toolName + ":" + filename
+        }
+    }
+
+    // 对于浏览器操作，使用URL作为指纹的一部分
+    if strings.HasPrefix(toolName, "browser_") {
+        if url, ok := args["url"].(string); ok {
+            return toolName + ":" + url
+        }
+    }
+
+    // 默认：使用工具名称
+    return toolName
 }
 
 // RecordAndCheck 记录工具调用并检测循环

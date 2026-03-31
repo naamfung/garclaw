@@ -1,7 +1,10 @@
 package main
 
 import (
+        "os"
         "fmt"
+        "time"
+        "runtime"
         "strings"
 )
 
@@ -18,44 +21,10 @@ const (
         DefaultBrowserTimeout     = 60  // 浏览器每次操作默认超时（增加以适应慢速网络）
 )
 
-const (
-        SYSTEM_PROMPT_TEMPLATE_EN = `Follow these principles:
+// 通用系统规则（不含角色身份）
+var baseSystemRules = `请遵循以下原则：
 
-1.  When asked about the current date or time, use the provided system time directly.
-2.  When searching for time-sensitive information (like news), use the system time to construct your query.
-3.  **Before calling any tool, review the entire conversation history. If the information needed to answer your current question is already present in the history (including your previous responses or tool results), answer directly without calling a tool.**
-
-# CRITICAL: Understanding Conversation History
-All messages in the conversation history are **PAST events that have already occurred**. They are records of what happened, NOT instructions to be executed again:
-- Every tool_call in history has ALREADY been executed
-- Every tool_result in history is the ACTUAL result of that execution
-- You should NEVER re-execute any tool call from the history
-- When you see a tool_result, treat it as factual information, not as a pending task
-
-If a previous task was completed (you see tool_result with success), do NOT repeat that task. Only proceed with NEW tasks based on the user's LATEST message.
-
-# Understanding Tool Execution Status
-Every tool result has a status marker indicating the final state:
-- **[COMPLETED]**: Task finished successfully. The action has been performed.
-- **[OPERATION FAILED]**: Task failed due to error. The action was NOT completed.
-- **[OPERATION CANCELLED BY USER]**: Task was cancelled by user. The action was STOPPED mid-execution. NEVER retry cancelled tasks - the user cancelled for a reason!
-- **[OPERATION SKIPPED]**: Task was skipped because a dependency was cancelled or failed.
-
-When you see [OPERATION CANCELLED BY USER], the user intentionally stopped that task. Do NOT retry or continue that task unless the user explicitly asks you to.
-
-4.  Only call a tool when the necessary information is not available in the history.
-5.  Provide clear and concise responses to the user.
-`
-
-        SYSTEM_PROMPT_TEMPLATE_ZH = `请遵循以下原则：
-
-**成本控制规则**：
-- 每个任务的总工具调用次数不应超过 20 次。如果超过，系统将自动终止任务。
-- 如果同一个工具（特别是 shell 命令）连续执行 2 次且结果相同（失败或无进展），你必须立即停止并告知用户：“我尝试了多次但问题仍未解决，请提供更多信息或手动介入。”
-- 避免在远程服务器上执行大量重复的诊断命令（如 strace/truss/grep），优先分析已有日志。
-- 如果连续 2 次相同命令失败，不要再次尝试，改用其他方法或请求用户帮助。
-2. 当需要搜索有时效性的信息（如新闻）时，使用系统时间构造搜索关键词。
-3. **在调用任何工具之前，先回顾整个对话历史。如果回答用户当前问题所需的信息已在历史中（包括你之前的回答或工具结果），请直接回答，不要调用工具。**
+1. **在调用任何工具之前，先回顾整个对话历史。如果回答用户当前问题所需的信息已在历史中（包括你之前的回答或工具结果），请直接回答，不要调用工具。**
 
 # 关键：理解对话历史
 对话历史中的所有消息都是**已经发生的过去事件**。它们是发生过的记录，而不是需要再次执行的指令：
@@ -74,18 +43,36 @@ When you see [OPERATION CANCELLED BY USER], the user intentionally stopped that 
 - **[OPERATION SKIPPED]**：任务被跳过，因为依赖项被取消或失败。
 
 当你看到 [OPERATION CANCELLED BY USER] 时，说明用户有意停止了该任务。**不要重试或继续该任务**，除非用户明确要求你这样做。
-
-4. 仅在历史中未有所需信息时才调用工具。
-5. 向用户提供清晰、简洁的回答。
 `
-)
 
 func init() {
-        if true {
-                SYSTEM_PROMPT = SYSTEM_PROMPT_TEMPLATE_ZH
-        } else {
-                SYSTEM_PROMPT = SYSTEM_PROMPT_TEMPLATE_EN
-        }
+        SYSTEM_PROMPT = baseSystemRules
+}
+
+// BuildGeneralSystemPrompt 构建通用系统规则（不含角色身份）
+func BuildGeneralSystemPrompt(enableImplicitSummary bool) string {
+    // 获取系统环境信息
+    hostname := getHostname()
+    currentTime := time.Now().Format("2006-01-02 15:04:05")
+    osInfo := runtime.GOOS + "/" + runtime.GOARCH
+    programName := "GarClaw"
+
+    envInfo := fmt.Sprintf(`# 系统环境信息
+- **操作系统**：%s
+- **宿主程序**：%s
+- **当前系统时间**：%s
+- **主机名**：%s
+`, osInfo, programName, currentTime, hostname)
+    return envInfo + baseSystemRules
+}
+
+// getHostname 获取主机名（失败时返回 "unknown"）
+func getHostname() string {
+    hostname, err := os.Hostname()
+    if err != nil {
+        return "unknown"
+    }
+    return hostname
 }
 
 // BuildSystemPromptForActor 为指定演员构建系统提示
