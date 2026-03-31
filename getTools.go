@@ -10,7 +10,25 @@ func getTools(apiType string) interface{} {
                                 "type": "function",
                                 "function": map[string]interface{}{
                                         "name":        "smart_shell",
-                                        "description": "智能执行 shell 命令，自动判断同步或异步执行模式。\n\n✅ 快速命令（ls, cat, grep 等）：同步执行，立即返回结果\n✅ 慢速命令（apt, make, npm install 等）：异步执行，后台运行\n\n系统自动判断命令类型：\n• 包管理器、编译、下载、传输 → 异步执行\n• 其他命令 → 同步执行\n\n可选参数：\n• async: true 强制异步执行\n• sync: true 强制同步执行\n• wake_after_minutes: 异步唤醒时间（默认5分钟）\n\n🚫 DO NOT POLL: 异步任务启动后不要轮询，系统会自动通知结果。",
+                                        "description": `智能执行 shell 命令，自动判断同步或异步执行模式。
+
+✅ 快速命令（ls, cat, grep 等）：同步执行，立即返回结果
+✅ 慢速命令（apt, make, npm install 等）：异步执行，后台运行
+✅ 远程 SSH 启动守护进程：必须使用以下方式防止进程随 SSH 退出：
+   setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   或 nohup /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   然后通过 ps aux | grep program 或 curl 检查状态。
+
+系统自动判断命令类型：
+• 包管理器、编译、下载、传输 → 异步执行
+• 其他命令 → 同步执行
+
+可选参数：
+• async: true 强制异步执行
+• sync: true 强制同步执行
+• wake_after_minutes: 异步唤醒时间（默认5分钟）
+
+🚫 DO NOT POLL: 异步任务启动后不要轮询，系统会自动通知结果。`,
                                         "parameters": map[string]interface{}{
                                                 "type": "object",
                                                 "properties": map[string]interface{}{
@@ -40,7 +58,27 @@ func getTools(apiType string) interface{} {
                                 "type": "function",
                                 "function": map[string]interface{}{
                                         "name":        "shell",
-                                        "description": "Execute a shell command synchronously with a timeout (default 60s). This tool BLOCKS until the command completes or times out.\n\n✅ USE THIS FOR: ls, cat, mkdir, rm, cp, mv, grep, find, echo, pwd, which, stat, date, simple git commands, and other quick operations under 60 seconds.\n\n🚫 CRITICAL WARNING - USE shell_delayed INSTEAD:\n❌ Package managers: apt, apt-get, yum, dnf, pacman, pkg (FreeBSD/GhostBSD)\n❌ Compilation: make, cmake, npm install, pip install, cargo build, go build\n❌ Downloads: wget, curl, git clone, rsync, scp, sftp\n❌ Docker: docker build, docker-compose build\n❌ System updates: apt update, yum update, pkg update, freebsd-update\n❌ Archives: tar, unzip, 7z (for large files)\n❌ Media: ffmpeg, handbrake\n❌ Any command that MAY take more than 60 seconds\n\nUsing 'shell' for long-running commands will cause TIMEOUT and FAIL the task!\n\n⚠️ INTERACTIVE COMMANDS: ssh, scp, rsync, sudo, su, vim, top etc. may require interactive input and will trigger a confirmation request.",
+                                        "description": `Execute a shell command synchronously with a timeout (default 60s). This tool BLOCKS until the command completes or times out.
+
+✅ USE THIS FOR: ls, cat, mkdir, rm, cp, mv, grep, find, echo, pwd, which, stat, date, simple git commands, and other quick operations under 60 seconds.
+
+🚫 CRITICAL WARNING - USE shell_delayed INSTEAD:
+❌ Package managers: apt, apt-get, yum, dnf, pacman, pkg (FreeBSD/GhostBSD)
+❌ Compilation: make, cmake, npm install, pip install, cargo build, go build
+❌ Downloads: wget, curl, git clone, rsync, scp, sftp
+❌ Docker: docker build, docker-compose build
+❌ System updates: apt update, yum update, pkg update, freebsd-update
+❌ Archives: tar, unzip, 7z (for large files)
+❌ Media: ffmpeg, handbrake
+❌ Any command that MAY take more than 60 seconds
+
+⚠️ REMOTE DAEMON STARTUP: If you are starting a long-running service via SSH, you MUST use:
+   setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   Otherwise the process will die when the SSH session ends.
+
+Using 'shell' for long-running commands will cause TIMEOUT and FAIL the task!
+
+⚠️ INTERACTIVE COMMANDS: ssh, scp, rsync, sudo, su, vim, top etc. may require interactive input and will trigger a confirmation request.`,
                                         "parameters": map[string]interface{}{
                                                 "type": "object",
                                                 "properties": map[string]interface{}{
@@ -1680,7 +1718,25 @@ func getTools(apiType string) interface{} {
                         // ========== 原有工具 ==========
                         {
                                 "name":        "smart_shell",
-                                "description": "智能执行 shell 命令，自动判断同步或异步执行模式。\n\n✅ 快速命令（ls, cat, grep 等）：同步执行，立即返回结果\n✅ 慢速命令（apt, make, npm install 等）：异步执行，后台运行\n\n系统自动判断命令类型：\n• 包管理器、编译、下载、传输 → 异步执行\n• 其他命令 → 同步执行\n\n可选参数：\n• async: true 强制异步执行\n• sync: true 强制同步执行\n• wake_after_minutes: 异步唤醒时间（默认5分钟）\n\n🚫 DO NOT POLL: 异步任务启动后不要轮询，系统会自动通知结果。",
+                                "description": `智能执行 shell 命令，自动判断同步或异步执行模式。
+
+✅ 快速命令（ls, cat, grep 等）：同步执行，立即返回结果
+✅ 慢速命令（apt, make, npm install 等）：异步执行，后台运行
+✅ 远程 SSH 启动守护进程：必须使用以下方式防止进程随 SSH 退出：
+   setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   或 nohup /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   然后通过 ps aux | grep program 或 curl 检查状态。
+
+系统自动判断命令类型：
+• 包管理器、编译、下载、传输 → 异步执行
+• 其他命令 → 同步执行
+
+可选参数：
+• async: true 强制异步执行
+• sync: true 强制同步执行
+• wake_after_minutes: 异步唤醒时间（默认5分钟）
+
+🚫 DO NOT POLL: 异步任务启动后不要轮询，系统会自动通知结果。`,
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{
@@ -1707,7 +1763,27 @@ func getTools(apiType string) interface{} {
                         },
                         {
                                 "name":        "shell",
-                                "description": "Execute a shell command synchronously with a timeout (default 60s). This tool BLOCKS until the command completes or times out.\n\n✅ USE THIS FOR: ls, cat, mkdir, rm, cp, mv, grep, find, echo, pwd, which, stat, date, simple git commands, and other quick operations under 60 seconds.\n\n🚫 CRITICAL WARNING - USE shell_delayed INSTEAD:\n❌ Package managers: apt, apt-get, yum, dnf, pacman, pkg (FreeBSD/GhostBSD)\n❌ Compilation: make, cmake, npm install, pip install, cargo build, go build\n❌ Downloads: wget, curl, git clone, rsync, scp, sftp\n❌ Docker: docker build, docker-compose build\n❌ System updates: apt update, yum update, pkg update, freebsd-update\n❌ Archives: tar, unzip, 7z (for large files)\n❌ Media: ffmpeg, handbrake\n❌ Any command that MAY take more than 60 seconds\n\nUsing 'shell' for long-running commands will cause TIMEOUT and FAIL the task!\n\n⚠️ INTERACTIVE COMMANDS: ssh, scp, rsync, sudo, su, vim, top etc. may require interactive input and will trigger a confirmation request.",
+                                "description": `Execute a shell command synchronously with a timeout (default 60s). This tool BLOCKS until the command completes or times out.
+
+✅ USE THIS FOR: ls, cat, mkdir, rm, cp, mv, grep, find, echo, pwd, which, stat, date, simple git commands, and other quick operations under 60 seconds.
+
+🚫 CRITICAL WARNING - USE shell_delayed INSTEAD:
+❌ Package managers: apt, apt-get, yum, dnf, pacman, pkg (FreeBSD/GhostBSD)
+❌ Compilation: make, cmake, npm install, pip install, cargo build, go build
+❌ Downloads: wget, curl, git clone, rsync, scp, sftp
+❌ Docker: docker build, docker-compose build
+❌ System updates: apt update, yum update, pkg update, freebsd-update
+❌ Archives: tar, unzip, 7z (for large files)
+❌ Media: ffmpeg, handbrake
+❌ Any command that MAY take more than 60 seconds
+
+⚠️ REMOTE DAEMON STARTUP: If you are starting a long-running service via SSH, you MUST use:
+   setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   Otherwise the process will die when the SSH session ends.
+
+Using 'shell' for long-running commands will cause TIMEOUT and FAIL the task!
+
+⚠️ INTERACTIVE COMMANDS: ssh, scp, rsync, sudo, su, vim, top etc. may require interactive input and will trigger a confirmation request.`,
                                 "input_schema": map[string]interface{}{
                                         "type": "object",
                                         "properties": map[string]interface{}{

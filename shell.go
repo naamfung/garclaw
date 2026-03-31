@@ -1,4 +1,3 @@
-// shell.go - 完整修复版本
 package main
 
 import (
@@ -36,7 +35,6 @@ func ExpandAlias(command string, aliases map[string]string) string {
                 return command
         }
 
-        // 使用集合记录已展开的别名，防止循环
         visited := make(map[string]bool)
         return expandAliasRecursive(command, aliases, visited)
 }
@@ -56,10 +54,9 @@ func expandAliasRecursive(command string, aliases map[string]string, visited map
         if expanded, ok := aliases[firstWord]; ok {
                 if visited[firstWord] {
                         log.Printf("[Alias] Circular alias detected: %s", firstWord)
-                        return command // 返回原命令，避免无限循环
+                        return command
                 }
                 visited[firstWord] = true
-                // 递归展开别名后的命令
                 newCommand := expanded
                 if len(fields) > 1 {
                         newCommand = newCommand + " " + strings.Join(fields[1:], " ")
@@ -84,8 +81,13 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
         cmdName = cmdName[idx+1:]
     }
 
-    // SSH
+    // SSH 检测（增强：检测后台启动但未正确脱离终端）
     if cmdName == "ssh" {
+        // 检查是否使用了 setsid 或 nohup（表示用户意图启动守护进程）
+        hasSetsid := strings.Contains(lowerCmd, "setsid")
+        hasNohup := strings.Contains(lowerCmd, "nohup")
+        hasBackground := strings.Contains(lowerCmd, "&")
+
         if !strings.HasPrefix(strings.TrimSpace(command), "sshpass") {
             hasPasswordAuth := strings.Contains(lowerCmd, "passwordauthentication=yes") ||
                 strings.Contains(lowerCmd, "passwordauthentication yes") ||
@@ -100,6 +102,19 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
                 }
                 return info
             }
+        }
+
+        // 新增：检测是否可能启动了后台进程但未正确脱离终端
+        if (hasBackground || strings.Contains(lowerCmd, "&")) && !hasSetsid && !hasNohup {
+            info.IsBlocking = true
+            info.Reason = "SSH 中启动后台进程可能因 SIGHUP 信号而退出"
+            info.Suggestions = []string{
+                "使用 setsid 创建新会话: setsid /path/to/program < /dev/null > /tmp/prog.log 2>&1 &",
+                "或使用 nohup: nohup /path/to/program < /dev/null > /tmp/prog.log 2>&1 &",
+                "也可以考虑使用 shell_delayed 工具异步执行此命令。",
+                "若确认命令不会启动守护进程，可使用 force: true 强制执行",
+            }
+            return info
         }
     }
 
@@ -247,7 +262,6 @@ func runShell(ctx context.Context, command string) CmdResult {
 
 // runShellWithTimeout 执行命令，增加别名展开
 func runShellWithTimeout(ctx context.Context, command string, force bool, isBlockingConfirmed bool) CmdResult {
-    // ========== 新增：展开命令别名 ==========
     if globalToolsAliases != nil && len(globalToolsAliases) > 0 {
         expanded := ExpandAlias(command, globalToolsAliases)
         if expanded != command {
@@ -257,7 +271,6 @@ func runShellWithTimeout(ctx context.Context, command string, force bool, isBloc
             command = expanded
         }
     }
-    // ======================================
 
     if IsDebug {
         fmt.Printf("[runShell] executing: %q, force=%v, isBlockingConfirmed=%v\n", command, force, isBlockingConfirmed)

@@ -14,6 +14,9 @@ import (
 
 const MaxHistoryMessages = 100
 
+// 工具调用配额（每个会话/任务）
+const MaxToolCallsPerSession = 50
+
 // AGENTIC_TAGS 用于前端解析工具调用的标记
 const (
     AgenticToolCallStart   = "<<<AGENTIC_TOOL_CALL_START>>>"
@@ -23,9 +26,6 @@ const (
     AgenticToolArgsEnd     = "<<<TOOL_ARGS_END>>>"
     AgenticTagSuffix       = ">>>"
 )
-
-// 工具调用配额（每个会话/任务）
-const MaxToolCallsPerSession = 30
 
 // sanitizeContent 清理内容中的非法控制字符
 func sanitizeContent(content string) string {
