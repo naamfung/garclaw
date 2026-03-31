@@ -14,6 +14,30 @@ import (
 // 直接返回的最大字符数（超过则保存到文件）
 const maxDirectOutput = 1000
 
+// safeTruncate 安全截断 UTF-8 字符串，确保不截断多字节字符
+func safeTruncate(s string, maxLen int) string {
+        if len(s) <= maxLen {
+                return s
+        }
+        runes := []rune(s)
+        if len(runes) <= maxLen {
+                return s
+        }
+        return string(runes[:maxLen]) + "..."
+}
+
+// tailContent 返回字符串末尾最多 maxChars 个字符（安全处理 UTF-8）
+func tailContent(s string, maxChars int) string {
+        if len(s) <= maxChars {
+                return s
+        }
+        runes := []rune(s)
+        if len(runes) <= maxChars {
+                return s
+        }
+        return string(runes[len(runes)-maxChars:])
+}
+
 // saveOutputToFile 将过长内容保存到文件，返回文件路径（若内容不长则返回空字符串）
 func saveOutputToFile(content, prefix, command string) (string, error) {
         if len(content) <= maxDirectOutput {
@@ -150,15 +174,16 @@ func handleSmartShellSync(ctx context.Context, command string, ch Channel, isUnk
         stdout := result.Stdout
         stdoutFile, err := saveOutputToFile(stdout, "stdout", command)
         if err == nil && stdoutFile != "" {
-                tail := tailLines(stdout, 10)
+                // 取最后 500 个字符作为预览（而不是最后 10 行）
+                tail := tailContent(stdout, 500)
                 stdout = fmt.Sprintf(
-                        "[stdout 过长，完整内容已保存至: %s]\n\n--- 最后 10 行 ---\n%s\n--- 结束 ---\n原始长度: %d 字符",
+                        "[stdout 过长，完整内容已保存至: %s]\n\n--- 最后 500 字符 ---\n%s\n--- 结束 ---\n原始长度: %d 字符",
                         stdoutFile, tail, len(result.Stdout),
                 )
         } else if len(stdout) > maxDirectOutput {
-                tail := tailLines(stdout, 10)
+                tail := tailContent(stdout, 500)
                 stdout = fmt.Sprintf(
-                        "[stdout 过长已截断（无法保存文件）]\n\n--- 最后 10 行 ---\n%s\n--- 结束 ---\n原始长度: %d 字符",
+                        "[stdout 过长已截断（无法保存文件）]\n\n--- 最后 500 字符 ---\n%s\n--- 结束 ---\n原始长度: %d 字符",
                         tail, len(result.Stdout),
                 )
         }
@@ -167,15 +192,15 @@ func handleSmartShellSync(ctx context.Context, command string, ch Channel, isUnk
         stderr := result.Stderr
         stderrFile, err := saveOutputToFile(stderr, "stderr", command)
         if err == nil && stderrFile != "" {
-                tail := tailLines(stderr, 10)
+                tail := tailContent(stderr, 500)
                 stderr = fmt.Sprintf(
-                        "[stderr 过长，完整内容已保存至: %s]\n\n--- 最后 10 行 ---\n%s\n--- 结束 ---\n原始长度: %d 字符",
+                        "[stderr 过长，完整内容已保存至: %s]\n\n--- 最后 500 字符 ---\n%s\n--- 结束 ---\n原始长度: %d 字符",
                         stderrFile, tail, len(result.Stderr),
                 )
         } else if len(stderr) > maxDirectOutput {
-                tail := tailLines(stderr, 10)
+                tail := tailContent(stderr, 500)
                 stderr = fmt.Sprintf(
-                        "[stderr 过长已截断（无法保存文件）]\n\n--- 最后 10 行 ---\n%s\n--- 结束 ---\n原始长度: %d 字符",
+                        "[stderr 过长已截断（无法保存文件）]\n\n--- 最后 500 字符 ---\n%s\n--- 结束 ---\n原始长度: %d 字符",
                         tail, len(result.Stderr),
                 )
         }

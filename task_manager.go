@@ -425,18 +425,9 @@ func truncateTaskOutput(output string) string {
         return output
 }
 
-// tailLines 返回字符串的最后 n 行
-func tailLines(s string, n int) string {
-        lines := strings.Split(s, "\n")
-        if len(lines) <= n {
-                return s
-        }
-        return strings.Join(lines[len(lines)-n:], "\n")
-}
-
 // saveOutputToFileForWake 将过长内容保存到文件（供唤醒消息使用）
 func saveOutputToFileForWake(content, prefix, command string) (string, error) {
-        const maxDirectOutput = 1000 // 与 task_tools.go 保持一致
+        const maxDirectOutput = 1000
         if len(content) <= maxDirectOutput {
                 return "", nil
         }
@@ -501,12 +492,13 @@ func GetTaskWakeMessage(task *BackgroundTask) string {
         stdout := task.Stdout.String()
         stdoutFile, err := saveOutputToFileForWake(stdout, "async_stdout", task.Command)
         if err == nil && stdoutFile != "" {
-                tail := tailLines(stdout, 10)
-                msg += fmt.Sprintf("\n📤 标准输出:\n[输出过长，完整内容已保存至: %s]\n\n--- 最后 10 行 ---\n%s\n--- 结束 ---\n原始长度: %d 字符\n",
+                // 取最后 500 个字符作为预览
+                tail := tailContent(stdout, 500)
+                msg += fmt.Sprintf("\n📤 标准输出:\n[输出过长，完整内容已保存至: %s]\n\n--- 最后 500 字符 ---\n%s\n--- 结束 ---\n原始长度: %d 字符\n",
                         stdoutFile, tail, len(stdout))
         } else if len(stdout) > 1000 {
-                tail := tailLines(stdout, 10)
-                msg += fmt.Sprintf("\n📤 标准输出:\n[输出过长已截断（无法保存文件）]\n\n--- 最后 10 行 ---\n%s\n--- 结束 ---\n原始长度: %d 字符\n",
+                tail := tailContent(stdout, 500)
+                msg += fmt.Sprintf("\n📤 标准输出:\n[输出过长已截断（无法保存文件）]\n\n--- 最后 500 字符 ---\n%s\n--- 结束 ---\n原始长度: %d 字符\n",
                         tail, len(stdout))
         } else if stdout != "" {
                 msg += fmt.Sprintf("\n📤 标准输出:\n%s\n", stdout)
@@ -516,12 +508,12 @@ func GetTaskWakeMessage(task *BackgroundTask) string {
         stderr := task.Stderr.String()
         stderrFile, err := saveOutputToFileForWake(stderr, "async_stderr", task.Command)
         if err == nil && stderrFile != "" {
-                tail := tailLines(stderr, 10)
-                msg += fmt.Sprintf("\n⚠️ 标准错误:\n[输出过长，完整内容已保存至: %s]\n\n--- 最后 10 行 ---\n%s\n--- 结束 ---\n原始长度: %d 字符\n",
+                tail := tailContent(stderr, 500)
+                msg += fmt.Sprintf("\n⚠️ 标准错误:\n[输出过长，完整内容已保存至: %s]\n\n--- 最后 500 字符 ---\n%s\n--- 结束 ---\n原始长度: %d 字符\n",
                         stderrFile, tail, len(stderr))
         } else if len(stderr) > 1000 {
-                tail := tailLines(stderr, 10)
-                msg += fmt.Sprintf("\n⚠️ 标准错误:\n[输出过长已截断（无法保存文件）]\n\n--- 最后 10 行 ---\n%s\n--- 结束 ---\n原始长度: %d 字符\n",
+                tail := tailContent(stderr, 500)
+                msg += fmt.Sprintf("\n⚠️ 标准错误:\n[输出过长已截断（无法保存文件）]\n\n--- 最后 500 字符 ---\n%s\n--- 结束 ---\n原始长度: %d 字符\n",
                         tail, len(stderr))
         } else if stderr != "" {
                 msg += fmt.Sprintf("\n⚠️ 标准错误:\n%s\n", stderr)
@@ -760,12 +752,12 @@ type LoopDetector struct {
 
 // LoopToolCallRecord 循环检测用的工具调用记录
 type LoopToolCallRecord struct {
-        ToolName string                 `json:"tool_name"`
-        Args     map[string]interface{} `json:"args,omitempty"`
+        ToolName   string                 `json:"tool_name"`
+        Args       map[string]interface{} `json:"args,omitempty"`
         Fingerprint string               `json:"fingerprint"` // 用于快速比较的指纹
-        Timestamp time.Time             `json:"timestamp"`
-        Result    string                `json:"result,omitempty"` // 结果摘要
-        IsError   bool                  `json:"is_error"`
+        Timestamp  time.Time             `json:"timestamp"`
+        Result     string                `json:"result,omitempty"` // 结果摘要
+        IsError    bool                  `json:"is_error"`
 }
 
 // LoopDetectionResult 循环检测结果
@@ -778,13 +770,13 @@ type LoopDetectionResult struct {
         ShouldInterrupt bool     `json:"should_interrupt"` // 是否应该中断
 }
 
-// NewLoopDetector 创建循环检测器
+// NewLoopDetector 创建循环检测器（修改：阈值改为 2）
 func NewLoopDetector(maxHistory, threshold int) *LoopDetector {
         if maxHistory < 10 {
                 maxHistory = 50
         }
         if threshold < 2 {
-                threshold = 3
+                threshold = 2 // 从 3 改为 2，更敏感
         }
         return &LoopDetector{
                 history:       make([]LoopToolCallRecord, 0, maxHistory),
@@ -846,7 +838,7 @@ func (ld *LoopDetector) RecordAndCheck(toolName string, args map[string]interfac
         return ld.detectLoop()
 }
 
-// detectLoop 检测循环模式
+// detectLoop 检测循环模式（修改：达到阈值即中断）
 func (ld *LoopDetector) detectLoop() LoopDetectionResult {
         result := LoopDetectionResult{
                 IsLoop:      false,
@@ -883,7 +875,8 @@ func (ld *LoopDetector) detectLoop() LoopDetectionResult {
                                         "4. 考虑请求人工协助",
                                 fingerprint, count)
                         result.Suggestion = "请分析之前的操作结果，找出问题根源，而不是重复相同的操作。"
-                        result.ShouldInterrupt = count >= ld.threshold+2
+                        // 修改：达到阈值即中断，不再需要额外 +2
+                        result.ShouldInterrupt = count >= ld.threshold
                         return result
                 }
         }
@@ -917,7 +910,7 @@ func (ld *LoopDetector) detectLoop() LoopDetectionResult {
                                 "4. 考虑换一种方法解决问题",
                         consecutiveFailures)
                 result.Suggestion = "连续失败表明当前方法可能不可行，建议尝试其他方案。"
-                result.ShouldInterrupt = consecutiveFailures >= ld.threshold+2
+                result.ShouldInterrupt = consecutiveFailures >= ld.threshold
         }
         
         return result
@@ -1037,8 +1030,8 @@ var globalLoopDetector *LoopDetector
 // InitGlobalLoopDetector 初始化全局循环检测器
 func InitGlobalLoopDetector() {
         if globalLoopDetector == nil {
-                globalLoopDetector = NewLoopDetector(100, 3)
-                log.Println("[LoopDetector] Initialized with max_history=100, threshold=3")
+                globalLoopDetector = NewLoopDetector(100, 2) // 阈值设为 2
+                log.Println("[LoopDetector] Initialized with max_history=100, threshold=2")
         }
 }
 

@@ -910,6 +910,34 @@ func CallModel(ctx context.Context, messages []Message, apiType, baseURL, apiKey
                 return nil, err
         }
 
+        // ========== 请求体大小检查 ==========
+        reqBody, err := json.Marshal(data)
+        if err != nil {
+                return nil, fmt.Errorf("failed to marshal request for size check: %w", err)
+        }
+
+        // 使用全局 APIConfig 中的 MaxRequestSizeBytes（在 main.go 中设置）
+        if maxSize := globalAPIConfig.MaxRequestSizeBytes; maxSize > 0 && len(reqBody) > maxSize {
+                errMsg := fmt.Sprintf(
+                        "🚫 请求体过大（%d bytes），超过配置限制（%d bytes）。\n"+
+                        "这通常是因为对话历史过长或工具定义过多。\n"+
+                        "请考虑：\n"+
+                        "  • 使用 /new 开始新对话\n"+
+                        "  • 减少不必要的工具调用\n"+
+                        "  • 调整配置中的 MaxRequestSizeBytes 值\n"+
+                        "任务已停止。",
+                        len(reqBody), maxSize,
+                )
+                log.Printf("[CallModel] Request size limit exceeded: %d > %d", len(reqBody), maxSize)
+
+                // 返回一个包含错误的通道
+                errChan := make(chan StreamChunk, 1)
+                errChan <- StreamChunk{Error: errMsg, Done: true}
+                close(errChan)
+                return errChan, nil
+        }
+        // ========== 检查结束 ==========
+
         if IsDebug {
                 debugData, _ := json.MarshalIndent(data, "", "  ")
                 debugFile := fmt.Sprintf("debug_request_%d.json", time.Now().Unix())

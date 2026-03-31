@@ -67,6 +67,7 @@ type APIConfig struct {
     Stream                 bool    `toon:"Stream" json:"Stream"`
     Thinking               bool    `toon:"Thinking" json:"Thinking"`
     BlockDangerousCommands bool    `toon:"BlockDangerousCommands" json:"BlockDangerousCommands"`
+    MaxRequestSizeBytes    int     `toon:"MaxRequestSizeBytes" json:"MaxRequestSizeBytes"` // 新增：请求体最大字节数
 }
 
 // 超时配置（单位：秒）
@@ -218,6 +219,7 @@ func loadConfig() (Config, error) {
         defaultConfig.APIConfig.Stream = true
         defaultConfig.APIConfig.Thinking = true
         defaultConfig.APIConfig.BlockDangerousCommands = false
+        defaultConfig.APIConfig.MaxRequestSizeBytes = 256 * 1024 // 256KB
         defaultConfig.HTTPServer.Listen = "0.0.0.0:10086"
         defaultConfig.PluginsDir = filepath.Join(execDir, "plugins")
         defaultConfig.DataDir = filepath.Join(execDir, ".garclaw")
@@ -245,6 +247,9 @@ func loadConfig() (Config, error) {
     }
     if config.APIConfig.MaxTokens == 0 {
         config.APIConfig.MaxTokens = 4096
+    }
+    if config.APIConfig.MaxRequestSizeBytes == 0 {
+        config.APIConfig.MaxRequestSizeBytes = 256 * 1024
     }
     if config.HTTPServer.Listen == "" {
         config.HTTPServer.Listen = "0.0.0.0:10086"

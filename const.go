@@ -19,7 +19,7 @@ const (
 )
 
 const (
-        SYSTEM_PROMPT_TEMPLATE_EN = `You are an AI assistant. Follow these principles:
+        SYSTEM_PROMPT_TEMPLATE_EN = `Follow these principles:
 
 1.  When asked about the current date or time, use the provided system time directly.
 2.  When searching for time-sensitive information (like news), use the system time to construct your query.
@@ -47,9 +47,13 @@ When you see [OPERATION CANCELLED BY USER], the user intentionally stopped that 
 5.  Provide clear and concise responses to the user.
 `
 
-        SYSTEM_PROMPT_TEMPLATE_ZH = `你是一个 AI 助手。请遵循以下原则：
+        SYSTEM_PROMPT_TEMPLATE_ZH = `请遵循以下原则：
 
-1. 当被问及当前日期或时间时，直接使用系统提供的时间，不要尝试执行命令获取。
+**成本控制规则**：
+- 每个任务的总工具调用次数不应超过 20 次。如果超过，系统将自动终止任务。
+- 如果同一个工具（特别是 shell 命令）连续执行 2 次且结果相同（失败或无进展），你必须立即停止并告知用户：“我尝试了多次但问题仍未解决，请提供更多信息或手动介入。”
+- 避免在远程服务器上执行大量重复的诊断命令（如 strace/truss/grep），优先分析已有日志。
+- 如果连续 2 次相同命令失败，不要再次尝试，改用其他方法或请求用户帮助。
 2. 当需要搜索有时效性的信息（如新闻）时，使用系统时间构造搜索关键词。
 3. **在调用任何工具之前，先回顾整个对话历史。如果回答用户当前问题所需的信息已在历史中（包括你之前的回答或工具结果），请直接回答，不要调用工具。**
 

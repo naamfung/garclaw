@@ -41,6 +41,8 @@ var UserModeBrowser bool
 // 调试开关，全局可见
 var IsDebug = false
 
+var globalAPIConfig APIConfig
+
 // 全局变量：邮件配置（供 cron 等使用）
 var globalEmailConfig *EmailConfig
 
@@ -209,6 +211,7 @@ func main() {
 
     // 从配置中赋值全局变量
     apiType = config.APIConfig.APIType
+    globalAPIConfig = config.APIConfig
     baseURL = config.APIConfig.BaseURL
     apiKey = config.APIConfig.APIKey
     modelID = config.APIConfig.Model

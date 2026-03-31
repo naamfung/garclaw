@@ -24,6 +24,9 @@ const (
     AgenticTagSuffix       = ">>>"
 )
 
+// 工具调用配额（每个会话/任务）
+const MaxToolCallsPerSession = 30
+
 // sanitizeContent 清理内容中的非法控制字符
 func sanitizeContent(content string) string {
     var builder strings.Builder
@@ -1201,6 +1204,9 @@ func getAllowedToolsList(role *Role) string {
 func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, baseURL, apiKey, modelID string,
     temperature float64, maxTokens int, stream bool, thinking bool) ([]Message, error) {
 
+    // 工具调用配额计数器
+    toolCallCount := 0
+
     // 注入记忆上下文
     if globalUnifiedMemory != nil {
         taskDesc := getCurrentTaskDescriptionFromMessages(messages)
@@ -1656,6 +1662,15 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
                 default:
                 }
 
+                // ========== 工具调用配额检查 ==========
+                toolCallCount++
+                if toolCallCount > MaxToolCallsPerSession {
+                    errMsg := fmt.Sprintf("⚠️ 已达到工具调用上限（%d次），任务已自动停止。请考虑简化任务或使用 /new 开始新对话。", MaxToolCallsPerSession)
+                    ch.WriteChunk(StreamChunk{Error: errMsg, Done: true})
+                    return messages, fmt.Errorf("tool call quota exceeded")
+                }
+                // ===================================
+
                 if call.Name == "" {
                     results = append(results, NewToolResultMessage(call.ID, "Error: Invalid tool type or function field", TaskStatusFailed, ""))
                     continue
@@ -1698,6 +1713,13 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
                             loopResult.WarningMessage += expMsg.String()
                         }
                     }
+                    // 如果检测到循环且需要中断，则终止整个任务
+                    if loopResult.ShouldInterrupt {
+                        errMsg := fmt.Sprintf("\n\n🚫 %s\n\n任务已被系统终止，因为检测到重复循环。", loopResult.WarningMessage)
+                        ch.WriteChunk(StreamChunk{Error: errMsg, Done: true})
+                        return messages, fmt.Errorf("loop detected: %s", loopResult.WarningMessage)
+                    }
+                    // 否则只添加警告
                     contentStr = contentStr + "\n\n" + loopResult.WarningMessage
                     if loopResult.Suggestion != "" {
                         contentStr = contentStr + "\n\n💡 建议：" + loopResult.Suggestion
@@ -1762,6 +1784,15 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
                             continue
                         }
 
+                        // ========== 工具调用配额检查 ==========
+                        toolCallCount++
+                        if toolCallCount > MaxToolCallsPerSession {
+                            errMsg := fmt.Sprintf("⚠️ 已达到工具调用上限（%d次），任务已自动停止。请考虑简化任务或使用 /new 开始新对话。", MaxToolCallsPerSession)
+                            ch.WriteChunk(StreamChunk{Error: errMsg, Done: true})
+                            return messages, fmt.Errorf("tool call quota exceeded")
+                        }
+                        // ===================================
+
                         if hookManager != nil && hookManager.IsEnabled() {
                             hookResult := hookManager.RunBeforeTool(ctx, 0, "", iteration, toolName, input)
                             if hookResult.Action == HookOutcomeBlock {
@@ -1788,6 +1819,11 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
                                     expMsg.WriteString("建议参考上述成功经验，避免重复错误。")
                                     loopResult.WarningMessage += expMsg.String()
                                 }
+                            }
+                            if loopResult.ShouldInterrupt {
+                                errMsg := fmt.Sprintf("\n\n🚫 %s\n\n任务已被系统终止，因为检测到重复循环。", loopResult.WarningMessage)
+                                ch.WriteChunk(StreamChunk{Error: errMsg, Done: true})
+                                return messages, fmt.Errorf("loop detected: %s", loopResult.WarningMessage)
                             }
                             contentStr = contentStr + "\n\n" + loopResult.WarningMessage
                             if loopResult.Suggestion != "" {
@@ -1878,3 +1914,4 @@ func AgentLoop(ctx context.Context, ch Channel, messages []Message, apiType, bas
 
     return messages, nil
 }
+
