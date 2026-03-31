@@ -442,57 +442,105 @@ func normalizeToolCall(tc interface{}) interface{} {
 }
 
 // validateAndCleanMessages 验证并清理消息，确保符合 API 要求
-// 1. 确保消息顺序正确（不会有两个连续的相同角色消息，除非是 tool_use/tool_result 配对）
-// 2. 确保 tool 消息有有效的 tool_call_id
-// 3. 确保消息内容不为 nil（至少是空字符串）
 func validateAndCleanMessages(messages []Message) []Message {
-        if len(messages) == 0 {
-                return messages
+    if len(messages) == 0 {
+        return messages
+    }
+
+    cleaned := make([]Message, 0, len(messages))
+
+    for i, msg := range messages {
+        // 跳过完全空的消息
+        if msg.Role == "" {
+            if IsDebug {
+                log.Printf("Warning: skipping message with empty role at index %d", i)
+            }
+            continue
         }
 
-        cleaned := make([]Message, 0, len(messages))
+        // 创建消息副本
+        cleanedMsg := msg
 
-        for i, msg := range messages {
-                // 跳过完全空的消息
-                if msg.Role == "" {
-                        continue
+        // 确保 content 不为 nil（对于需要 content 的消息类型）
+        if msg.Role == "user" || msg.Role == "assistant" {
+            if msg.Content == nil {
+                cleanedMsg.Content = ""
+            }
+            // 对于 assistant 且有 tool_calls 的情况，某些 API 要求 content 为 null 或空字符串
+            // 但为了安全，如果 content 是空字符串，我们设置为 nil
+            if msg.Role == "assistant" && msg.ToolCalls != nil {
+                if contentStr, ok := msg.Content.(string); ok && contentStr == "" {
+                    cleanedMsg.Content = nil
                 }
-
-                // 创建消息副本
-                cleanedMsg := msg
-
-                // 确保 content 不为 nil（对于需要 content 的消息类型）
-                if msg.Role == "user" || msg.Role == "assistant" {
-                        if msg.Content == nil {
-                                cleanedMsg.Content = ""
-                        }
-                }
-
-                // 对于 tool 消息，确保 tool_call_id 存在
-                if msg.Role == "tool" && msg.ToolCallID == "" {
-                        cleanedMsg.ToolCallID = fmt.Sprintf("auto_id_%d", i)
-                        if IsDebug {
-                                log.Printf("Warning: tool message missing tool_call_id, assigned: %s", cleanedMsg.ToolCallID)
-                        }
-                }
-
-                // 检查是否与上一条消息角色相同（特殊情况：连续的 tool 消息是允许的）
-                if len(cleaned) > 0 {
-                        lastMsg := cleaned[len(cleaned)-1]
-                        // 允许连续的 tool 消息
-                        if lastMsg.Role == msg.Role && msg.Role != "tool" {
-                                // 两个相同角色的非 tool 消息连续出现，可能需要处理
-                                // 但不自动修复，只是记录日志
-                                if IsDebug {
-                                        log.Printf("Warning: consecutive messages with same role: %s at index %d", msg.Role, i)
-                                }
-                        }
-                }
-
-                cleaned = append(cleaned, cleanedMsg)
+            }
         }
 
-        return cleaned
+        // 对于 tool 消息，确保 tool_call_id 存在且 content 是字符串
+        if msg.Role == "tool" {
+            if msg.ToolCallID == "" {
+                cleanedMsg.ToolCallID = fmt.Sprintf("auto_id_%d", i)
+                if IsDebug {
+                    log.Printf("Warning: tool message missing tool_call_id, assigned: %s", cleanedMsg.ToolCallID)
+                }
+            }
+            if msg.Content == nil {
+                cleanedMsg.Content = ""
+            } else if _, ok := msg.Content.(string); !ok {
+                // 如果不是字符串，尝试转换为 JSON 字符串
+                if jsonBytes, err := json.Marshal(msg.Content); err == nil {
+                    cleanedMsg.Content = string(jsonBytes)
+                } else {
+                    cleanedMsg.Content = fmt.Sprintf("%v", msg.Content)
+                }
+            }
+        }
+
+        // 检查是否与上一条消息角色相同（特殊情况：连续的 tool 消息是允许的）
+        if len(cleaned) > 0 {
+            lastMsg := cleaned[len(cleaned)-1]
+            // 允许连续的 tool 消息
+            if lastMsg.Role == msg.Role && msg.Role != "tool" {
+                if IsDebug {
+                    log.Printf("Warning: consecutive messages with same role: %s at index %d", msg.Role, i)
+                }
+                // 如果是连续两个 assistant 且都没有 tool_calls，可以合并 content
+                if msg.Role == "assistant" && lastMsg.ToolCalls == nil && msg.ToolCalls == nil {
+                    lastContent, _ := lastMsg.Content.(string)
+                    thisContent, _ := msg.Content.(string)
+                    if lastContent != "" && thisContent != "" {
+                        cleaned[len(cleaned)-1].Content = lastContent + "\n" + thisContent
+                    } else if thisContent != "" {
+                        cleaned[len(cleaned)-1].Content = thisContent
+                    }
+                    continue
+                }
+                // 如果是连续两个 user 消息，合并
+                if msg.Role == "user" {
+                    lastContent, _ := lastMsg.Content.(string)
+                    thisContent, _ := msg.Content.(string)
+                    if lastContent != "" && thisContent != "" {
+                        cleaned[len(cleaned)-1].Content = lastContent + "\n" + thisContent
+                    } else if thisContent != "" {
+                        cleaned[len(cleaned)-1].Content = thisContent
+                    }
+                    continue
+                }
+                // 其他情况保留，但记录警告
+            }
+        }
+
+        cleaned = append(cleaned, cleanedMsg)
+    }
+
+    // 最终检查：确保消息序列以 user 或 tool 开头（不能以 assistant 开头）
+    if len(cleaned) > 0 && cleaned[0].Role == "assistant" {
+        if IsDebug {
+            log.Printf("Warning: messages start with assistant, this may cause API errors")
+        }
+        // 可以插入一个虚拟的 user 消息，但更好的做法是记录并希望模型不会这样
+    }
+
+    return cleaned
 }
 
 // 准备请求数据

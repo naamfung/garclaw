@@ -81,11 +81,12 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
         cmdName = cmdName[idx+1:]
     }
 
-    // SSH 检测（增强：检测后台启动但未正确脱离终端）
+    // SSH 检测（增强：检测后台启动但未正确脱离终端，支持 Linux setsid 和 FreeBSD daemon）
     if cmdName == "ssh" {
-        // 检查是否使用了 setsid 或 nohup（表示用户意图启动守护进程）
+        // 检查是否使用了正确的守护进程启动方式
         hasSetsid := strings.Contains(lowerCmd, "setsid")
         hasNohup := strings.Contains(lowerCmd, "nohup")
+        hasDaemon := strings.Contains(lowerCmd, "daemon")
         hasBackground := strings.Contains(lowerCmd, "&")
 
         if !strings.HasPrefix(strings.TrimSpace(command), "sshpass") {
@@ -104,13 +105,13 @@ func detectBlockingCommand(command string) BlockingCommandInfo {
             }
         }
 
-        // 新增：检测是否可能启动了后台进程但未正确脱离终端
-        if (hasBackground || strings.Contains(lowerCmd, "&")) && !hasSetsid && !hasNohup {
+        // 检测是否可能启动了后台进程但未正确脱离终端
+        if (hasBackground || strings.Contains(lowerCmd, "&")) && !hasSetsid && !hasNohup && !hasDaemon {
             info.IsBlocking = true
             info.Reason = "SSH 中启动后台进程可能因 SIGHUP 信号而退出"
             info.Suggestions = []string{
-                "使用 setsid 创建新会话: setsid /path/to/program < /dev/null > /tmp/prog.log 2>&1 &",
-                "或使用 nohup: nohup /path/to/program < /dev/null > /tmp/prog.log 2>&1 &",
+                "Linux: 使用 setsid 创建新会话: setsid /path/to/program < /dev/null > /tmp/prog.log 2>&1 &",
+                "GhostBSD/FreeBSD: 使用 daemon 命令: daemon -p /var/run/prog.pid /path/to/program",
                 "也可以考虑使用 shell_delayed 工具异步执行此命令。",
                 "若确认命令不会启动守护进程，可使用 force: true 强制执行",
             }

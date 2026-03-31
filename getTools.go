@@ -14,9 +14,9 @@ func getTools(apiType string) interface{} {
 
 ✅ 快速命令（ls, cat, grep 等）：同步执行，立即返回结果
 ✅ 慢速命令（apt, make, npm install 等）：异步执行，后台运行
-✅ 远程 SSH 启动守护进程：必须使用以下方式防止进程随 SSH 退出：
-   setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
-   或 nohup /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+✅ 远程 SSH 启动守护进程：
+   - Linux: setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   - GhostBSD/FreeBSD: daemon -p /var/run/program.pid /path/to/program
    然后通过 ps aux | grep program 或 curl 检查状态。
 
 系统自动判断命令类型：
@@ -72,8 +72,9 @@ func getTools(apiType string) interface{} {
 ❌ Media: ffmpeg, handbrake
 ❌ Any command that MAY take more than 60 seconds
 
-⚠️ REMOTE DAEMON STARTUP: If you are starting a long-running service via SSH, you MUST use:
-   setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+⚠️ REMOTE DAEMON STARTUP:
+   - Linux: setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   - GhostBSD/FreeBSD: daemon -p /var/run/program.pid /path/to/program
    Otherwise the process will die when the SSH session ends.
 
 Using 'shell' for long-running commands will cause TIMEOUT and FAIL the task!
@@ -1716,15 +1717,15 @@ Using 'shell' for long-running commands will cause TIMEOUT and FAIL the task!
                 // 返回与 openai 分支完全一致的工具列表，但使用 Anthropic 格式
                 tools := []map[string]interface{}{
                         // ========== 原有工具 ==========
-                        {
+                                                {
                                 "name":        "smart_shell",
                                 "description": `智能执行 shell 命令，自动判断同步或异步执行模式。
 
 ✅ 快速命令（ls, cat, grep 等）：同步执行，立即返回结果
 ✅ 慢速命令（apt, make, npm install 等）：异步执行，后台运行
-✅ 远程 SSH 启动守护进程：必须使用以下方式防止进程随 SSH 退出：
-   setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
-   或 nohup /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+✅ 远程 SSH 启动守护进程：
+   - Linux: setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   - GhostBSD/FreeBSD: daemon -p /var/run/program.pid /path/to/program
    然后通过 ps aux | grep program 或 curl 检查状态。
 
 系统自动判断命令类型：
@@ -1777,8 +1778,9 @@ Using 'shell' for long-running commands will cause TIMEOUT and FAIL the task!
 ❌ Media: ffmpeg, handbrake
 ❌ Any command that MAY take more than 60 seconds
 
-⚠️ REMOTE DAEMON STARTUP: If you are starting a long-running service via SSH, you MUST use:
-   setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+⚠️ REMOTE DAEMON STARTUP:
+   - Linux: setsid /path/to/program < /dev/null > /tmp/program.log 2>&1 &
+   - GhostBSD/FreeBSD: daemon -p /var/run/program.pid /path/to/program
    Otherwise the process will die when the SSH session ends.
 
 Using 'shell' for long-running commands will cause TIMEOUT and FAIL the task!
