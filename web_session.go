@@ -9,44 +9,39 @@ import (
 	"github.com/google/uuid"
 )
 
-// WebInput 用户输入
 type WebInput struct {
 	Content   string
 	Timestamp time.Time
 }
 
-// WebSession 会话对象，独立于 WebSocket 连接
 type WebSession struct {
 	ID        string
 	History   []Message
 	CreatedAt time.Time
 	LastSeen  time.Time
 
-	// 输入输出队列
-	InputQueue  chan WebInput     // 用户输入队列
-	OutputQueue chan StreamChunk  // 输出缓冲队列
+	InputQueue  chan WebInput
+	OutputQueue chan StreamChunk
 
-	// 任务控制（用于取消当前正在执行的任务）
 	TaskRunning   bool
-	currentTaskID string            // 当前任务唯一ID
+	currentTaskID string
 	TaskCtx       context.Context
 	TaskCancel    context.CancelFunc
 
-	// WebSocket 连接控制（独立于任务控制，用于管理 WebSocket 生命周期）
 	WsCtx    context.Context
 	WsCancel context.CancelFunc
 
-	// 连接状态
 	Connected   bool
-	OutputDone  chan struct{} // 通知输出协程结束
-
-	// 消息同步：跟踪已发送给前端的消息索引
+	OutputDone  chan struct{}
 	LastSentIndex int
+
+	// 持久化相关
+	persistID string   // 已保存的会话 ID（文件名前缀）
+	persistMu sync.Mutex
 
 	mu sync.RWMutex
 }
 
-// NewWebSession 创建新会话
 func NewWebSession() *WebSession {
 	taskCtx, taskCancel := context.WithCancel(context.Background())
 	wsCtx, wsCancel := context.WithCancel(context.Background())
@@ -66,7 +61,6 @@ func NewWebSession() *WebSession {
 	return s
 }
 
-// AddToHistory 添加消息到历史
 func (s *WebSession) AddToHistory(role, content string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -74,7 +68,6 @@ func (s *WebSession) AddToHistory(role, content string) {
 	s.LastSeen = time.Now()
 }
 
-// GetHistory 获取历史副本
 func (s *WebSession) GetHistory() []Message {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -83,15 +76,17 @@ func (s *WebSession) GetHistory() []Message {
 	return h
 }
 
-// SetHistory 设置历史（任务完成后更新）
+// SetHistory 更新历史并触发自动保存
 func (s *WebSession) SetHistory(h []Message) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.History = h
 	s.LastSeen = time.Now()
+	s.mu.Unlock()
+
+	// 异步自动保存，避免阻塞
+	go s.autoSaveHistory()
 }
 
-// GetNewMessages 获取未发送给前端的新消息（用于重连时同步）
 func (s *WebSession) GetNewMessages() []Message {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -103,14 +98,12 @@ func (s *WebSession) GetNewMessages() []Message {
 	return newMsgs
 }
 
-// MarkAllSent 标记所有消息已发送给前端
 func (s *WebSession) MarkAllSent() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.LastSentIndex = len(s.History)
 }
 
-// EnqueueInput 将用户输入加入队列
 func (s *WebSession) EnqueueInput(content string) bool {
 	select {
 	case s.InputQueue <- WebInput{Content: content, Timestamp: time.Now()}:
@@ -124,7 +117,6 @@ func (s *WebSession) EnqueueInput(content string) bool {
 	}
 }
 
-// EnqueueOutput 将输出加入队列（非阻塞，队列满时丢弃旧数据）
 func (s *WebSession) EnqueueOutput(chunk StreamChunk) {
 	select {
 	case s.OutputQueue <- chunk:
@@ -138,53 +130,42 @@ func (s *WebSession) EnqueueOutput(chunk StreamChunk) {
 	}
 }
 
-// TryStartTask 尝试启动任务（原子操作）
-// 返回 (是否成功, 任务ID)
 func (s *WebSession) TryStartTask() (bool, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.TaskRunning {
-		log.Printf("[Session %s] TryStartTask: rejected (TaskRunning=true)", s.ID)
 		return false, ""
 	}
 	s.TaskRunning = true
 	taskID := uuid.New().String()
 	s.currentTaskID = taskID
-	log.Printf("[Session %s] TryStartTask: accepted, taskID=%s", s.ID, taskID)
 	return true, taskID
 }
 
-// SetTaskRunning 设置任务运行状态，仅当 taskID 匹配时才执行
 func (s *WebSession) SetTaskRunning(running bool, taskID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.currentTaskID != taskID {
-		log.Printf("[Session %s] SetTaskRunning: taskID mismatch (got %s, expected %s), ignoring", s.ID, taskID, s.currentTaskID)
 		return
 	}
-	old := s.TaskRunning
 	s.TaskRunning = running
 	if !running {
 		s.currentTaskID = ""
 	}
-	log.Printf("[Session %s] SetTaskRunning: %v -> %v (taskID=%s)", s.ID, old, running, taskID)
 }
 
-// IsTaskRunning 检查任务是否运行中
 func (s *WebSession) IsTaskRunning() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.TaskRunning
 }
 
-// GetTaskCtx 获取当前任务 context（用于判断是否被取消）
 func (s *WebSession) GetTaskCtx() context.Context {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.TaskCtx
 }
 
-// SetConnected 设置连接状态
 func (s *WebSession) SetConnected(connected bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -194,14 +175,12 @@ func (s *WebSession) SetConnected(connected bool) {
 	}
 }
 
-// IsConnected 检查是否已连接
 func (s *WebSession) IsConnected() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.Connected
 }
 
-// CancelWs 取消 WebSocket 连接（当连接断开时调用）
 func (s *WebSession) CancelWs() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -210,7 +189,6 @@ func (s *WebSession) CancelWs() {
 	}
 }
 
-// ResetWsCtx 重置 WebSocket context（当重新连接时调用）
 func (s *WebSession) ResetWsCtx() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -221,24 +199,18 @@ func (s *WebSession) ResetWsCtx() {
 	}
 }
 
-// CancelTask 取消当前任务
 func (s *WebSession) CancelTask() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.TaskCancel != nil && s.TaskRunning {
 		log.Printf("[Session %s] CancelTask: cancelling task (taskID=%s)", s.ID, s.currentTaskID)
 		s.TaskCancel()
-		// 重置 context 和状态
 		s.TaskCtx, s.TaskCancel = context.WithCancel(context.Background())
 		s.TaskRunning = false
 		s.currentTaskID = ""
-		log.Printf("[Session %s] CancelTask: TaskRunning set to false", s.ID)
-	} else {
-		log.Printf("[Session %s] CancelTask: no task to cancel (TaskRunning=%v)", s.ID, s.TaskRunning)
 	}
 }
 
-// Stop 停止会话（清理资源）
 func (s *WebSession) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -251,17 +223,72 @@ func (s *WebSession) Stop() {
 	close(s.InputQueue)
 	close(s.OutputQueue)
 
-	// 修复：关闭关联的浏览器会话，防止资源泄漏
 	if globalBrowserSessionManager != nil {
 		if err := globalBrowserSessionManager.CloseSession(s.ID); err != nil {
 			log.Printf("[Session %s] Failed to close browser session: %v", s.ID, err)
-		} else {
-			log.Printf("[Session %s] Browser session closed", s.ID)
 		}
 	}
 }
 
-// WebSessionManager 会话管理器
+// autoSaveHistory 自动保存当前会话到持久化存储
+func (s *WebSession) autoSaveHistory() {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
+
+	s.mu.RLock()
+	historyCopy := make([]Message, len(s.History))
+	copy(historyCopy, s.History)
+	sessionID := s.ID
+	s.mu.RUnlock()
+
+	if len(historyCopy) == 0 {
+		return
+	}
+
+	// 生成描述：取第一条用户消息的前50字符
+	description := "自动保存的会话"
+	for _, msg := range historyCopy {
+		if msg.Role == "user" {
+			if content, ok := msg.Content.(string); ok && content != "" {
+				desc := content
+				if len(desc) > 50 {
+					desc = desc[:50] + "..."
+				}
+				description = desc
+				break
+			}
+		}
+	}
+
+	if s.persistID == "" {
+		// 首次保存，创建新文件
+		saved, err := globalSessionPersist.SaveSession(sessionID, historyCopy, description)
+		if err != nil {
+			log.Printf("[Session %s] Auto save failed (create): %v", sessionID, err)
+			return
+		}
+		s.persistID = saved.ID
+		log.Printf("[Session %s] Auto saved (new) with ID %s", sessionID, s.persistID)
+	} else {
+		// 已存在，更新文件
+		err := globalSessionPersist.UpdateSession(s.persistID, historyCopy)
+		if err != nil {
+			// 更新失败（如文件被删除），尝试重新创建
+			log.Printf("[Session %s] Auto save update failed: %v, trying to create new", sessionID, err)
+			saved, err2 := globalSessionPersist.SaveSession(sessionID, historyCopy, description)
+			if err2 != nil {
+				log.Printf("[Session %s] Auto save re-create failed: %v", sessionID, err2)
+				return
+			}
+			s.persistID = saved.ID
+			log.Printf("[Session %s] Auto saved (re-created) with ID %s", sessionID, s.persistID)
+		} else {
+			log.Printf("[Session %s] Auto saved (update)", sessionID)
+		}
+	}
+}
+
+// WebSessionManager 保持不变
 type WebSessionManager struct {
 	sessions map[string]*WebSession
 	mu       sync.RWMutex
@@ -270,7 +297,6 @@ type WebSessionManager struct {
 	MaxSessions    int
 }
 
-// NewWebSessionManager 创建会话管理器
 func NewWebSessionManager() *WebSessionManager {
 	sm := &WebSessionManager{
 		sessions:      make(map[string]*WebSession),
@@ -281,7 +307,6 @@ func NewWebSessionManager() *WebSessionManager {
 	return sm
 }
 
-// GetOrCreate 获取或创建会话
 func (sm *WebSessionManager) GetOrCreate(sessionID string) *WebSession {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -302,7 +327,6 @@ func (sm *WebSessionManager) GetOrCreate(sessionID string) *WebSession {
 	return s
 }
 
-// Get 获取会话（不存在返回 nil）
 func (sm *WebSessionManager) Get(sessionID string) *WebSession {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -312,7 +336,6 @@ func (sm *WebSessionManager) Get(sessionID string) *WebSession {
 	return nil
 }
 
-// Remove 移除会话
 func (sm *WebSessionManager) Remove(sessionID string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -322,7 +345,6 @@ func (sm *WebSessionManager) Remove(sessionID string) {
 	}
 }
 
-// cleanupLoop 定期清理过期会话
 func (sm *WebSessionManager) cleanupLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -331,7 +353,6 @@ func (sm *WebSessionManager) cleanupLoop() {
 	}
 }
 
-// cleanup 清理过期会话
 func (sm *WebSessionManager) cleanup() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -355,7 +376,6 @@ func (sm *WebSessionManager) cleanup() {
 	}
 }
 
-// cleanupOldestLocked 清理最旧的会话（已持有锁）
 func (sm *WebSessionManager) cleanupOldestLocked() {
 	var oldestID string
 	var oldestTime time.Time
@@ -382,7 +402,6 @@ func (sm *WebSessionManager) cleanupOldestLocked() {
 	}
 }
 
-// Count 返回当前会话数
 func (sm *WebSessionManager) Count() int {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()

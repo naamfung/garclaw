@@ -445,7 +445,7 @@ func (mc *MemoryConsolidator) ResetSessionOffset(sessionKey string) {
     mc.sessionOffset[sessionKey] = 0
 }
 
-// ========== 新增：写入每日日志 ==========
+// WriteDailyLog 写入每日日志（添加 UTF-8 BOM 解决中文乱码）
 func (mc *MemoryConsolidator) WriteDailyLog(sessionID string, messages []Message) error {
     if len(messages) == 0 {
         return nil
@@ -483,11 +483,26 @@ func (mc *MemoryConsolidator) WriteDailyLog(sessionID string, messages []Message
         return nil
     }
 
+    // 检查文件是否存在且已有内容
+    needBOM := false
+    if fi, err := os.Stat(dailyLogPath); os.IsNotExist(err) {
+        needBOM = true
+    } else if err == nil && fi.Size() == 0 {
+        needBOM = true
+    }
+
     f, err := os.OpenFile(dailyLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
     if err != nil {
         return err
     }
     defer f.Close()
+
+    // 如果需要 BOM，写入 UTF-8 BOM
+    if needBOM {
+        if _, err := f.Write([]byte{0xEF, 0xBB, 0xBF}); err != nil {
+            return err
+        }
+    }
 
     timestamp := time.Now().Format("15:04:05")
     header := fmt.Sprintf("\n## 会话 %s [%s]\n", sessionID, timestamp)
