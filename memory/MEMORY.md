@@ -5,11 +5,17 @@
 
 ## Facts
 
-- user_name: Zorsion [tags: username,user]
-- shrimp_tutorial_feishu_url: https://yitanger.feishu.cn/docx/VB9RddOTioTMb7xVSYRcgoFjnTf [tags: 虾教程,飞书,养虾,教程]
-- internal_server_ssh: SSH连接信息：
-- IP地址：192.168.124.165
-- 用户名：root
-- 密码：rootpass
-- 备注：内网服务器 [tags: ssh,server,internal,credentials]
+- user.name: Zorsion
+- user.birth_year: 未收集
+- user.gender: 未收集
+- assistant.name: 八爪 (Gar) [tags: assistant,name,八爪,Gar]
+
+## Projects
+
+- server.home.name: 内网服务器 [tags: server,内网,home]
+- server.home.host: 192.168.124.165 [tags: server,内网,home,IP]
+- server.home.port: 22 [tags: server,内网,home,SSH]
+- server.home.username: root [tags: server,内网,home]
+- server.home.password: rootpass [tags: server,内网,home,password]
+- server.home.mirror.freebsd: https://mirrors.ustc.edu.cn/freebsd/ [tags: freebsd,mirror,国内镜像]
 

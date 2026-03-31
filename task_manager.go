@@ -855,100 +855,110 @@ func (ld *LoopDetector) RecordAndCheck(toolName string, args map[string]interfac
 
 // detectLoop 检测循环模式
 func (ld *LoopDetector) detectLoop() LoopDetectionResult {
-    result := LoopDetectionResult{
-        IsLoop:      false,
-        LoopCount:   0,
-        LoopPattern: []string{},
-    }
+	result := LoopDetectionResult{
+		IsLoop:      false,
+		LoopCount:   0,
+		LoopPattern: []string{},
+	}
 
-    if len(ld.history) < ld.interruptThreshold && len(ld.history) < ld.warningThreshold {
-        return result
-    }
+	if len(ld.history) < ld.interruptThreshold && len(ld.history) < ld.warningThreshold {
+		return result
+	}
 
-    // 方法1：检测相同的指纹重复出现
-    fingerprintCounts := make(map[string]int)
-    recentHistory := ld.history
-    if len(recentHistory) > ld.patternWindow*3 {
-        recentHistory = recentHistory[len(recentHistory)-ld.patternWindow*3:]
-    }
+	// 方法1：检测相同的指纹重复出现
+	fingerprintCounts := make(map[string]int)
+	recentHistory := ld.history
+	if len(recentHistory) > ld.patternWindow*3 {
+		recentHistory = recentHistory[len(recentHistory)-ld.patternWindow*3:]
+	}
 
-    for _, record := range recentHistory {
-        fingerprintCounts[record.Fingerprint]++
-    }
+	for _, record := range recentHistory {
+		fingerprintCounts[record.Fingerprint]++
+	}
 
-    // 检查是否有超过阈值的指纹
-    for fingerprint, count := range fingerprintCounts {
-        if count >= ld.interruptThreshold {
-            result.IsLoop = true
-            result.LoopCount = count
-            result.LoopPattern = []string{fingerprint}
-            result.WarningMessage = fmt.Sprintf(
-                "🚫 ⚠️ **循环检测警告**\n\n检测到相同操作「%s」已重复执行 %d 次。\n\n这可能表明陷入了死循环，建议：\n"+
-                    "1. 分析操作失败的根本原因\n"+
-                    "2. 尝试不同的解决方案\n"+
-                    "3. 检查相关配置或日志文件\n"+
-                    "4. 考虑请求人工协助\n\n任务已被系统终止，因为检测到重复循环。",
-                fingerprint, count)
-            result.Suggestion = "请分析之前的操作结果，找出问题根源，而不是重复相同的操作。"
-            result.ShouldInterrupt = true
-            return result
-        } else if count >= ld.warningThreshold {
-            result.IsLoop = true
-            result.LoopCount = count
-            result.LoopPattern = []string{fingerprint}
-            result.WarningMessage = fmt.Sprintf(
-                "⚠️ **循环检测警告**\n\n检测到相同操作「%s」已重复执行 %d 次。\n\n请调整策略，避免继续重复相同的操作。",
-                fingerprint, count)
-            result.Suggestion = "请分析之前的操作结果，找出问题根源，而不是重复相同的操作。"
-            result.ShouldInterrupt = false
-            // 仍然返回 isLoop=true 以便上层添加警告，但不中断
-            return result
-        }
-    }
+	// 检查是否有超过阈值的指纹
+	for fingerprint, count := range fingerprintCounts {
+		if count >= ld.interruptThreshold {
+			result.IsLoop = true
+			result.LoopCount = count
+			result.LoopPattern = []string{fingerprint}
+			result.WarningMessage = fmt.Sprintf(
+				"🚫 ⚠️ **循环检测警告**\n\n检测到相同操作「%s」已重复执行 %d 次。\n\n这可能表明陷入了死循环，建议：\n"+
+					"1. 分析操作失败的根本原因\n"+
+					"2. 尝试不同的解决方案\n"+
+					"3. 检查相关配置或日志文件\n"+
+					"4. 考虑请求人工协助\n\n任务已被系统终止，因为检测到重复循环。",
+				fingerprint, count)
+			result.Suggestion = "请分析之前的操作结果，找出问题根源，而不是重复相同的操作。"
+			result.ShouldInterrupt = true
+			return result
+		} else if count >= ld.warningThreshold {
+			result.IsLoop = true
+			result.LoopCount = count
+			result.LoopPattern = []string{fingerprint}
+			result.WarningMessage = fmt.Sprintf(
+				"⚠️ **循环检测警告**\n\n检测到相同操作「%s」已重复执行 %d 次。\n\n请调整策略，避免继续重复相同的操作。",
+				fingerprint, count)
+			result.Suggestion = "请分析之前的操作结果，找出问题根源，而不是重复相同的操作。"
+			result.ShouldInterrupt = false
+			return result
+		}
+	}
 
-    // 方法2：检测操作序列模式（如 A->B->C->A->B->C）
-    if len(ld.history) >= ld.patternWindow*2 {
-        pattern := ld.detectPatternSequence()
-        if pattern.IsLoop {
-            return pattern
-        }
-    }
+	// 方法2：检测操作序列模式（如 A->B->C->A->B->C）
+	if len(ld.history) >= ld.patternWindow*2 {
+		pattern := ld.detectPatternSequence()
+		if pattern.IsLoop {
+			return pattern
+		}
+	}
 
-    // 方法3：检测连续失败循环
-    consecutiveFailures := 0
-    for i := len(ld.history) - 1; i >= 0; i-- {
-        if ld.history[i].IsError {
-            consecutiveFailures++
-        } else {
-            break
-        }
-    }
+	// 方法3：检测连续相同指纹的失败循环（修正：按指纹统计，而非工具名）
+	consecutiveFailures := 0
+	var lastFingerprint string
+	for i := len(ld.history) - 1; i >= 0; i-- {
+		record := ld.history[i]
+		if record.IsError {
+			if i == len(ld.history)-1 {
+				// 最近一条，记录指纹
+				lastFingerprint = record.Fingerprint
+				consecutiveFailures = 1
+			} else if record.Fingerprint == lastFingerprint {
+				consecutiveFailures++
+			} else {
+				// 指纹不同，停止计数
+				break
+			}
+		} else {
+			break
+		}
+	}
 
-    if consecutiveFailures >= ld.interruptThreshold {
-        result.IsLoop = true
-        result.LoopCount = consecutiveFailures
-        result.WarningMessage = fmt.Sprintf(
-            "🚫 ⚠️ **连续失败警告**\n\n检测到连续 %d 次操作失败。\n\n建议：\n"+
-                "1. 仔细分析错误信息\n"+
-                "2. 检查是否有权限、路径或配置问题\n"+
-                "3. 尝试简化的操作步骤\n"+
-                "4. 考虑换一种方法解决问题\n\n任务已被系统终止，因为检测到重复失败。",
-            consecutiveFailures)
-        result.Suggestion = "连续失败表明当前方法可能不可行，建议尝试其他方案。"
-        result.ShouldInterrupt = true
-        return result
-    } else if consecutiveFailures >= ld.warningThreshold {
-        result.IsLoop = true
-        result.LoopCount = consecutiveFailures
-        result.WarningMessage = fmt.Sprintf(
-            "⚠️ **连续失败警告**\n\n检测到连续 %d 次操作失败。请调整策略，避免继续重复失败的操作。",
-            consecutiveFailures)
-        result.Suggestion = "连续失败表明当前方法可能不可行，建议尝试其他方案。"
-        result.ShouldInterrupt = false
-        return result
-    }
+	if consecutiveFailures >= ld.interruptThreshold {
+		result.IsLoop = true
+		result.LoopCount = consecutiveFailures
+		result.WarningMessage = fmt.Sprintf(
+			"🚫 ⚠️ **连续失败警告**\n\n检测到相同操作「%s」连续失败 %d 次。\n\n建议：\n"+
+				"1. 仔细分析错误信息\n"+
+				"2. 检查是否有权限、路径或配置问题\n"+
+				"3. 尝试简化的操作步骤\n"+
+				"4. 考虑换一种方法解决问题\n\n任务已被系统终止。",
+			lastFingerprint, consecutiveFailures)
+		result.Suggestion = "连续失败表明当前方法可能不可行，建议尝试其他方案。"
+		result.ShouldInterrupt = true
+		return result
+	} else if consecutiveFailures >= ld.warningThreshold {
+		result.IsLoop = true
+		result.LoopCount = consecutiveFailures
+		result.WarningMessage = fmt.Sprintf(
+			"⚠️ **连续失败警告**\n\n检测到相同操作「%s」连续失败 %d 次。请调整策略，避免继续重复。",
+			lastFingerprint, consecutiveFailures)
+		result.Suggestion = "连续失败表明当前方法可能不可行，建议尝试其他方案。"
+		result.ShouldInterrupt = false
+		return result
+	}
 
-    return result
+	return result
 }
 
 // detectPatternSequence 检测操作序列模式

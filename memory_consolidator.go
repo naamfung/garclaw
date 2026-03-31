@@ -445,76 +445,71 @@ func (mc *MemoryConsolidator) ResetSessionOffset(sessionKey string) {
     mc.sessionOffset[sessionKey] = 0
 }
 
-// WriteDailyLog 写入每日日志（添加 UTF-8 BOM 解决中文乱码）
+// WriteDailyLog 写入每日日志
 func (mc *MemoryConsolidator) WriteDailyLog(sessionID string, messages []Message) error {
-    if len(messages) == 0 {
-        return nil
-    }
-    // 确保 memory 目录存在
-    memoryDir := filepath.Join(globalExecDir, "memory")
-    if err := os.MkdirAll(memoryDir, 0755); err != nil {
-        return err
-    }
+	if len(messages) == 0 {
+		return nil
+	}
+	// 确保 memory 目录存在
+	memoryDir := filepath.Join(globalExecDir, "memory")
+	if err := os.MkdirAll(memoryDir, 0755); err != nil {
+		return err
+	}
 
-    today := time.Now().Format("2006-01-02")
-    dailyLogPath := filepath.Join(memoryDir, today+".md")
+	today := time.Now().Format("2006-01-02")
+	dailyLogPath := filepath.Join(memoryDir, today+".md")
 
-    // 提取关键信息
-    var entries []string
-    for _, msg := range messages {
-        if msg.Role == "user" {
-            if content, ok := msg.Content.(string); ok && content != "" {
-                entries = append(entries, fmt.Sprintf("- [用户] %s", truncateString(content, 200)))
-            }
-        } else if msg.Role == "assistant" {
-            if msg.ToolCalls != nil {
-                entries = append(entries, fmt.Sprintf("- [工具调用] %v", msg.ToolCalls))
-            } else if content, ok := msg.Content.(string); ok && content != "" {
-                entries = append(entries, fmt.Sprintf("- [助手] %s", truncateString(content, 200)))
-            }
-        } else if msg.Role == "tool" {
-            if content, ok := msg.Content.(string); ok && content != "" {
-                entries = append(entries, fmt.Sprintf("- [工具结果] %s", truncateString(content, 100)))
-            }
-        }
-    }
+	// 提取关键信息
+	var entries []string
+	for _, msg := range messages {
+		if msg.Role == "user" {
+			if content, ok := msg.Content.(string); ok && content != "" {
+				entries = append(entries, fmt.Sprintf("- [用户] %s", truncateByRune(content, 200)))
+			}
+		} else if msg.Role == "assistant" {
+			if msg.ToolCalls != nil {
+				entries = append(entries, "- [工具调用] ...")
+			} else if content, ok := msg.Content.(string); ok && content != "" {
+				entries = append(entries, fmt.Sprintf("- [助手] %s", truncateByRune(content, 200)))
+			}
+		} else if msg.Role == "tool" {
+			if content, ok := msg.Content.(string); ok && content != "" {
+				entries = append(entries, fmt.Sprintf("- [工具结果] %s", truncateByRune(content, 100)))
+			}
+		}
+	}
 
-    if len(entries) == 0 {
-        return nil
-    }
+	if len(entries) == 0 {
+		return nil
+	}
 
-    // 检查文件是否存在且已有内容
-    needBOM := false
-    if fi, err := os.Stat(dailyLogPath); os.IsNotExist(err) {
-        needBOM = true
-    } else if err == nil && fi.Size() == 0 {
-        needBOM = true
-    }
+	// 打开文件（追加或创建）
+	f, err := os.OpenFile(dailyLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
 
-    f, err := os.OpenFile(dailyLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-    if err != nil {
-        return err
-    }
-    defer f.Close()
+	timestamp := time.Now().Format("15:04:05")
+	header := fmt.Sprintf("\n## 会话 %s [%s]\n", sessionID, timestamp)
+	if _, err := f.WriteString(header); err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if _, err := f.WriteString(entry + "\n"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-    // 如果需要 BOM，写入 UTF-8 BOM
-    if needBOM {
-        if _, err := f.Write([]byte{0xEF, 0xBB, 0xBF}); err != nil {
-            return err
-        }
-    }
-
-    timestamp := time.Now().Format("15:04:05")
-    header := fmt.Sprintf("\n## 会话 %s [%s]\n", sessionID, timestamp)
-    if _, err := f.WriteString(header); err != nil {
-        return err
-    }
-    for _, entry := range entries {
-        if _, err := f.WriteString(entry + "\n"); err != nil {
-            return err
-        }
-    }
-    return nil
+// truncateByRune 按字符数安全截断字符串，保留完整的 UTF-8 字符
+func truncateByRune(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "..."
 }
 
 // ========== 全局函数 ==========
